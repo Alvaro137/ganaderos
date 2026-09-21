@@ -33,7 +33,7 @@ class TestQueryBuilder(unittest.TestCase):
             {"crotal_4": "0391"}
         )
         self.assertIsNotNone(res.sql)
-        self.assertIn("madre_crotal = (", res.sql)
+        self.assertIn("madre_crotal IN (", res.sql)
         self.assertEqual(res.params, ["0391"])
         self.assertEqual(res.tipo_resultado, "partos")
 
