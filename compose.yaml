@@ -1,0 +1,26 @@
+services:
+  ganaderos-campo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ganaderos-campo:latest
+    container_name: ganaderos-campo
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      - APP_PORT=8000
+      - PWA_PASSWORD=${PWA_PASSWORD:-mvp-testing}
+      - PWA_AUTH_SECRET=${PWA_AUTH_SECRET:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    volumes:
+      # Montaje opcional de base de datos de producción sobre la ruta de la PWA
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
