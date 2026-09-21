@@ -3,13 +3,20 @@
 *.env
 !*.env.example
 
-# Base de datos de producción (datos reales y privados de explotación)
-pwa/ganaderos_campo.sqlite
+# Bases de datos y volcados de produccion (datos reales y privados de explotacion)
+*.sqlite
+*.sqlite3
+*.db
 *.mdb
 *.accdb
+*.xml
 *.pdf
-backups/
+*.lock
+pwa/*.sqlite
+pwa/*.db
 data/
+backups/
+.tools/
 
 # Entornos virtuales de Python
 .venv/
