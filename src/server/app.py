@@ -5,14 +5,13 @@ import http.server
 import json
 import mimetypes
 import os
-from pathlib import Path
 import secrets
 import socketserver
-import sys
 import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
 # Tipos MIME necesarios para PWA y WebAssembly
 mimetypes.add_type("application/wasm", ".wasm")
@@ -23,7 +22,6 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 PWA_DIR = BASE_DIR / "pwa"
 
 # Cargar capas de Clean Architecture
-from src.application.intents import IntentType
 from src.application.query_builder import construir_consulta_intent
 from src.infrastructure.llm_gateway import resolver_intencion_usuario
 

@@ -1,9 +1,9 @@
 """Pasarela de comunicación con modelos de lenguaje mediante Tool/Intent Calling estructurado."""
 import json
 import os
-from typing import Any, Optional, Tuple
 import urllib.error
 import urllib.request
+from typing import Any, Optional, Tuple
 
 from src.application.intents import CATALOGO_HERRAMIENTAS_LLM, IntentType
 
@@ -129,7 +129,7 @@ def resolver_intencion_usuario(
     historial: Optional[list[dict[str, str]]] = None
 ) -> Tuple[str, dict[str, Any], bool]:
     """Resuelve la intención mediante LLM si hay conectividad, o mediante parser local en caso contrario.
-    
+
     Devuelve: (nombre_intent, argumentos, es_offline)
     """
     # Intentar primero con el proveedor online si hay clave

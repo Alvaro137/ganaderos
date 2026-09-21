@@ -7,11 +7,11 @@ recetas veterinarias con periodos de supresión y compras de pienso).
 """
 
 import argparse
-from datetime import date, timedelta
-from pathlib import Path
 import random
 import sqlite3
 import sys
+from datetime import date, timedelta
+from pathlib import Path
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "pwa" / "ganaderos_demo.sqlite"
 

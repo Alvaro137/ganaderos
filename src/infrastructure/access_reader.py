@@ -1,12 +1,17 @@
 """Anti-Corruption Layer (ACL): Lectura y normalización segura de Access (.mdb)."""
 from __future__ import annotations
+
+import os
+import time
 from contextlib import contextmanager
 from datetime import datetime
-import os
 from pathlib import Path
-import time
-from typing import Generator, Optional, Any
-import pyodbc
+from typing import Any, Generator, Optional
+
+try:
+    import pyodbc
+except ImportError:
+    pyodbc = None
 
 LOCK_TIMEOUT_S = 10.0
 LOCK_RETRY_S = 0.5
@@ -76,6 +81,9 @@ def conn_str_for(path: Path) -> str:
 
 @contextmanager
 def conexion_access(db_path: Optional[Path] = None) -> Generator[pyodbc.Cursor, None, None]:
+    if pyodbc is None:
+        raise RuntimeError("El controlador pyodbc no está instalado en este entorno.")
+
     path = db_path or detectar_ruta_bd()
     if not path.exists():
         raise FileNotFoundError(f"Base de datos no encontrada en: {path}")

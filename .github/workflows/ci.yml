@@ -41,6 +41,8 @@ jobs:
         run: python3 scripts/generate_demo_db.py --animales 100
 
       - name: Run Unit Tests
+        env:
+          PYTHONPATH: .
         run: python3 -m unittest discover tests
 
   docker-build:

@@ -30,7 +30,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
     if nombre_intent == IntentType.CONSULTAR_FICHA_ANIMAL.value:
         c4 = str(args.get("crotal_4", "")).strip()[-4:]
         sql = """
-            SELECT * FROM animales 
+            SELECT * FROM animales
             WHERE crotal_4 = ? AND estado = 'A'
             ORDER BY fecha_nacimiento DESC
             LIMIT 1
@@ -47,7 +47,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
         solo_activos = args.get("solo_activos", True)
         filtro_estado = "AND estado = 'A'" if solo_activos else ""
         sql = f"""
-            SELECT * FROM animales 
+            SELECT * FROM animales
             WHERE UPPER(corral) LIKE ? {filtro_estado}
             ORDER BY crotal_4 ASC
         """.strip()
@@ -61,14 +61,14 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
     elif nombre_intent == IntentType.CONSULTAR_PARTOS_MADRE.value:
         c4 = str(args.get("crotal_4", "")).strip()[-4:]
         sql = """
-            SELECT 
-                p.id, 
-                p.fecha_parto, 
-                p.cria_crotal, 
-                p.cria_sexo, 
+            SELECT
+                p.id,
+                p.fecha_parto,
+                p.cria_crotal,
+                p.cria_sexo,
                 p.incidencias,
-                a.crotal_4 AS cria_crotal_4, 
-                a.raza AS cria_raza, 
+                a.crotal_4 AS cria_crotal_4,
+                a.raza AS cria_raza,
                 a.estado AS cria_estado,
                 a.corral AS cria_corral
             FROM partos p
@@ -94,9 +94,9 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
             params.append(f"%{str(corral).strip().upper()}%")
 
         sql = f"""
-            SELECT * FROM animales 
-            WHERE (sexo = 'Vaca' OR sexo LIKE 'Hembra%') 
-              AND estado = 'A' 
+            SELECT * FROM animales
+            WHERE (sexo = 'Vaca' OR sexo LIKE 'Hembra%')
+              AND estado = 'A'
               AND (fecha_ult_parto IS NULL OR fecha_ult_parto = '' OR total_partos = 0)
               {filtro_corral}
             ORDER BY fecha_nacimiento ASC
@@ -111,14 +111,14 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
     elif nombre_intent == IntentType.CONSULTAR_SUPRESIONES_ACTIVAS.value:
         limite = int(args.get("limite", 30))
         sql = """
-            SELECT 
+            SELECT
                 r.id,
-                r.fecha, 
-                r.receta, 
-                r.medicamento, 
-                r.n_animales, 
-                r.tiempo_carne, 
-                r.veterinario, 
+                r.fecha,
+                r.receta,
+                r.medicamento,
+                r.n_animales,
+                r.tiempo_carne,
+                r.veterinario,
                 r.cea,
                 date(r.fecha, '+' || CAST(r.tiempo_carne AS TEXT) || ' days') AS fin_supresion
             FROM recetas r
@@ -143,9 +143,9 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
             params.append(f"%{str(cea).strip()}%")
 
         sql = f"""
-            SELECT 
-                medicamento, 
-                COUNT(*) AS total_recetas, 
+            SELECT
+                medicamento,
+                COUNT(*) AS total_recetas,
                 SUM(n_animales) AS animales_tratados,
                 MAX(tiempo_carne) AS max_supresion_dias
             FROM recetas
@@ -166,16 +166,16 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
         destino = args.get("destino", "122")
         limite = int(args.get("limite", 20))
         sql = """
-            SELECT 
-                m.id, 
-                m.crotal, 
-                m.fecha, 
-                m.tipo, 
-                m.origen, 
-                m.destino, 
+            SELECT
+                m.id,
+                m.crotal,
+                m.fecha,
+                m.tipo,
+                m.origen,
+                m.destino,
                 m.corral,
-                a.crotal_4, 
-                a.sexo, 
+                a.crotal_4,
+                a.sexo,
                 a.raza
             FROM movimientos m
             LEFT JOIN animales a ON m.crotal = a.crotal
@@ -201,15 +201,15 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
         params.append(limite)
 
         sql = f"""
-            SELECT 
-                id, 
-                fecha, 
-                alimento, 
-                kg, 
-                importe, 
-                precio_kg, 
-                albaran, 
-                proveedor 
+            SELECT
+                id,
+                fecha,
+                alimento,
+                kg,
+                importe,
+                precio_kg,
+                albaran,
+                proveedor
             FROM compras_alimento
             {filtro_alim}
             ORDER BY fecha DESC

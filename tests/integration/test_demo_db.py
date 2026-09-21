@@ -1,8 +1,8 @@
 """Tests para validar la integridad de la base de datos de demostración."""
-from pathlib import Path
 import sqlite3
 import sys
 import unittest
+from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEMO_DB = ROOT_DIR / "pwa" / "ganaderos_demo.sqlite"

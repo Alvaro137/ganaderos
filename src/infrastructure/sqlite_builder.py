@@ -1,9 +1,8 @@
 """Construcción y optimización de base de datos SQLite relacional indexada."""
 from __future__ import annotations
-from datetime import datetime
-from pathlib import Path
+
 import sqlite3
-from typing import Any
+from pathlib import Path
 
 
 def inicializar_bd_sqlite(ruta_destino: Path) -> sqlite3.Connection:

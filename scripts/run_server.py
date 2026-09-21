@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Punto de entrada para el servidor HTTP de Ganaderos Campo PWA."""
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))

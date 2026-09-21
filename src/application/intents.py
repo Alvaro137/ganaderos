@@ -1,7 +1,5 @@
 """Definición y catálogo tipado de intenciones (Intents) del asistente ganadero."""
-from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
 
 
 class IntentType(str, Enum):

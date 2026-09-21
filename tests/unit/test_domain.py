@@ -1,9 +1,9 @@
 """Tests unitarios para la capa de dominio ganadero."""
-from datetime import date
 import unittest
+from datetime import date
 
 from src.domain.exceptions import CrotalInvalidoError, ExplotacionInvalidaError
-from src.domain.models import Animal, Movimiento, RecetaSanitaria
+from src.domain.models import Animal, Movimiento
 from src.domain.value_objects import Crotal, ExplotacionCEA, PeriodoSupresion
 
 
