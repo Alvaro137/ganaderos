@@ -1,7 +1,7 @@
 """Objetos de valor (Value Objects) inmutables del dominio ganadero."""
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
-import re
 from typing import Optional
 
 from src.domain.exceptions import CrotalInvalidoError, ExplotacionInvalidaError
@@ -10,7 +10,7 @@ from src.domain.exceptions import CrotalInvalidoError, ExplotacionInvalidaError
 @dataclass(frozen=True)
 class Crotal:
     """Identificador oficial e inmutable de identificación animal (bovino).
-    
+
     Estructura en España: Prefijo país (ES) + 12 dígitos numéricos (Total: 14 caracteres).
     Los últimos 4 dígitos son el identificador operativo rápido en campo (crotal_4).
     """
@@ -36,7 +36,7 @@ class Crotal:
 @dataclass(frozen=True)
 class PeriodoSupresion:
     """Periodo de retirada sanitaria obligatorio tras administrar un medicamento veterinario.
-    
+
     Evita la entrada en la cadena alimentaria de carne o leche con residuos farmacológicos.
     """
     dias_carne: int
@@ -64,7 +64,7 @@ class PeriodoSupresion:
 @dataclass(frozen=True)
 class ExplotacionCEA:
     """Código de Explotación Agraria / REGA oficial.
-    
+
     Diferencia ciclo cerrado/vida (121) de cebadero/engorde (122) y traslados internos.
     """
     codigo: str
