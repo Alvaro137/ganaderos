@@ -4,23 +4,23 @@ Aplicación web progresiva (PWA) de alto rendimiento construida con principios d
 
 ```mermaid
 flowchart TD
-    subgraph Dispositivo Móvil (Offline-First en Campo)
-        UI[Interfaz Móvil PWA\nHTML5 + CSS Safe Areas]
-        PARSER[Parser Heurístico Local\nModo Sin Cobertura]
-        WASM[Motor SQLite WebAssembly\nSQL.js en Navegador]
-        IDB[(IndexedDB\nAlmacenamiento Persistente)]
+    subgraph SUB_CLIENTE["Dispositivo Movil (Offline-First en Campo)"]
+        UI["Interfaz Movil PWA<br>HTML5 + CSS Safe Areas"]
+        PARSER["Parser Heuristico Local<br>Modo Sin Cobertura"]
+        WASM["Motor SQLite WebAssembly<br>SQL.js en Navegador"]
+        IDB[("IndexedDB<br>Almacenamiento Persistente")]
 
         UI <-->|Consultas relacionales preparadas| WASM
         UI -.->|Sin cobertura 4G| PARSER
         PARSER -->|Consultas locales| WASM
-        IDB <-->|Carga en frío y persistencia| WASM
+        IDB <-->|Carga en frio y persistencia| WASM
     end
 
-    subgraph Servidor / API Gateway (Clean Architecture)
-        API[Capa de Presentación / HTTP Server\nsrc/server/app.py]
-        APP[Capa de Aplicación\nIntent Calling y Query Builder]
-        DOM[Capa de Dominio\nEntidades y Value Objects Ganaderos]
-        INFRA[Capa de Infraestructura\nAdaptadores LLM y SQLite]
+    subgraph SUB_SERVER["Servidor / API Gateway (Clean Architecture)"]
+        API["Capa de Presentacion / HTTP Server<br>src/server/app.py"]
+        APP["Capa de Aplicacion<br>Intent Calling y Query Builder"]
+        DOM["Capa de Dominio<br>Entidades y Value Objects Ganaderos"]
+        INFRA["Capa de Infraestructura<br>Adaptadores LLM y SQLite"]
 
         UI -.->|Conectividad online| API
         API --> APP
@@ -28,9 +28,9 @@ flowchart TD
         APP <--> INFRA
     end
 
-    subgraph Servicios de Inteligencia Artificial (Online)
-        GROQ[Groq Cloud\nWhisper v3 Turbo + Tool Calling]
-        INFRA <-->|Extracción estructurada de intenciones| GROQ
+    subgraph SUB_AI["Servicios de Inteligencia Artificial (Online)"]
+        GROQ["Groq Cloud<br>Whisper v3 Turbo + Tool Calling"]
+        INFRA <-->|Extraccion estructurada de intenciones| GROQ
     end
 ```
 
