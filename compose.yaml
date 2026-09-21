@@ -1,10 +1,10 @@
 services:
-  ganaderos-campo:
+  ganaderos:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ganaderos-campo:latest
-    container_name: ganaderos-campo
+    image: ganaderos:latest
+    container_name: ganaderos
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8000}:8000"
