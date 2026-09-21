@@ -1689,7 +1689,7 @@ function setupAsistenteIA() {
       const c4 = mCrotal[1];
       if (p.includes("parto") || p.includes("cria") || p.includes("cría") || p.includes("hijo")) {
         return {
-          sql: "SELECT p.id, p.fecha_parto, p.cria_crotal, p.cria_sexo, a.crotal_4 as cria_crotal_4, a.raza as cria_raza, a.estado as cria_estado FROM partos p LEFT JOIN animales a ON p.cria_crotal = a.crotal WHERE p.madre_crotal = (SELECT crotal FROM animales WHERE crotal_4 = ? LIMIT 1) ORDER BY p.fecha_parto DESC",
+          sql: "SELECT p.id, p.fecha_parto, p.cria_crotal, p.cria_sexo, a.crotal_4 as cria_crotal_4, a.raza as cria_raza, a.estado as cria_estado FROM partos p LEFT JOIN animales a ON p.cria_crotal = a.crotal WHERE p.madre_crotal IN (SELECT crotal FROM animales WHERE crotal_4 = ?) ORDER BY p.fecha_parto DESC",
           params: [c4],
           interpretacion: `Partos y descendencia de la madre ${c4} (Modo sin cobertura).`,
           tipo_resultado: "partos",

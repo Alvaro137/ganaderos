@@ -73,8 +73,8 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
                 a.corral AS cria_corral
             FROM partos p
             LEFT JOIN animales a ON p.cria_crotal = a.crotal
-            WHERE p.madre_crotal = (
-                SELECT crotal FROM animales WHERE crotal_4 = ? LIMIT 1
+            WHERE p.madre_crotal IN (
+                SELECT crotal FROM animales WHERE crotal_4 = ?
             )
             ORDER BY p.fecha_parto DESC
         """.strip()
