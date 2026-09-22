@@ -155,12 +155,40 @@ MODELOS_PRIORIZADOS = obtener_modelos_priorizados()
 
 
 def _obtener_claves_api() -> dict[str, str]:
-    return {
+    claves = {
         "groq": os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY", ""),
         "openrouter": os.environ.get("OPENROUTER_API_KEY", ""),
         "gemini": os.environ.get("GEMINI_API_KEY", ""),
         "mistral": os.environ.get("MISTRAL_API_KEY", ""),
     }
+    if not all(claves.values()):
+        posibles_env = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
+            os.path.join(os.getcwd(), ".env"),
+            "/home/varo/ganaderos_pwa/.env",
+        ]
+        for env_path in posibles_env:
+            if os.path.isfile(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith("#") or "=" not in line:
+                                continue
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip().strip("'\"")
+                            if k in ("GROQ_API_KEY", "GROK_API_KEY") and not claves["groq"]:
+                                claves["groq"] = v
+                            elif k == "OPENROUTER_API_KEY" and not claves["openrouter"]:
+                                claves["openrouter"] = v
+                            elif k == "GEMINI_API_KEY" and not claves["gemini"]:
+                                claves["gemini"] = v
+                            elif k == "MISTRAL_API_KEY" and not claves["mistral"]:
+                                claves["mistral"] = v
+                except Exception:
+                    pass
+                break
+    return claves
 
 
 def _ejecutar_tool_calling(
