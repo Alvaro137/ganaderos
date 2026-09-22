@@ -221,75 +221,7 @@ export function ejecutarBusquedaMovimientos() {
     return;
   }
 
-  const cardsHtml = movs
-    .map((m) => {
-      const tipoRaw = (m.tipo_display || m.tipo || "").toUpperCase();
-      let tipoClase = "otro";
-      if (tipoRaw.includes("VENTA") || m.es_venta_cebadero) tipoClase = "venta";
-      else if (tipoRaw.includes("TRASPASO") || tipoRaw.includes("TRASLADO")) tipoClase = "traspaso";
-      else if (tipoRaw.includes("NACIMIENTO")) tipoClase = "nacimiento";
-      else if (tipoRaw.includes("SACRIFICIO")) tipoClase = "sacrificio";
-      else if (tipoRaw.includes("MUERTE")) tipoClase = "muerte";
-      else if (tipoRaw.includes("COMPRA")) tipoClase = "compra";
-
-      const crotal4 = m.crotal_4 || (m.crotal && m.crotal.length >= 4 ? m.crotal.slice(-4) : m.crotal);
-      const estadoBadge = m.estado === "A" 
-        ? '<span style="background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 700;">Activo en finca</span>' 
-        : '<span style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600;">Baja</span>';
-
-      const corralInfo = m.corral_actual ? `• Lote actual: <strong>${escapeHtml(m.corral_actual)}</strong>` : (m.corral ? `• Lote: ${escapeHtml(m.corral)}` : "");
-      const badgeTexto = m.tipo_display || m.tipo || "MOVIMIENTO";
-      const subtipoTag = m.subtipo_display ? `<span class="mov-subtipo-tag">${escapeHtml(m.subtipo_display)}</span>` : "";
-
-      return `
-        <article class="movimiento-card">
-          <div class="mov-header-row">
-            <div style="display: flex; align-items: center;">
-              <span class="badge-tipo-mov ${tipoClase}">
-                ${escapeHtml(badgeTexto)}
-              </span>
-              ${subtipoTag}
-            </div>
-            <span class="mov-fecha">${formatearFecha(m.fecha)}</span>
-          </div>
-
-          <div class="mov-animal-row">
-            <span class="mov-crotal-4">${escapeHtml(crotal4)}</span>
-            <span class="mov-crotal-completo" data-action="select-animal" data-crotal="${escapeHtml(m.crotal)}" style="cursor: pointer;">
-              ${escapeHtml(m.crotal)}
-            </span>
-            ${estadoBadge}
-          </div>
-
-          <div class="mov-ruta-box">
-            <div class="mov-punto">
-              <span class="mov-punto-label">Origen</span>
-              <span class="mov-punto-valor">${escapeHtml(formatearExplotacionAmigable(m.origen))}</span>
-            </div>
-            <span class="mov-flecha">➔</span>
-            <div class="mov-punto">
-              <span class="mov-punto-label">Destino</span>
-              <span class="mov-punto-valor">${escapeHtml(formatearExplotacionAmigable(m.destino))}</span>
-            </div>
-          </div>
-
-          <div class="mov-card-footer">
-            <div>
-              ${m.sexo ? `<span>${escapeHtml(m.sexo)}</span> ` : ""}
-              ${corralInfo}
-            </div>
-            <button 
-              class="nav-link" 
-              style="padding: 4px 10px; font-size: 0.75rem; background: var(--bg-surface-subtle); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;" 
-              data-action="select-animal" 
-              data-crotal="${escapeHtml(m.crotal)}">
-              Ver ficha animal →
-            </button>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  const cardsHtml = renderListaMovimientosCards(movs);
 
   const btnMasHtml = movs.length < total ? `
     <div style="text-align: center; margin-top: 24px; margin-bottom: 30px;">
@@ -307,3 +239,76 @@ export function ejecutarBusquedaMovimientos() {
 
   listContainer.innerHTML = cardsHtml + btnMasHtml;
 }
+
+export function generarCardMovimientoHtml(m) {
+  const tipoRaw = (m.tipo_display || m.tipo || "").toUpperCase();
+  let tipoClase = "otro";
+  if (tipoRaw.includes("VENTA") || m.es_venta_cebadero) tipoClase = "venta";
+  else if (tipoRaw.includes("TRASPASO") || tipoRaw.includes("TRASLADO")) tipoClase = "traspaso";
+  else if (tipoRaw.includes("NACIMIENTO")) tipoClase = "nacimiento";
+  else if (tipoRaw.includes("SACRIFICIO")) tipoClase = "sacrificio";
+  else if (tipoRaw.includes("MUERTE")) tipoClase = "muerte";
+  else if (tipoRaw.includes("COMPRA")) tipoClase = "compra";
+
+  const crotal4 = m.crotal_4 || (m.crotal && m.crotal.length >= 4 ? m.crotal.slice(-4) : m.crotal);
+  const estadoBadge = m.estado === "A" 
+    ? '<span style="background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 700;">Activo en finca</span>' 
+    : '<span style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600;">Baja</span>';
+
+  const corralInfo = m.corral_actual ? `• Lote actual: <strong>${escapeHtml(m.corral_actual)}</strong>` : (m.corral ? `• Lote: ${escapeHtml(m.corral)}` : "");
+  const badgeTexto = m.tipo_display || m.tipo || "MOVIMIENTO";
+  const subtipoTag = m.subtipo_display ? `<span class="mov-subtipo-tag">${escapeHtml(m.subtipo_display)}</span>` : "";
+
+  return `
+    <article class="movimiento-card">
+      <div class="mov-header-row">
+        <div style="display: flex; align-items: center;">
+          <span class="badge-tipo-mov ${tipoClase}">
+            ${escapeHtml(badgeTexto)}
+          </span>
+          ${subtipoTag}
+        </div>
+        <span class="mov-fecha">${formatearFecha(m.fecha)}</span>
+      </div>
+
+      <div class="mov-animal-row">
+        <span class="mov-crotal-4">${escapeHtml(crotal4)}</span>
+        <span class="mov-crotal-completo" data-action="select-animal" data-crotal="${escapeHtml(m.crotal)}" style="cursor: pointer;">
+          ${escapeHtml(m.crotal)}
+        </span>
+        ${estadoBadge}
+      </div>
+
+      <div class="mov-ruta-box">
+        <div class="mov-punto">
+          <span class="mov-punto-label">Origen</span>
+          <span class="mov-punto-valor">${escapeHtml(formatearExplotacionAmigable(m.origen))}</span>
+        </div>
+        <span class="mov-flecha">➔</span>
+        <div class="mov-punto">
+          <span class="mov-punto-label">Destino</span>
+          <span class="mov-punto-valor">${escapeHtml(formatearExplotacionAmigable(m.destino))}</span>
+        </div>
+      </div>
+
+      <div class="mov-card-footer">
+        <div>
+          ${m.sexo ? `<span>${escapeHtml(m.sexo)}</span> ` : ""}
+          ${corralInfo}
+        </div>
+        <button 
+          class="btn-ver-ficha-animal" 
+          data-action="select-animal" 
+          data-crotal="${escapeHtml(m.crotal)}">
+          <span>Ver ficha</span>
+          <span aria-hidden="true">→</span>
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+export function renderListaMovimientosCards(movs) {
+  return movs.map(generarCardMovimientoHtml).join("");
+}
+

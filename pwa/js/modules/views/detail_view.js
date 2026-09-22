@@ -7,6 +7,7 @@
 import {
   AppState,
   formatearFecha,
+  formatearExplotacionAmigable,
   calcularEdad,
   calcularTiempoTranscurrido,
   extraer4Digitos,
@@ -195,6 +196,46 @@ export function generarHtmlDetalleAnimal(animal) {
   const estadoTexto = esActivo ? "Activo" : "Baja";
   const textoVolver = obtenerTextoBotonVolver();
 
+  // Detección de redundancia en Alta vs Nacimiento:
+  // Si nació en la propia finca, fecha_alta coincide con fecha_nacimiento (redundante).
+  // Solo se muestra 'Alta' si la vaca entró con posterioridad (compra o traspaso externo).
+  const tieneAltaDiferente = animal.fecha_alta &&
+    String(animal.fecha_alta).trim() !== "" &&
+    String(animal.fecha_alta).trim() !== String(animal.fecha_nacimiento || "").trim();
+
+  // Información de Baja para animales inactivos
+  const esBaja = !esActivo;
+  let fechaBaja = null;
+  let motivoBaja = "Baja en censo";
+  let destinoBaja = null;
+
+  if (esBaja && animal.movimientos && animal.movimientos.length > 0) {
+    const movSalida = animal.movimientos.find((m) => {
+      const t = (m.tipo || "").toUpperCase();
+      return ["SACRIFICIO", "MUERTE", "VENTA"].includes(t) ||
+        (m.origen && m.origen.endsWith("122") && m.destino && !m.destino.endsWith("121") && !m.destino.endsWith("671") && !m.destino.endsWith("591"));
+    }) || animal.movimientos[0];
+
+    if (movSalida) {
+      fechaBaja = movSalida.fecha;
+      destinoBaja = movSalida.destino;
+      const t = (movSalida.tipo || "").toUpperCase();
+      if (t === "MUERTE") {
+        motivoBaja = "Baja en campo / Muerte natural";
+      } else if (t === "SACRIFICIO") {
+        if (movSalida.origen && movSalida.origen.endsWith("122")) {
+          motivoBaja = "Venta / Matadero (Cebadero)";
+        } else {
+          motivoBaja = "Sacrificio / Desvieje";
+        }
+      } else if (t === "VENTA") {
+        motivoBaja = "Venta comercial";
+      } else {
+        motivoBaja = movSalida.tipo || "Baja";
+      }
+    }
+  }
+
   // Partos y Becerros
   let htmlPartos = '<p style="color: var(--text-dim); font-size: 0.88rem; padding: 10px 0;">No tiene partos registrados</p>';
   if (animal.partos && animal.partos.length > 0) {
@@ -314,10 +355,27 @@ export function generarHtmlDetalleAnimal(animal) {
           <div class="spec-val">${formatearFecha(animal.fecha_nacimiento)} (${calcularEdad(animal.fecha_nacimiento)})</div>
         </div>
 
+        ${tieneAltaDiferente ? `
         <div>
           <div class="spec-label">Alta en Explotación</div>
-          <div class="spec-val">${formatearFecha(animal.fecha_alta)}</div>
+          <div class="spec-val">${formatearFecha(animal.fecha_alta)} <span style="font-size: 0.75rem; color: var(--text-dim);">(Entrada en finca)</span></div>
         </div>
+        ` : ""}
+
+        ${esBaja ? `
+        <div>
+          <div class="spec-label" style="color: #b91c1c; font-weight: 700;">Fecha de Baja</div>
+          <div class="spec-val" style="color: #b91c1c; font-weight: 700;">${formatearFecha(fechaBaja)}</div>
+        </div>
+
+        <div>
+          <div class="spec-label" style="color: #b91c1c; font-weight: 700;">Motivo de Baja</div>
+          <div class="spec-val" style="font-weight: 700; color: var(--text-main);">
+            ${escapeHtml(motivoBaja)}
+            ${destinoBaja ? `<span style="font-size: 0.78rem; font-weight: 500; color: var(--text-muted); display: block;">Destino: ${escapeHtml(formatearExplotacionAmigable(destinoBaja))}</span>` : ""}
+          </div>
+        </div>
+        ` : ""}
 
         <div>
           <div class="spec-label">Último Parto</div>

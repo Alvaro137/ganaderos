@@ -1706,4 +1706,33 @@ body {
   transform: translateY(0);
 }
 
+.btn-ver-ficha-animal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--brand-primary);
+  color: #ffffff !important;
+  border: 1px solid var(--brand-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+}
+
+.btn-ver-ficha-animal:hover {
+  background: var(--brand-primary-hover);
+  border-color: var(--brand-primary-hover);
+  color: #ffffff !important;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.btn-ver-ficha-animal:active {
+  transform: translateY(0);
+}
+
 

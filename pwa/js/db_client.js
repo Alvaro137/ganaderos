@@ -236,7 +236,7 @@ class CampoDB {
     let params;
 
     if (soloDigitos.length >= 1 && soloDigitos.length <= 4) {
-      // Coincidencia por últimos dígitos
+      // Coincidencia por dígitos iniciales (búsqueda incremental mientras teclea: 1->0->4->5)
       const condActivo = soloActivos ? "AND estado = 'A'" : "";
       sql = `
         SELECT crotal, crotal_4, nombre, sexo, raza, estado, corral, fecha_ult_parto, total_partos, fecha_nacimiento
@@ -245,7 +245,7 @@ class CampoDB {
         ORDER BY (estado = 'A') DESC, crotal_4 ASC
         LIMIT 30
       `;
-      params = [`%${soloDigitos}`];
+      params = [`${soloDigitos}%`];
     } else {
       // Búsqueda por crotal completo o corral
       const condActivo = soloActivos ? "AND estado = 'A'" : "";
