@@ -21,7 +21,7 @@ En la industria es común pedirle a un LLM que genere directamente sentencias SQ
 Implementar un sistema de dos capas desacopladas:
 1. **Capa Semántica (Extractor de Intención):** Un catálogo cerrado de herramientas tipadas (`src/application/intents.py`) define esquemas JSON Schema de las intenciones soportadas (ej: `consultar_ficha_animal`, `consultar_censo_corral`, `consultar_vacas_sin_parir`, `consultar_supresion_lote`). El LLM (Groq Llama 3.3) debe invocar obligatoriamente una función del catálogo.
 2. **Capa Determinista (`QueryBuilder`):** El código de la aplicación valida los argumentos (crotales, corrales) y ensambla una sentencia SQL pre-verificada usando parámetros ligados (`?`). La base de datos local ejecuta la consulta parametrizada.
-3. **Fallback Heurístico Offline:** Cuando no hay conexión, un parser heurístico local en JavaScript (`pwa/js/modules/heuristics.js`) clasifica las preguntas más comunes (crotales de 4 dígitos, nombres de corral, etc.) sin depender de APIs de IA.
+3. **Asistente Híbrido Conectado y Degradación Grácil (Enmienda ADR 0008):** El asistente en lenguaje natural y dictado por voz se define como un servicio conectado asistido por servidor/Cloud. Cuando no hay red, la aplicación aplica *Degradación Grácil* transparente, guiando al ganadero al buscador directo por 4 dígitos de crotal y a las vistas de censo y corrales, que son 100% Offline-First en SQLite WASM local (sustituyendo el fallback heurístico inicial por simplicidad y robustez, conforme a YAGNI y KISS).
 
 ## Consecuencias
 
@@ -29,7 +29,7 @@ Implementar un sistema de dos capas desacopladas:
 - **Inmunidad a Inyecciones SQL:** Al usar sentencias parametrizadas generadas por código probado, es imposible inyectar código SQL arbitrario.
 - **Tasa Cero de Errores Sintácticos:** Todas las plantillas SQL son validadas exhaustivamente mediante pruebas unitarias.
 - **Privacidad Absoluta de Datos:** A la nube del LLM solo viaja la pregunta formulada ("vacas en Dueña"), nunca el censo de animales ni los datos de la explotación.
-- **Degradación Elegante:** Si la red se cae o la cuota de la API se agota, el sistema degrada de forma transparente al parser heurístico local.
+- **Degradación Elegante:** Si la red se cae o la cuota de la API se agota, el sistema degrada de forma transparente hacia la navegación táctil y búsqueda determinista por 4 dígitos de la base SQLite WASM local.
 
 ### Negativas / Desafíos
 - **Catálogo Finito de Consultas:** Nuevos tipos de preguntas complejas requieren registrar una nueva intención y su correspondiente método en `QueryBuilder`.

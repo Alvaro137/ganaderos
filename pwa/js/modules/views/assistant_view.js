@@ -6,7 +6,6 @@
 import { AppState, esPantallaEscritorio, escapeHtml, formatearFecha, formatearMoneda, formatearKg } from '../config.js';
 import { obtenerAuthHeaders } from '../auth.js';
 import { ejecutarConsulta } from '../db.js';
-import { resolverConsultaOffline } from '../heuristics.js';
 import { VoiceManager } from '../voice.js';
 import { seleccionarAnimal, verDetalleCorral } from './detail_view.js';
 
@@ -46,7 +45,28 @@ export function setupAsistenteIA() {
     }
   });
 
+  function actualizarEstadoConectividad() {
+    const online = navigator.onLine;
+    if (voiceStatusText) {
+      if (!online) {
+        voiceStatusText.textContent = "📡 Sin conexión: el asistente por voz/IA requiere cobertura";
+        voiceStatusText.style.color = "#ea580c";
+      } else {
+        voiceStatusText.textContent = "Toca el micrófono para hablar";
+        voiceStatusText.style.color = "";
+      }
+    }
+    if (btnRecordVoice) {
+      btnRecordVoice.classList.toggle("disabled-offline", !online);
+      btnRecordVoice.title = online ? "Dictar consulta por voz" : "La entrada por voz requiere conexión al servidor";
+    }
+  }
+
+  window.addEventListener("online", actualizarEstadoConectividad);
+  window.addEventListener("offline", actualizarEstadoConectividad);
+
   function abrirModal() {
+    actualizarEstadoConectividad();
     modalBackdrop.style.display = "flex";
     if (esPantallaEscritorio() && inputAiPrompt) {
       setTimeout(() => inputAiPrompt.focus(), 150);
@@ -56,6 +76,61 @@ export function setupAsistenteIA() {
   function cerrarModal() {
     voiceManager.detener();
     modalBackdrop.style.display = "none";
+  }
+
+  function mostrarDegradacionGracil(motivo) {
+    if (resultsWrapper) resultsWrapper.style.display = "block";
+    if (bubbleResponse) {
+      bubbleResponse.innerHTML = `
+        <div class="ai-offline-graceful-box" style="background: var(--bg-surface); border: 1px solid #fed7aa; border-left: 4px solid #f97316; padding: 14px 16px; border-radius: var(--radius-md);">
+          <div style="font-weight: 700; color: #c2410c; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+            <span>📡 Asistente Conectado (Cloud/Edge) sin Cobertura</span>
+          </div>
+          <p style="font-size: 0.88rem; color: var(--text-color); margin: 0 0 10px 0; line-height: 1.4;">
+            ${escapeHtml(motivo || "El asistente por voz e inferencia en lenguaje natural requiere conexión con el servidor.")}
+            <br>
+            <strong>La gestión de censo, fichas de animales, corrales, genealogía y alertas sanitarias sigue disponible 100% offline</strong> mediante la base de datos local SQLite.
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="go-search" style="font-size: 0.82rem; padding: 6px 12px; border-radius: 6px; cursor: pointer; background: var(--bg-surface-subtle); border: 1px solid var(--border-color);">
+              🔍 Ir al Buscador por Crotal
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="go-corrales" style="font-size: 0.82rem; padding: 6px 12px; border-radius: 6px; cursor: pointer; background: var(--bg-surface-subtle); border: 1px solid var(--border-color);">
+              📍 Ver Corrales de Pasto
+            </button>
+          </div>
+        </div>
+      `;
+
+      const btnSearch = bubbleResponse.querySelector('[data-action="go-search"]');
+      if (btnSearch) {
+        btnSearch.addEventListener("click", () => {
+          cerrarModal();
+          const tabBtn = document.querySelector('.nav-link[data-tab="animales"]') || document.querySelector('.mobile-tab-btn[data-tab="animales"]');
+          if (tabBtn) tabBtn.click();
+          const searchInput = document.getElementById("search-crotal");
+          if (searchInput) {
+            setTimeout(() => {
+              searchInput.focus();
+              searchInput.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+          }
+        });
+      }
+      const btnCorrales = bubbleResponse.querySelector('[data-action="go-corrales"]');
+      if (btnCorrales) {
+        btnCorrales.addEventListener("click", () => {
+          cerrarModal();
+          const tabBtn = document.querySelector('.nav-link[data-tab="animales"]') || document.querySelector('.mobile-tab-btn[data-tab="animales"]');
+          if (tabBtn) tabBtn.click();
+          const corralesSec = document.getElementById("sec-corrales") || document.querySelector(".corrales-container");
+          if (corralesSec) {
+            corralesSec.scrollIntoView({ behavior: "smooth" });
+          }
+        });
+      }
+    }
+    if (cardsContainer) cardsContainer.innerHTML = "";
   }
 
   btnOpenAi.addEventListener("click", abrirModal);
@@ -75,6 +150,10 @@ export function setupAsistenteIA() {
 
   if (btnRecordVoice) {
     btnRecordVoice.addEventListener("click", () => {
+      if (!navigator.onLine) {
+        mostrarDegradacionGracil("La transcripción de voz requiere conexión al servidor de explotación. Puedes consultar el censo o fichas de animales directamente sin conexión.");
+        return;
+      }
       if (voiceManager.escuchandoVoz) {
         voiceManager.detener();
       } else {
@@ -162,6 +241,12 @@ export function setupAsistenteIA() {
     voiceManager.detener();
     ejecutandoConsulta = true;
 
+    if (!navigator.onLine) {
+      mostrarDegradacionGracil("El asistente en lenguaje natural requiere conexión con el servidor de explotación.");
+      ejecutandoConsulta = false;
+      return;
+    }
+
     if (resultsWrapper) resultsWrapper.style.display = "block";
     if (bubbleResponse) {
       bubbleResponse.innerHTML = `
@@ -176,48 +261,43 @@ export function setupAsistenteIA() {
     let intentData = null;
     const modelId = selectAiModel ? selectAiModel.value : "auto";
 
-    if (!navigator.onLine) {
-      intentData = resolverConsultaOffline(prompt);
-    } else {
-      try {
-        const authHdrs = obtenerAuthHeaders();
-        const resp = await fetch("./api/ai/intent", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHdrs
-          },
-          body: JSON.stringify({
-            prompt,
-            historial: AppState.conversacionIA.slice(-6),
-            model_id: modelId
-          })
-        });
+    try {
+      const authHdrs = obtenerAuthHeaders();
+      const resp = await fetch("./api/ai/intent", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHdrs
+        },
+        body: JSON.stringify({
+          prompt,
+          historial: AppState.conversacionIA.slice(-6),
+          model_id: modelId
+        })
+      });
 
-        if (resp.ok) {
-          const resJson = await resp.json();
-          if (resJson.ok) {
-            intentData = resJson;
-          }
+      if (resp.ok) {
+        const resJson = await resp.json();
+        if (resJson.ok) {
+          intentData = resJson;
+        } else {
+          mostrarDegradacionGracil(resJson.message || "El servidor no pudo procesar la consulta con el modelo de lenguaje.");
+          ejecutandoConsulta = false;
+          return;
         }
-      } catch (netErr) {
-        intentData = resolverConsultaOffline(prompt);
+      } else {
+        mostrarDegradacionGracil("El servicio de inteligencia artificial no está disponible actualmente en el servidor.");
+        ejecutandoConsulta = false;
+        return;
       }
+    } catch (netErr) {
+      mostrarDegradacionGracil("Fallo de red al contactar con el servidor. Verifica la cobertura de tu dispositivo.");
+      ejecutandoConsulta = false;
+      return;
     }
 
     if (!intentData) {
-      intentData = resolverConsultaOffline(prompt);
-    }
-
-    if (!intentData) {
-      if (bubbleResponse) {
-        bubbleResponse.innerHTML = `
-          <div style="background: var(--bg-surface); border: 1px solid var(--border-color); padding: 12px 14px; border-radius: var(--radius-md);">
-            <div style="font-weight: 700; color: var(--text-color); margin-bottom: 4px;">Consulta no clasificada</div>
-            <div style="font-size: 0.86rem; color: var(--text-dim);">Prueba a indicar un crotal de 4 dígitos (ej. 1045), un nombre de corral (ej. Dueña) o palabras como "partos", "sin parir" o "supresión".</div>
-          </div>
-        `;
-      }
+      mostrarDegradacionGracil("No se obtuvo respuesta del servicio de inteligencia artificial.");
       ejecutandoConsulta = false;
       return;
     }
@@ -266,7 +346,6 @@ export function setupAsistenteIA() {
 
     const tieneHistorialPrevio = AppState.conversacionIA.length > 0;
     const historyBadge = tieneHistorialPrevio ? '<span class="ai-history-badge">En contexto</span>' : '';
-    const badgeOffline = offline_mode ? '<span style="font-size: 0.72rem; color: #047857; background: #ecfdf5; padding: 2px 8px; border-radius: 9999px; border: 1px solid #a7f3d0;">Modo sin cobertura</span>' : '';
 
     if (filas.length === 0) {
       const htmlBubble = `
@@ -274,7 +353,6 @@ export function setupAsistenteIA() {
           <div style="font-size: 1rem; font-weight: 700; color: #14532d; display: flex; align-items: center; gap: 6px;">
             <span>${escapeHtml(interpretacion || "Consulta realizada:")}</span>
             ${historyBadge}
-            ${badgeOffline}
           </div>
           ${modelo_usado ? `
             <span style="font-size: 0.72rem; color: #15803d; opacity: 0.85; background: rgba(255,255,255,0.7); padding: 2px 8px; border-radius: 9999px; border: 1px solid #bbf7d0; font-family: monospace;">
@@ -316,7 +394,6 @@ export function setupAsistenteIA() {
         <div style="font-size: 1rem; font-weight: 700; color: #14532d; display: flex; align-items: center; gap: 6px;">
           <span>${escapeHtml(interpretacion || "Consulta realizada:")}</span>
           ${historyBadge}
-          ${badgeOffline}
         </div>
         ${modelo_usado ? `
           <span style="font-size: 0.72rem; color: #15803d; opacity: 0.85; background: rgba(255,255,255,0.7); padding: 2px 8px; border-radius: 9999px; border: 1px solid #bbf7d0; font-family: monospace;">

@@ -86,75 +86,21 @@ def clasificar_intencion_groq(
     return None
 
 
-def clasificar_intencion_heuristica(prompt: str) -> Tuple[str, dict[str, Any]]:
-    """Parser determinista y local (Offline Fallback) para consultas en campo sin cobertura."""
-    import re
-    p = prompt.strip().lower()
-
-    # Normalizar espacios en números de 4 dígitos partidos por Whisper (ej. "10 45" -> "1045")
-    p = re.sub(r"\b(\d{2})\s+(\d{2})\b", r"\1\2", p)
-
-    # 0. Detección de crotal: 4 dígitos o crotal oficial completo (ej. ES083710104599 -> 4599)
-    m_oficial = re.search(r"\b(?:es)?\d{8,12}(\d{4})\b", p)
-    m_4dig = re.search(r"\b(\d{4})\b", p)
-    crotal_detectado = m_4dig.group(1) if m_4dig else (m_oficial.group(1) if m_oficial else None)
-
-    # 1. Partos / genealogía de madre
-    palabras_parto = ["parto", "cría", "cria", "hijo", "descendencia", "becerro", "ternero", "nacid"]
-    if crotal_detectado and any(w in p for w in palabras_parto):
-        return IntentType.CONSULTAR_PARTOS_MADRE.value, {"crotal_4": crotal_detectado}
-
-    # 2. Ficha de animal
-    palabras_ficha = ["ficha", "vaca", "animal", "crotal", "dato"]
-    if crotal_detectado and (any(w in p for w in palabras_ficha) or len(p.split()) <= 2):
-        return IntentType.CONSULTAR_FICHA_ANIMAL.value, {"crotal_4": crotal_detectado}
-
-    # 3. Traspasos y movimientos entre explotaciones (evaluar antes de corrales para 'cebadero')
-    if "traspaso" in p or "traslad" in p or "movimiento" in p:
-        return IntentType.LISTAR_ULTIMOS_TRASPASOS.value, {"origen": "121", "destino": "122", "limite": 20}
-
-    # 4. Compras de pienso y gastos de alimentación (evaluar antes de corrales)
-    if "pienso" in p or "alimento" in p or "compra" in p or "gasto" in p or "tolva" in p or "albaran" in p or "albarán" in p:
-        return IntentType.CONSULTAR_COMPRAS_ALIMENTO.value, {"limite": 20}
-
-    # 5. Medicamento más usado o tratamiento frecuente
-    if ("medicamento" in p or "tratamiento" in p) and ("más" in p or "mas" in p or "frecuente" in p or "usado" in p or "recetad" in p):
-        return IntentType.CONSULTAR_MEDICAMENTO_MAS_USADO.value, {"explotacion_codigo": "121", "limite": 10}
-
-    # 6. Supresiones sanitarias / retirada de medicamentos
-    if "supresion" in p or "supresión" in p or "retirada" in p or "tratamiento" in p or "medicamento" in p or "receta" in p:
-        return IntentType.CONSULTAR_SUPRESIONES_ACTIVAS.value, {"limite": 20}
-
-    # 7. Vacas sin parir / vacías
-    if "sin parir" in p or "vacia" in p or "vacía" in p or "no pare" in p or "no paren" in p or "nodriza" in p:
-        return IntentType.LISTAR_VACAS_SIN_PARIR.value, {}
-
-    # 8. Corrales conocidos
-    for c in ["dueña", "duena", "espadaña", "espadana", "rivera", "vega", "cebadero"]:
-        if c in p:
-            norm_c = "DUEÑA" if "due" in c else ("ESPADAÑA" if "espad" in c else c.upper())
-            return IntentType.LISTAR_ANIMALES_CORRAL.value, {"corral": norm_c, "solo_activos": True}
-
-    return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {
-        "respuesta": "No se pudo clasificar la consulta de forma determinista en modo sin cobertura."
-    }
-
-
 def resolver_intencion_usuario(
     prompt: str,
     historial: Optional[list[dict[str, str]]] = None
-) -> Tuple[str, dict[str, Any], bool]:
-    """Resuelve la intención mediante LLM si hay conectividad, o mediante parser local en caso contrario.
+) -> Tuple[Optional[str], dict[str, Any], bool]:
+    """Resuelve la intención del usuario delegando en el LLM (Cloud/Edge).
 
-    Devuelve: (nombre_intent, argumentos, es_offline)
+    En caso de no haber conectividad o no tener credenciales de inferencia,
+    retorna (None, {}, False) para permitir degradación grácil hacia la interfaz táctil.
+
+    Devuelve: (nombre_intent, argumentos, False)
     """
-    # Intentar primero con el proveedor online si hay clave
     claves = _obtener_claves_api()
     if claves["groq"]:
         res_online = clasificar_intencion_groq(prompt, historial, api_key=claves["groq"])
         if res_online:
             return res_online[0], res_online[1], False
 
-    # Fallback determinista offline
-    nombre, args = clasificar_intencion_heuristica(prompt)
-    return nombre, args, True
+    return None, {}, False

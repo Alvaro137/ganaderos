@@ -1259,6 +1259,18 @@ body {
   animation: pulseRecording 1.4s infinite;
 }
 
+.btn-record-voice.disabled-offline {
+  background: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.65;
+  box-shadow: none;
+}
+
+.btn-record-voice.disabled-offline:hover {
+  background: #9ca3af;
+  transform: none;
+}
+
 @keyframes pulseRecording {
   0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
   70% { box-shadow: 0 0 0 16px rgba(220, 38, 38, 0); }

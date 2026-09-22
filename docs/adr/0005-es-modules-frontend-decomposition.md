@@ -24,7 +24,7 @@ Dividir el cliente en módulos especializados bajo `pwa/js/modules/`:
 2. **`db.js`:** Capa de acceso a datos que expone métodos tipados y consultas preparadas con `?`.
 3. **`auth.js`:** Gestión de tokens Bearer y pantalla de autenticación.
 4. **`voice.js`:** `VoiceManager` con soporte dual para Web Speech API y fallback con `MediaRecorder` + Groq Whisper.
-5. **`heuristics.js`:** Parser de lenguaje natural para consultas en modo offline.
+5. **`heuristics.js`:** Suprimido en ADR 0008 (YAGNI & KISS) en favor de Degradación Grácil en `views/assistant_view.js` y asistente conectado Cloud/Edge.
 6. **Vistas Especializadas:**
    - `views/cattle_view.js`: Listado de animales, teclado numérico táctil de campo y split-view.
    - `views/detail_view.js`: Ficha individual, madre, árbol de partos y lote.
