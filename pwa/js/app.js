@@ -43,6 +43,12 @@ function setupNavegacion() {
 async function iniciarAplicacion() {
   const container = document.getElementById("app-container");
 
+  const token = localStorage.getItem("campo_pwa_token");
+  if (!token) {
+    mostrarPantallaLogin();
+    return;
+  }
+
   try {
     await inicializarDB((mensaje) => {
       const elMsg = document.getElementById("loading-msg");
@@ -63,6 +69,7 @@ async function iniciarAplicacion() {
     window.addEventListener(
       "resize",
       debounce(() => {
+        if (document.getElementById("form-auth-login")) return;
         if (AppState.tabActual === "animales" && !AppState.crotalSeleccionado && !AppState.corralSeleccionado) {
           renderVistaAnimales();
         }

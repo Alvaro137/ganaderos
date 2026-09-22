@@ -189,7 +189,7 @@ export function setupAsistenteIA() {
       });
       if (resp.status === 401) {
         localStorage.removeItem("campo_pwa_token");
-        mostrarPantallaLogin("Tu sesión ha caducado. Introduce la contraseña de nuevo.");
+        console.warn("[Asistente IA] Token no autenticado o expirado para el catálogo de modelos.");
         return;
       }
       if (!resp.ok) return;
