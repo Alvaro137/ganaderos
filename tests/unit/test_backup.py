@@ -1,0 +1,110 @@
+"""Tests unitarios para el script de backup y rotación de bases de datos."""
+import gzip
+import sqlite3
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+from scripts.backup_db import purgar_backups_antiguos, realizar_backup
+
+
+class TestBackupDB(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.base_path = Path(self.temp_dir.name)
+        self.db_path = self.base_path / "test_censo.sqlite"
+        self.backup_dir = self.base_path / "backups"
+
+        # Crear base de datos de prueba
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute("CREATE TABLE animales (crotal TEXT PRIMARY KEY, nombre TEXT);")
+            conn.execute("INSERT INTO animales VALUES ('ES083710104599', 'Estrella');")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_backup_exitoso_y_comprimido(self):
+        backup_file = realizar_backup(
+            db_path=self.db_path,
+            backup_dir=self.backup_dir,
+            retencion=5,
+            comprimir=True,
+        )
+        self.assertIsNotNone(backup_file)
+        self.assertTrue(backup_file.exists())
+        self.assertTrue(backup_file.name.endswith(".sqlite.gz"))
+
+        # Descomprimir y verificar integridad relacional
+        with gzip.open(backup_file, "rb") as gz:
+            descomprimido = gz.read()
+
+        dest_test = self.base_path / "restored.sqlite"
+        dest_test.write_bytes(descomprimido)
+
+        conn = sqlite3.connect(dest_test)
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT crotal, nombre FROM animales;")
+            row = cur.fetchone()
+            self.assertEqual(row, ("ES083710104599", "Estrella"))
+        finally:
+            conn.close()
+
+    def test_backup_sin_compresion(self):
+        backup_file = realizar_backup(
+            db_path=self.db_path,
+            backup_dir=self.backup_dir,
+            retencion=5,
+            comprimir=False,
+        )
+        self.assertIsNotNone(backup_file)
+        self.assertTrue(backup_file.exists())
+        self.assertTrue(backup_file.name.endswith(".sqlite"))
+
+        conn = sqlite3.connect(backup_file)
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT nombre FROM animales;")
+            self.assertEqual(cur.fetchone()[0], "Estrella")
+        finally:
+            conn.close()
+
+    def test_rotacion_y_retencion(self):
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        # Crear 5 archivos simulados con marcas temporales diferentes
+        archivos = []
+        for i in range(5):
+            f = self.backup_dir / f"ganaderos_backup_20260901_0{i}0000.sqlite.gz"
+            f.write_text("dummy")
+            # Forzar modificación de mtime
+            t = time.time() - (5 - i) * 100
+            import os
+            os.utime(f, (t, t))
+            archivos.append(f)
+
+        # Retener solo 2
+        purgados = purgar_backups_antiguos(self.backup_dir, retencion=2)
+        self.assertEqual(len(purgados), 3)
+
+        restantes = list(self.backup_dir.glob("ganaderos_backup_*.sqlite*"))
+        self.assertEqual(len(restantes), 2)
+        # Los restantes deben ser los dos más recientes
+        nombres_restantes = [r.name for r in restantes]
+        self.assertIn("ganaderos_backup_20260901_040000.sqlite.gz", nombres_restantes)
+        self.assertIn("ganaderos_backup_20260901_030000.sqlite.gz", nombres_restantes)
+
+    def test_db_origen_inexistente(self):
+        resultado = realizar_backup(
+            db_path=self.base_path / "inexistente.sqlite",
+            backup_dir=self.backup_dir,
+        )
+        self.assertIsNone(resultado)
+
+
+if __name__ == "__main__":
+    unittest.main()
