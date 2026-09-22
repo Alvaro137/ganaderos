@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import importlib.util
-import json
 import logging
 import os
 import secrets
@@ -82,9 +81,6 @@ def validar_auth_token(token: Optional[str]) -> bool:
                     return expira_en > int(time.time())
                 except (ValueError, TypeError):
                     return False
-    # Compatibilidad hacia atrás con tokens legacy emitidos antes de la migración HMAC
-    if len(token) >= 20 and all(c in "0123456789abcdefABCDEF" for c in token):
-        return True
     return False
 
 # Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
@@ -125,7 +121,11 @@ from src.application.services import (
 )
 from src.domain.exceptions import DomainError
 from src.domain.value_objects import Crotal
-from src.infrastructure.llm_gateway import resolver_intencion_usuario
+from src.infrastructure.llm_gateway import (
+    obtener_modelos_priorizados,
+    resolver_intencion_usuario,
+    sintetizar_respuesta_llm,
+)
 from src.infrastructure.repositories import (
     SQLiteAnimalRepository,
     SQLitePartoRepository,
@@ -263,7 +263,7 @@ def get_asistente_service() -> AsistenteService:
     service = getattr(app.state, "asistente_service", None)
     if service is None:
         service = AsistenteService(
-            intent_resolver=lambda p, h=None: resolver_intencion_usuario(p, h),
+            intent_resolver=lambda p, h=None, **kw: resolver_intencion_usuario(p, h, **kw),
             query_builder=construir_consulta_intent,
         )
         app.state.asistente_service = service
@@ -389,7 +389,9 @@ async def ai_intent(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Servicio de asistente no inicializado.",
         )
-    resultado = asistente.procesar_intencion(req.prompt, req.historial)
+    resultado = asistente.procesar_intencion(
+        req.prompt, req.historial, modelo_solicitado=req.model_id
+    )
     if not resultado:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -411,14 +413,10 @@ async def ai_intent(
 @app.get("/api/ai/models", tags=["Asistente IA"], response_model=AIModelResponse)
 async def ai_models(authorized: bool = Depends(verify_token)):
     """Devuelve el catálogo de modelos disponibles para inferencia y asistencia."""
-    current_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-    models = [
-        {"id": "auto", "name": "Automático (Recomendado)"},
-        {"id": current_model, "name": f"Groq {current_model} (Cloud/Edge)"},
-    ]
-    if current_model != "llama-3.3-70b-versatile":
-        models.append({"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (Cloud/Edge)"})
-    models.append({"id": "qwen/qwen3.8-27b", "name": "Groq Qwen 3.8 27B (Ultra-rápido)"})
+    modelos = obtener_modelos_priorizados()
+    models = [{"id": "auto", "name": "Automático (Recomendado - Cascada de Mayor Inteligencia)"}]
+    for m in modelos:
+        models.append({"id": m["model"], "name": m["name"]})
     return {
         "ok": True,
         "models": models,
@@ -428,39 +426,10 @@ async def ai_models(authorized: bool = Depends(verify_token)):
 @app.post("/api/ai/synthesize", tags=["Asistente IA"], response_model=SynthesizeResponse)
 async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verify_token)):
     """Sintetiza en lenguaje ganadero directo los resultados obtenidos de la base de datos."""
-    groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY")
-    if groq_key and req.data:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                prompt_text = (
-                    f"Eres un asesor técnico y veterinario de una explotación de vacuno de carne en pastos.\n"
-                    f"El ganadero ha preguntado: '{req.prompt}'\n"
-                    f"Los datos obtenidos de la base de datos son:\n{json.dumps(req.data[:15], ensure_ascii=False)}\n"
-                    f"Resume en 1 o 2 frases breves, directas y claras en lenguaje ganadero la respuesta práctica."
-                )
-                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
-                model_name = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-                payload = {
-                    "model": model_name,
-                    "messages": [{"role": "user", "content": prompt_text}],
-                    "temperature": 0.2,
-                    "max_tokens": 150,
-                }
-                resp = await client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                if resp.status_code == 200:
-                    content = resp.json()["choices"][0]["message"]["content"].strip()
-                    return {"ok": True, "sintesis": content}
-                logger.warning(f"[AI Synthesize] Respuesta no-200 de Groq ({resp.status_code}): {resp.text}")
-        except httpx.TimeoutException:
-            logger.warning("[AI Synthesize] Timeout agotado (10s) contactando con Groq.")
-        except httpx.HTTPError as e:
-            logger.warning(f"[AI Synthesize] Fallo de comunicación HTTP con Groq: {e}")
-        except Exception as e:
-            logger.error(f"[AI Synthesize] Error inesperado en síntesis: {e}", exc_info=True)
+    if req.data:
+        sintesis_llm = sintetizar_respuesta_llm(req.prompt, req.data, modelo_solicitado=req.model_id)
+        if sintesis_llm:
+            return {"ok": True, "sintesis": sintesis_llm}
 
     n = len(req.data)
     sintesis = f"Se han obtenido {n} registro{'s' if n != 1 else ''} para la consulta '{req.prompt}'."

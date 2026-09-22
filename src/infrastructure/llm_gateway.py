@@ -1,9 +1,15 @@
-"""Pasarela de comunicación con modelos de lenguaje mediante Tool/Intent Calling estructurado."""
+"""Pasarela de comunicación multi-proveedor con modelos de lenguaje (LLM Router).
+
+Enruta consultas en lenguaje natural mediante Tool / Function Calling tipado,
+priorizando los modelos con mayor capacidad de razonamiento (Groq 120B, OpenRouter 70B, etc.)
+y con degradación en cascada ante caídas o límites de cuota (HTTP 429).
+Sin heurísticas offline de campo libre en producción.
+"""
+from __future__ import annotations
+
 import json
 import logging
 import os
-import re
-import unicodedata
 import urllib.error
 import urllib.request
 from typing import Any, Optional, Tuple
@@ -22,53 +28,151 @@ Reglas del dominio:
 - Si la pregunta es conceptual o informativa (ej. sanidad, consejos generales), utiliza la función 'consulta_informativa_general'.
 """
 
+# Lista priorizada predeterminada por nivel de inteligencia y razonamiento
+_MODELOS_DEFAULT = [
+    {
+        "provider": "gemini",
+        "model": "gemini-3.8-flash",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "name": "Gemini 3.8 Flash (Flagship Google AI)",
+    },
+    {
+        "provider": "gemini",
+        "model": "gemini-3.7-flash",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "name": "Gemini 3.7 Flash (Razonamiento Híbrido)",
+    },
+    {
+        "provider": "gemini",
+        "model": "gemini-3.6-flash",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "name": "Gemini 3.6 Flash (Alta Capacidad)",
+    },
+    {
+        "provider": "gemini",
+        "model": "gemini-3.5-flash",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "name": "Gemini 3.5 Flash (Generación Estable)",
+    },
+    {
+        "provider": "openrouter",
+        "model": "poolside/laguna-s-2.1:free",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "name": "OpenRouter Poolside Laguna S 2.1 (1.35T Flagship Free)",
+    },
+    {
+        "provider": "openrouter",
+        "model": "nex-agi/nex-n2.5-pro:free",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "name": "OpenRouter Nex-N2.5-Pro (657B MoE Free)",
+    },
+    {
+        "provider": "openrouter",
+        "model": "inclusionai/ling-3.0-flash-sante:free",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "name": "OpenRouter Ling 3.0 Flash Sante (327B Free)",
+    },
+    {
+        "provider": "groq",
+        "model": "qwen/qwen3.8-27b",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "name": "Groq Qwen 3.8 27B (Ultra-rápido)",
+    },
+    {
+        "provider": "openrouter",
+        "model": "qwen/qwen3.8-27b:free",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "name": "OpenRouter Qwen 3.8 27B (Free)",
+    },
+    {
+        "provider": "gemini",
+        "model": "gemini-3.5-flash-lite",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "name": "Gemini 3.5 Flash Lite (Alta Cuota 500 RPD)",
+    },
+    {
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        "name": "Gemini 3.1 Flash Lite (Respaldo Ligero)",
+    },
+    {
+        "provider": "openrouter",
+        "model": "google/gemma-4-31b-it:free",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "name": "OpenRouter Google Gemma 4 31B (Free)",
+    },
+]
+
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "config", "ai_models_router.json")
+
+
+def obtener_modelos_priorizados() -> list[dict[str, Any]]:
+    """Carga los modelos ordenados por inteligencia desde config/ai_models_router.json o usa el default."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                modelos = data.get("modelos", [])
+                if modelos:
+                    return modelos
+        except Exception as e:
+            logger.warning(f"[LLM Gateway] No se pudo leer {CONFIG_FILE}: {e}")
+    return _MODELOS_DEFAULT
+
+
+MODELOS_PRIORIZADOS = obtener_modelos_priorizados()
+
 
 def _obtener_claves_api() -> dict[str, str]:
     return {
         "groq": os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY", ""),
-        "gemini": os.environ.get("GEMINI_API_KEY", ""),
         "openrouter": os.environ.get("OPENROUTER_API_KEY", ""),
+        "gemini": os.environ.get("GEMINI_API_KEY", ""),
     }
 
 
-def clasificar_intencion_groq(
+def _ejecutar_tool_calling(
+    url: str,
+    key: str,
+    model: str,
     prompt: str,
     historial: Optional[list[dict[str, str]]] = None,
-    api_key: Optional[str] = None
+    timeout: float = 10.0,
+    extra_headers: Optional[dict[str, str]] = None,
 ) -> Optional[Tuple[str, dict[str, Any]]]:
-    """Llama a Groq Cloud con Tool Calling nativo."""
-    key = api_key or _obtener_claves_api()["groq"]
-    if not key:
-        return None
-
+    """Ejecuta una petición estándar OpenAI-compatible con tools a un proveedor LLM."""
     messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
     if historial:
         for msg in historial[-4:]:
             messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
     messages.append({"role": "user", "content": prompt})
 
-    model_name = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
     payload = {
-        "model": model_name,
+        "model": model,
         "messages": messages,
         "tools": CATALOGO_HERRAMIENTAS_LLM,
         "tool_choice": "auto",
         "temperature": 0.1,
     }
 
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+        "User-Agent": "GanaderosCampo/2.0",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+
     req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions",
+        url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {key}",
-            "User-Agent": "GanaderosCampo/2.0"
-        },
-        method="POST"
+        headers=headers,
+        method="POST",
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             choice = data["choices"][0]["message"]
 
@@ -78,122 +182,180 @@ def clasificar_intencion_groq(
                 try:
                     args = json.loads(tool["arguments"])
                 except Exception as json_err:
-                    logger.warning(f"[LLM Gateway] Error al decodificar argumentos JSON de la herramienta '{nombre}': {json_err}")
+                    logger.warning(f"[LLM Router] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
                     args = {}
                 return nombre, args
 
-            # Si el modelo respondió en texto directo
-            content = choice.get("content", "").strip()
+            content = choice.get("content", "").strip() if choice.get("content") else ""
             if content:
                 return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
 
     except urllib.error.HTTPError as http_err:
-        logger.warning(f"[LLM Gateway] Error HTTP al comunicar con Groq ({http_err.code}): {http_err.reason}")
+        logger.warning(f"[LLM Router] {model} respondió HTTP {http_err.code}: {http_err.reason}")
     except urllib.error.URLError as url_err:
-        logger.warning(f"[LLM Gateway] Error de conexión URL con Groq: {url_err.reason}")
+        logger.warning(f"[LLM Router] Error de conexión URL con {model}: {url_err.reason}")
     except Exception as e:
-        logger.error(f"[LLM Gateway] Error inesperado en llamada a Groq: {e}", exc_info=True)
+        logger.warning(f"[LLM Router] Error inesperado en llamada a {model}: {e}")
 
     return None
 
 
-def _normalizar_texto(texto: str) -> str:
-    texto = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("utf-8")
-    return texto.lower().strip()
+def clasificar_intencion_groq(
+    prompt: str,
+    historial: Optional[list[dict[str, str]]] = None,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Optional[Tuple[str, dict[str, Any]]]:
+    """Llama a Groq Cloud con Tool Calling nativo."""
+    key = api_key or _obtener_claves_api()["groq"]
+    if not key:
+        return None
+    model_name = model or os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+    return _ejecutar_tool_calling(
+        url="https://api.groq.com/openai/v1/chat/completions",
+        key=key,
+        model=model_name,
+        prompt=prompt,
+        historial=historial,
+    )
 
 
-def clasificar_intencion_offline(prompt: str) -> Tuple[str, dict[str, Any]]:
-    """Clasificador semántico y extractor determinista para modo offline y resiliencia."""
-    p_norm = _normalizar_texto(prompt)
-
-    # Detección de ataques o consultas fuera de dominio (adversarios)
-    patrones_adversarios = [
-        r"drop\s+table",
-        r"select\s+\*",
-        r"--;",
-        r"contrasena",
-        r"password",
-        r"capital\s+de",
-        r"chiste",
-        r"tiempo\s+va\s+a\s+hacer",
-        r"clima",
-    ]
-    for pat in patrones_adversarios:
-        if re.search(pat, p_norm):
-            return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {}
-
-    # Sanitización de espaciado Whisper (ej: '10 45' -> '1045')
-    prompt_sanitizado = re.sub(r"\b(\d{2})\s+(\d{2})\b", r"\1\2", prompt)
-    p_norm_s = _normalizar_texto(prompt_sanitizado)
-
-    crotal_4 = None
-    match_oficial = re.search(r"\b[A-Za-z]{2}\d{10,12}\b", prompt_sanitizado)
-    if match_oficial:
-        crotal_4 = match_oficial.group(0)[-4:]
-    else:
-        match_4 = re.search(r"\b(\d{4})\b", prompt_sanitizado)
-        if match_4:
-            crotal_4 = match_4.group(1)
-
-    if any(k in p_norm_s for k in ["parto", "cria", "hijo", "descendencia", "becerro"]):
-        if any(k in p_norm_s for k in ["sin parir", "vacia", "no paren"]):
-            return IntentType.LISTAR_VACAS_SIN_PARIR.value, {}
-        if crotal_4:
-            return IntentType.CONSULTAR_PARTOS_MADRE.value, {"crotal_4": crotal_4}
-
-    if any(k in p_norm_s for k in ["sin parir", "vacia", "no paren", "nodrizas"]):
-        return IntentType.LISTAR_VACAS_SIN_PARIR.value, {}
-
-    if any(k in p_norm_s for k in ["retirada", "supresion", "tiempo de carne", "medicamento", "receta", "tratamiento"]):
-        if any(k in p_norm_s for k in ["mas usado", "mas recetado", "mas frecuente", "frecuente"]):
-            return IntentType.CONSULTAR_MEDICAMENTO_MAS_USADO.value, {}
-        return IntentType.CONSULTAR_SUPRESIONES_ACTIVAS.value, {}
-
-    if any(k in p_norm_s for k in ["pienso", "alimento", "albaran", "tolva"]):
-        return IntentType.CONSULTAR_COMPRAS_ALIMENTO.value, {}
-
-    corrales_conocidos = {
-        "duena": "DUEÑA",
-        "espadana": "ESPADAÑA",
-        "rivera": "RIVERA",
-        "vega": "VEGA",
-        "cebadero": "CEBADERO",
+def clasificar_intencion_openrouter(
+    prompt: str,
+    historial: Optional[list[dict[str, str]]] = None,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Optional[Tuple[str, dict[str, Any]]]:
+    """Llama a OpenRouter con Tool Calling nativo."""
+    key = api_key or _obtener_claves_api()["openrouter"]
+    if not key:
+        return None
+    model_name = model or "meta-llama/llama-3.3-70b-instruct"
+    extra = {
+        "HTTP-Referer": "https://ganaderos.local",
+        "X-Title": "Ganaderos Campo",
     }
-    # Distinguir traspasos de corrales
-    if any(k in p_norm_s for k in ["traspaso", "trasladado", "movimiento"]):
-        if "reciente" in p_norm_s and "cebadero" in p_norm_s:
-            return IntentType.LISTAR_ULTIMOS_TRASPASOS.value, {"origen": "121", "destino": "122"}
-        return IntentType.LISTAR_ULTIMOS_TRASPASOS.value, {}
-
-    for alias, nombre_oficial in corrales_conocidos.items():
-        if alias in p_norm_s:
-            return IntentType.LISTAR_ANIMALES_CORRAL.value, {"corral": nombre_oficial}
-
-    if crotal_4:
-        return IntentType.CONSULTAR_FICHA_ANIMAL.value, {"crotal_4": crotal_4}
-
-    return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {}
+    return _ejecutar_tool_calling(
+        url="https://openrouter.ai/api/v1/chat/completions",
+        key=key,
+        model=model_name,
+        prompt=prompt,
+        historial=historial,
+        extra_headers=extra,
+    )
 
 
 def resolver_intencion_usuario(
     prompt: str,
-    historial: Optional[list[dict[str, str]]] = None
+    historial: Optional[list[dict[str, str]]] = None,
+    modelo_solicitado: Optional[str] = None,
 ) -> Tuple[Optional[str], dict[str, Any], bool]:
-    """Resuelve la intención del usuario delegando en el LLM (Cloud/Edge) con fallback local.
+    """Resuelve la intención del usuario delegando en la lista priorizada de modelos de IA.
 
-    En caso de haber conectividad y credenciales válidas, utiliza inferencia online.
-    Si el LLM no está disponible, falla o no hay internet en campo, recurre al
-    clasificador determinista de alta precisión para no interrumpir el servicio.
+    Prioriza los modelos más inteligentes (Frontier 120B/70B) y desciende en cascada
+    si se agota la cuota o falla el proveedor.
+    Si todos los modelos fallan o no hay conexión, retorna (None, {}, False) sin intentar
+    parsear heurísticamente campos libres.
     """
     claves = _obtener_claves_api()
-    if claves["groq"]:
-        res_online = clasificar_intencion_groq(prompt, historial, api_key=claves["groq"])
-        if res_online:
-            return res_online[0], res_online[1], False
+    modelos = obtener_modelos_priorizados()
 
-    # Fallback determinista local-first para resiliencia offline en campo
-    intent_offline, args_offline = clasificar_intencion_offline(prompt)
-    if intent_offline and intent_offline != IntentType.CONSULTA_INFORMATIVA_GENERAL.value:
-        return intent_offline, args_offline, True
+    # Si se solicitó un modelo específico que no sea "auto"
+    if modelo_solicitado and modelo_solicitado != "auto":
+        for candidato in modelos:
+            if candidato["model"] == modelo_solicitado:
+                prov = candidato["provider"]
+                key = claves.get(prov)
+                if key:
+                    res = _ejecutar_tool_calling(
+                        url=candidato["url"],
+                        key=key,
+                        model=candidato["model"],
+                        prompt=prompt,
+                        historial=historial,
+                        extra_headers={"HTTP-Referer": "https://ganaderos.local", "X-Title": "Ganaderos Campo"} if prov == "openrouter" else None,
+                    )
+                    if res:
+                        return res[0], res[1], False
+                break
 
+    # Router en cascada: orden de mayor a menor capacidad de razonamiento
+    for candidato in modelos:
+        prov = candidato["provider"]
+        key = claves.get(prov)
+        if not key:
+            continue
+
+        extra_hdrs = {"HTTP-Referer": "https://ganaderos.local", "X-Title": "Ganaderos Campo"} if prov == "openrouter" else None
+        res = _ejecutar_tool_calling(
+            url=candidato["url"],
+            key=key,
+            model=candidato["model"],
+            prompt=prompt,
+            historial=historial,
+            extra_headers=extra_hdrs,
+        )
+        if res:
+            return res[0], res[1], False
+
+    # Todos los proveedores online agotados o sin conectividad
     return None, {}, False
+
+
+def sintetizar_respuesta_llm(
+    prompt: str,
+    data: list[dict[str, Any]],
+    modelo_solicitado: Optional[str] = None,
+) -> Optional[str]:
+    """Genera la síntesis en lenguaje ganadero utilizando la lista priorizada de modelos."""
+    claves = _obtener_claves_api()
+    modelos = obtener_modelos_priorizados()
+    prompt_text = (
+        f"Eres un asesor técnico y veterinario de una explotación de vacuno de carne en pastos.\n"
+        f"El ganadero ha preguntado: '{prompt}'\n"
+        f"Los datos obtenidos de la base de datos son:\n{json.dumps(data[:15], ensure_ascii=False)}\n"
+        f"Resume en 1 o 2 frases breves, directas y claras en lenguaje ganadero la respuesta práctica."
+    )
+
+    candidatos_a_probar = []
+    if modelo_solicitado and modelo_solicitado != "auto":
+        candidatos_a_probar = [m for m in modelos if m["model"] == modelo_solicitado]
+    if not candidatos_a_probar:
+        candidatos_a_probar = modelos
+
+    for candidato in candidatos_a_probar:
+        prov = candidato["provider"]
+        key = claves.get(prov)
+        if not key:
+            continue
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+            "User-Agent": "GanaderosCampo/2.0",
+        }
+        if prov == "openrouter":
+            headers["HTTP-Referer"] = "https://ganaderos.local"
+            headers["X-Title"] = "Ganaderos Campo"
+
+        payload = {
+            "model": candidato["model"],
+            "messages": [
+                {"role": "system", "content": "Eres un asesor técnico ganadero. Resume en 1 o 2 frases breves y directas."},
+                {"role": "user", "content": prompt_text},
+            ],
+            "temperature": 0.2,
+            "max_tokens": 150,
+        }
+
+        try:
+            req = urllib.request.Request(candidato["url"], data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                content = res_data["choices"][0]["message"]["content"].strip()
+                if content:
+                    return content
+        except Exception as e:
+            logger.warning(f"[Synthesize Router] Fallo con {candidato['name']}: {e}")
+
+    return None
