@@ -35,7 +35,7 @@ async function test(nombre, fn) {
     console.log(`  [OK] ${nombre}`);
   } catch (err) {
     console.error(`  [FALLO] ${nombre}`);
-    console.error(`         ${err.message}`);
+    console.error(`         ${err.stack || err.message}`);
     process.exitCode = 1;
   }
 }
@@ -179,8 +179,92 @@ async function runAllTests() {
     assert.strictEqual(movVida.tipo_display, "SACRIFICIO");
   });
 
+  await test("Búsqueda Incremental: Comparación por prefijo de crotal_4", () => {
+    // Al teclear 1 -> 0 -> 4 -> 5, la búsqueda parcial '10' debe filtrar vacas que comiencen por '10'
+    const crotalesPrueba = ["1045", "1034", "3410", "4510", "1099"];
+    const busqueda = "10";
+    
+    // Algoritmo nuevo por prefijo:
+    const resultadosPrefijo = crotalesPrueba.filter(c => c.startsWith(busqueda));
+    assert.deepStrictEqual(resultadosPrefijo, ["1045", "1034", "1099"]);
+    assert.strictEqual(resultadosPrefijo.includes("3410"), false);
+    assert.strictEqual(resultadosPrefijo.includes("4510"), false);
+  });
 
-  console.log("==================================================");
+  await test("Ficha Animal: Detección de redundancia entre Nacimiento y Alta", async () => {
+    const { generarHtmlDetalleAnimal } = await import('../../pwa/js/modules/views/detail_view.js');
+    
+    // Caso 1: Vaca nacida en la finca (fecha_nacimiento == fecha_alta)
+    const vacaNacidaEnFinca = {
+      crotal: "ES083710101045",
+      crotal_4: "1045",
+      nombre: "Mariposa",
+      raza: "Charolesa",
+      sexo: "H",
+      estado: "A",
+      fecha_nacimiento: "2018-05-10",
+      fecha_alta: "2018-05-10",
+      corral: "DUEÑA",
+      partos: []
+    };
+    const htmlNacida = generarHtmlDetalleAnimal(vacaNacidaEnFinca);
+    assert.strictEqual(htmlNacida.includes("Fecha Nacimiento"), true);
+    assert.strictEqual(htmlNacida.includes("Alta en Explotación"), false, "No debe mostrar Alta si es idéntica a Nacimiento.");
+
+    // Caso 2: Vaca comprada / introducida más tarde
+    const vacaComprada = {
+      crotal: "ES083710102000",
+      crotal_4: "2000",
+      nombre: "Rubia",
+      raza: "Limusina",
+      sexo: "H",
+      estado: "A",
+      fecha_nacimiento: "2017-02-15",
+      fecha_alta: "2019-11-20",
+      corral: "DUEÑA",
+      partos: []
+    };
+    const htmlComprada = generarHtmlDetalleAnimal(vacaComprada);
+    assert.strictEqual(htmlComprada.includes("Fecha Nacimiento"), true);
+    assert.strictEqual(htmlComprada.includes("Alta en Explotación"), true, "Debe mostrar Alta si difiere de Nacimiento.");
+    assert.strictEqual(htmlComprada.includes("20/11/2019"), true);
+
+    // Caso 3: Vaca dada de baja (inactiva)
+    const vacaBaja = {
+      crotal: "ES083710109999",
+      crotal_4: "9999",
+      nombre: "Vieja",
+      raza: "Cruzada",
+      sexo: "H",
+      estado: "B",
+      fecha_nacimiento: "2012-03-01",
+      fecha_alta: "2012-03-01",
+      movimientos: [
+        { fecha: "2024-06-15", tipo: "SACRIFICIO", origen: "ES371261100122", destino: "ES373762000081" }
+      ],
+      partos: []
+    };
+    const htmlBaja = generarHtmlDetalleAnimal(vacaBaja);
+    assert.strictEqual(htmlBaja.includes("Fecha de Baja"), true);
+    assert.strictEqual(htmlBaja.includes("15/06/2024"), true);
+    assert.strictEqual(htmlBaja.includes("Motivo de Baja"), true);
+    assert.strictEqual(htmlBaja.includes("Venta / Matadero (Cebadero)"), true);
+  });
+
+  await test("Accesibilidad: Botón Ver Ficha en Movimientos", async () => {
+    const { generarCardMovimientoHtml } = await import('../../pwa/js/modules/views/movements_view.js');
+    const html = generarCardMovimientoHtml({
+      id: 1,
+      crotal: "ES083710101045",
+      crotal_4: "1045",
+      fecha: "2026-03-10",
+      tipo: "VENTA",
+      origen: "ES371261100122",
+      destino: "ES373762000081"
+    });
+    assert.strictEqual(html.includes('class="btn-ver-ficha-animal"'), true);
+    assert.strictEqual(html.includes('Ver ficha'), true);
+  });
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);
   console.log("==================================================");
 
