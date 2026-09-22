@@ -55,6 +55,12 @@ _MODELOS_DEFAULT = [
         "name": "Gemini 3.5 Flash (Generación Estable)",
     },
     {
+        "provider": "mistral",
+        "model": "mistral-large-2512",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "name": "Mistral Large 2512 (Flagship Mistral AI)",
+    },
+    {
         "provider": "openrouter",
         "model": "poolside/laguna-s-2.1:free",
         "url": "https://openrouter.ai/api/v1/chat/completions",
@@ -85,6 +91,18 @@ _MODELOS_DEFAULT = [
         "name": "OpenRouter Qwen 3.8 27B (Free)",
     },
     {
+        "provider": "mistral",
+        "model": "codestral-2508",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "name": "Mistral Codestral 2508 (Razonamiento y Código)",
+    },
+    {
+        "provider": "mistral",
+        "model": "mistral-small-2603",
+        "url": "https://api.mistral.ai/v1/chat/completions",
+        "name": "Mistral Small 2603 (Rápido y Ligero)",
+    },
+    {
         "provider": "gemini",
         "model": "gemini-3.5-flash-lite",
         "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -101,6 +119,18 @@ _MODELOS_DEFAULT = [
         "model": "google/gemma-4-31b-it:free",
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "name": "OpenRouter Google Gemma 4 31B (Free)",
+    },
+    {
+        "provider": "groq",
+        "model": "openai/gpt-oss-120b",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "name": "Groq GPT OSS 120B (Último recurso / Fallback)",
+    },
+    {
+        "provider": "groq",
+        "model": "openai/gpt-oss-20b",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "name": "Groq GPT OSS 20B (Básico)",
     },
 ]
 

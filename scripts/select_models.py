@@ -262,7 +262,32 @@ def descubrir_groq_models(api_key: str, excluir_gpt_oss: bool = False) -> List[D
 def descubrir_mistral_models(api_key: str) -> List[Dict[str, Any]]:
     """Descubre los modelos activos en Mistral AI y los clasifica por inteligencia."""
     if not api_key:
-        return []
+        return [
+            {
+                "provider": "mistral",
+                "model": "mistral-large-2512",
+                "name": "Mistral Large 2512 (Flagship Mistral AI)",
+                "url": "https://api.mistral.ai/v1/chat/completions",
+                "soporta_tools": True,
+                "score": 98,
+            },
+            {
+                "provider": "mistral",
+                "model": "codestral-2508",
+                "name": "Mistral Codestral 2508 (Razonamiento y Código)",
+                "url": "https://api.mistral.ai/v1/chat/completions",
+                "soporta_tools": True,
+                "score": 88,
+            },
+            {
+                "provider": "mistral",
+                "model": "mistral-small-2603",
+                "name": "Mistral Small 2603 (Rápido y Ligero)",
+                "url": "https://api.mistral.ai/v1/chat/completions",
+                "soporta_tools": True,
+                "score": 80,
+            },
+        ]
 
     url = "https://api.mistral.ai/v1/models"
     req = urllib.request.Request(
