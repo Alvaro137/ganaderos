@@ -41,14 +41,14 @@ class TestAIBenchmarkRegression(unittest.TestCase):
             f"Fallo en construcción de consultas SQL: tasa de validez {metrics['query_validity_rate']*100:.1f}% != 100%."
         )
 
-    def test_offline_latency_budget(self):
-        """Valida que el tiempo de inferencia offline P95 sea inferior a 15 ms."""
+    def test_ast_validation_latency_budget(self):
+        """Valida que el tiempo de verificación AST y compilación SQL P95 sea inferior a 15 ms."""
         _, metrics = ejecutar_benchmark(self.dataset_path)
 
         self.assertLess(
             metrics["latency_p95_ms"],
             15.0,
-            f"Latencia offline excesiva: {metrics['latency_p95_ms']:.3f} ms supera el presupuesto de 15 ms."
+            f"Latencia de verificación excesiva: {metrics['latency_p95_ms']:.3f} ms supera el presupuesto de 15 ms."
         )
 
 
