@@ -127,3 +127,128 @@ export function obtenerTextoBotonVolver() {
   }
   return "Volver a la búsqueda";
 }
+
+/**
+ * Clasifica un movimiento según el modelo de dominio unificado:
+ * - VENTA: Salidas comerciales (terneros cebados a matadero, vacas de desvieje a matadero, ventas a terceros).
+ * - TRASPASO_CEBADERO: Traspasos de animales desde cría/vida (121, 671, 591) hacia cebadero propio (122).
+ * - MOVIMIENTO_INTERNO: Movimientos entre fincas reproductoras (121, 671, 591) o cambios de cerca/corral.
+ * - NACIMIENTO: Parideras y altas por nacimiento.
+ * - COMPRA: Entradas de ganado comprado a terceros.
+ * - MUERTE: Bajas en campo / muerte natural.
+ * - SACRIFICIO: Sacrificios en campo no derivados a matadero comercial.
+ */
+export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
+  const o = String(orig || "").trim();
+  const d = String(dest || "").trim();
+  const t = String(tipo || "").trim().toUpperCase();
+
+  const esFincaInterna = (code) => code.endsWith("121") || code.endsWith("671") || code.endsWith("591");
+  const esMatadero = (code) =>
+    code.endsWith("081") ||
+    code.endsWith("014") ||
+    code.endsWith("061") ||
+    code.endsWith("078") ||
+    code.toUpperCase().includes("MATADERO") ||
+    code.startsWith("ES37376") ||
+    code.startsWith("ES47086") ||
+    code.startsWith("ES28129");
+
+  // 1. Nacimiento siempre es Nacimiento
+  if (t === "NACIMIENTO") {
+    return {
+      tipo_display: "NACIMIENTO",
+      label: "Nacimiento",
+      badge_class: "nacimiento"
+    };
+  }
+
+  // 2. Movimientos internos entre 121, 671 y 591 (independientemente de cómo se registrara en Access)
+  if (esFincaInterna(o) && esFincaInterna(d) && o !== d) {
+    return {
+      tipo_display: "MOVIMIENTO_INTERNO",
+      label: "Movimiento Interno",
+      badge_class: "interno"
+    };
+  }
+
+  // 3. Ubicaciones o movimientos dentro de la misma finca
+  if (t === "UBICACIÓN" || t === "UBICACION") {
+    return {
+      tipo_display: "MOVIMIENTO_INTERNO",
+      label: "Movimiento Interno",
+      badge_class: "interno"
+    };
+  }
+
+  // 4. Traspasos a Cebadero (122) desde explotaciones de vida/cría
+  if (d.endsWith("122") && (esFincaInterna(o) || t === "TRASPASO")) {
+    return {
+      tipo_display: "TRASPASO_CEBADERO",
+      label: "Traspaso Cebadero",
+      badge_class: "traspaso"
+    };
+  }
+
+  // 5. Salidas a matadero (desde cebadero 122 o fincas de vida 121/671/591) -> Venta comercial
+  if ((o.endsWith("122") || esFincaInterna(o)) && esMatadero(d)) {
+    if (t === "SACRIFICIO" || t === "VENTA") {
+      return {
+        tipo_display: "VENTA",
+        label: "Venta",
+        badge_class: "venta"
+      };
+    }
+  }
+
+  // 6. Cualquier salida desde el Cebadero (122) hacia destinos no internos -> Venta comercial
+  if (o.endsWith("122") && !esFincaInterna(d) && d !== "") {
+    return {
+      tipo_display: "VENTA",
+      label: "Venta",
+      badge_class: "venta"
+    };
+  }
+
+  // 7. Ventas explícitas de la base de datos
+  if (t === "VENTA") {
+    return {
+      tipo_display: "VENTA",
+      label: "Venta",
+      badge_class: "venta"
+    };
+  }
+
+  // 8. Compras
+  if (t === "COMPRA") {
+    return {
+      tipo_display: "COMPRA",
+      label: "Compra",
+      badge_class: "compra"
+    };
+  }
+
+  // 9. Bajas en campo / muerte natural
+  if (t === "MUERTE") {
+    return {
+      tipo_display: "MUERTE",
+      label: "Baja en campo",
+      badge_class: "muerte"
+    };
+  }
+
+  // 10. Sacrificios en campo no derivados a matadero comercial
+  if (t === "SACRIFICIO") {
+    return {
+      tipo_display: "SACRIFICIO",
+      label: "Sacrificio",
+      badge_class: "sacrificio"
+    };
+  }
+
+  return {
+    tipo_display: t || "OTRO",
+    label: t || "Movimiento",
+    badge_class: "otro"
+  };
+}

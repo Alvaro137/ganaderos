@@ -1549,9 +1549,15 @@ body {
 }
 
 .badge-tipo-mov.traspaso {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
+.badge-tipo-mov.interno {
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
 }
 
 .badge-tipo-mov.nacimiento {
@@ -1664,19 +1670,6 @@ body {
   margin-top: 10px;
   font-size: 0.8rem;
   color: var(--text-dim);
-}
-
-.mov-subtipo-tag {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #7e22ce;
-  background: #faf5ff;
-  border: 1px solid #e9d5ff;
-  padding: 1px 7px;
-  border-radius: var(--radius-sm);
-  margin-left: 8px;
-  vertical-align: middle;
 }
 
 .btn-mostrar-mas-movimientos {
