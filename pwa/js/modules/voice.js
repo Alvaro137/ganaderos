@@ -3,7 +3,7 @@
  * Módulo de captura de voz y transcripción (Web Speech API + Groq Whisper fallback).
  */
 
-import { obtenerAuthHeaders } from './auth.js';
+import { fetchTranscribe } from './api.js';
 
 export class VoiceManager {
   constructor({ onResult, onStatus, onStateChange, onWaveform }) {
@@ -129,15 +129,7 @@ export class VoiceManager {
         this.onWaveform(false);
 
         try {
-          const authHdrs = obtenerAuthHeaders();
-          const resp = await fetch("./api/ai/transcribe", {
-            method: "POST",
-            headers: {
-              "Content-Type": audioBlob.type || "audio/webm",
-              ...authHdrs
-            },
-            body: audioBlob,
-          });
+          const resp = await fetchTranscribe(audioBlob);
 
           const data = await resp.json();
           if (resp.ok && data.ok && data.text) {

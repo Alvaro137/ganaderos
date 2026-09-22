@@ -111,7 +111,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 
 from src.application.query_builder import construir_consulta_intent
-from src.application.services import CensoService, GenealogiaService, SanidadService
+from src.application.services import (
+    AsistenteService,
+    CensoService,
+    GenealogiaService,
+    SanidadService,
+)
 from src.domain.exceptions import DomainError
 from src.domain.value_objects import Crotal
 from src.infrastructure.llm_gateway import resolver_intencion_usuario
@@ -171,7 +176,11 @@ async def lifespan(app: FastAPI):
         app.state.db_conn = None
         app.state.censo_service = None
         app.state.sanidad_service = None
-        app.state.genealogia_service = None
+    # Asistente IA está disponible tanto con BD local como en modo edge
+    app.state.asistente_service = AsistenteService(
+        intent_resolver=lambda p, h=None: resolver_intencion_usuario(p, h),
+        query_builder=construir_consulta_intent,
+    )
 
     yield
 
@@ -231,6 +240,17 @@ def get_censo_service() -> Optional[CensoService]:
 
 def get_sanidad_service() -> Optional[SanidadService]:
     return getattr(app.state, "sanidad_service", None)
+
+
+def get_asistente_service() -> AsistenteService:
+    service = getattr(app.state, "asistente_service", None)
+    if service is None:
+        service = AsistenteService(
+            intent_resolver=lambda p, h=None: resolver_intencion_usuario(p, h),
+            query_builder=construir_consulta_intent,
+        )
+        app.state.asistente_service = service
+    return service
 
 
 # ============================================================
@@ -335,25 +355,33 @@ async def get_animal_por_crotal(
 
 
 @app.post("/api/ai/intent", tags=["Asistente IA"], response_model=IntentResponse)
-async def ai_intent(req: IntentRequest, authorized: bool = Depends(verify_token)):
+async def ai_intent(
+    req: IntentRequest,
+    authorized: bool = Depends(verify_token),
+    asistente: Optional[AsistenteService] = Depends(get_asistente_service),
+):
     """Traduce lenguaje natural a un Intent tipado y genera la consulta SQL parametrizada."""
-    nombre_intent, args, _ = resolver_intencion_usuario(req.prompt, req.historial)
-    if not nombre_intent:
+    if not asistente:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio de asistente no inicializado.",
+        )
+    resultado = asistente.procesar_intencion(req.prompt, req.historial)
+    if not resultado:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Servicio de inferencia LLM no disponible o sin credenciales de API activas.",
         )
-    query_result = construir_consulta_intent(nombre_intent, args)
     return {
         "ok": True,
-        "intent": nombre_intent,
-        "args": args,
-        "sql": query_result.sql,
-        "params": query_result.params,
-        "interpretacion": query_result.interpretacion,
-        "tipo_resultado": query_result.tipo_resultado,
-        "respuesta_directa": query_result.respuesta_directa,
-        "offline_mode": False,
+        "intent": resultado.intent,
+        "args": resultado.args,
+        "sql": resultado.query_result.sql,
+        "params": resultado.query_result.params,
+        "interpretacion": resultado.query_result.interpretacion,
+        "tipo_resultado": resultado.query_result.tipo_resultado,
+        "respuesta_directa": resultado.query_result.respuesta_directa,
+        "offline_mode": resultado.offline_mode,
     }
 
 
@@ -422,7 +450,7 @@ async def ai_transcribe(file: UploadFile = File(...)):
     content = await file.read()
     if len(content) > MAX_AUDIO_SIZE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=f"El archivo de audio supera el límite permitido de {MAX_AUDIO_SIZE_BYTES // (1024 * 1024)}MB.",
         )
 

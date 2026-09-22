@@ -3,7 +3,13 @@ import unittest
 from datetime import date, timedelta
 from unittest.mock import MagicMock
 
-from src.application.services import CensoService, GenealogiaService, SanidadService
+from src.application.query_builder import QueryResult
+from src.application.services import (
+    AsistenteService,
+    CensoService,
+    GenealogiaService,
+    SanidadService,
+)
 from src.domain.models import Animal, RecetaSanitaria
 from src.domain.value_objects import Crotal, ExplotacionCEA, PeriodoSupresion
 
@@ -143,6 +149,42 @@ class TestApplicationServices(unittest.TestCase):
         problematicas = self.genealogia_service.check_vacas_sin_parir(dias_max=400)
         self.assertEqual(len(problematicas), 1)
         self.assertEqual(problematicas[0], vaca_retrasada)
+
+    def test_asistente_service_procesar_intencion_valida(self):
+        mock_resolver = MagicMock(return_value=("consultar_ficha_animal", {"crotal_4": "1045"}, False))
+        mock_query_res = QueryResult(
+            sql="SELECT * FROM animales WHERE crotal_4 = ?",
+            params=["1045"],
+            interpretacion="Consulta de ficha",
+            tipo_resultado="vaca",
+        )
+        mock_builder = MagicMock(return_value=mock_query_res)
+
+        asistente = AsistenteService(intent_resolver=mock_resolver, query_builder=mock_builder)
+        res = asistente.procesar_intencion("dame la 1045")
+
+        self.assertIsNotNone(res)
+        self.assertEqual(res.intent, "consultar_ficha_animal")
+        self.assertEqual(res.args, {"crotal_4": "1045"})
+        self.assertEqual(res.query_result, mock_query_res)
+        self.assertFalse(res.offline_mode)
+        mock_resolver.assert_called_once_with("dame la 1045", None)
+        mock_builder.assert_called_once_with("consultar_ficha_animal", {"crotal_4": "1045"})
+
+    def test_asistente_service_intent_no_resuelto(self):
+        mock_resolver = MagicMock(return_value=(None, {}, False))
+        mock_builder = MagicMock()
+
+        asistente = AsistenteService(intent_resolver=mock_resolver, query_builder=mock_builder)
+        res = asistente.procesar_intencion("un prompt ininteligible")
+
+        self.assertIsNone(res)
+        mock_builder.assert_not_called()
+
+    def test_asistente_service_sin_resolvers(self):
+        asistente = AsistenteService(intent_resolver=None, query_builder=None)
+        with self.assertRaises(RuntimeError):
+            asistente.procesar_intencion("hola")
 
 
 if __name__ == "__main__":

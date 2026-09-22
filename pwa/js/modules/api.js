@@ -33,13 +33,14 @@ export async function fetchSynthesize(prompt, data, columns, history, modelId) {
 }
 
 export async function fetchTranscribe(audioBlob) {
+  const formData = new FormData();
+  formData.append("file", audioBlob, "audio.webm");
+  const authHeaders = obtenerAuthHeaders();
+  delete authHeaders["Content-Type"];
   const resp = await fetch("./api/ai/transcribe", {
     method: "POST",
-    headers: {
-      "Content-Type": audioBlob.type || "audio/webm",
-      ...obtenerAuthHeaders()
-    },
-    body: audioBlob,
+    headers: authHeaders,
+    body: formData,
   });
   return resp;
 }

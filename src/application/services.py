@@ -1,6 +1,8 @@
+from dataclasses import dataclass
 from datetime import date
-from typing import List, Optional
+from typing import Any, List, Optional
 
+from src.application.query_builder import QueryResult
 from src.domain.models import Animal, Parto, RecetaSanitaria
 from src.domain.repositories import (
     AnimalRepository,
@@ -55,11 +57,40 @@ class GenealogiaService:
         return problematicas
 
 
+@dataclass
+class AsistenteResultado:
+    intent: str
+    args: dict[str, Any]
+    query_result: QueryResult
+    offline_mode: bool = False
+
+
 class AsistenteService:
-    def __init__(self, intent_resolver, query_builder):
+    """Servicio de aplicación para coordinar el Asistente IA en lenguaje natural."""
+
+    def __init__(self, intent_resolver: Any, query_builder: Any):
         self.intent_resolver = intent_resolver
         self.query_builder = query_builder
 
-    def procesar_intencion(self, prompt: str, historial: list):
-        # Delegate logic to AI / Heuristics intent processing
-        pass
+    def procesar_intencion(
+        self, prompt: str, historial: Optional[List[dict]] = None
+    ) -> Optional[AsistenteResultado]:
+        """Coordina la resolución de intenciones y la generación de consultas SQL/respuestas.
+
+        Retorna un AsistenteResultado con el intent, argumentos y QueryResult,
+        o None si no se pudo resolver la intención.
+        """
+        if not self.intent_resolver or not self.query_builder:
+            raise RuntimeError("AsistenteService no tiene configurados los resolvers necesarios.")
+
+        nombre_intent, args, offline_mode = self.intent_resolver(prompt, historial)
+        if not nombre_intent:
+            return None
+
+        query_result = self.query_builder(nombre_intent, args)
+        return AsistenteResultado(
+            intent=nombre_intent,
+            args=args,
+            query_result=query_result,
+            offline_mode=offline_mode,
+        )

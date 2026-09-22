@@ -1,4 +1,11 @@
-"""Anti-Corruption Layer (ACL): Lectura y normalización segura de Access (.mdb)."""
+"""Anti-Corruption Layer (ACL): Adaptador para lectura y migración de Access (.mdb).
+
+AVISO ARQUITECTÓNICO:
+Este módulo actúa como adaptador ETL desacoplado para migración histórica desde bases de datos
+Microsoft Access de Ganaderos 10. Está diseñado exclusivamente para herramientas de migración
+offline en entornos de escritorio Windows con drivers ODBC (scripts/import_legacy_access.py).
+NO es utilizado por el runtime del servidor web FastAPI en producción sobre Linux/Edge.
+"""
 from __future__ import annotations
 
 import os
