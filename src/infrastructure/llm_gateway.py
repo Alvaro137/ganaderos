@@ -88,36 +88,52 @@ def clasificar_intencion_groq(
 
 def clasificar_intencion_heuristica(prompt: str) -> Tuple[str, dict[str, Any]]:
     """Parser determinista y local (Offline Fallback) para consultas en campo sin cobertura."""
+    import re
     p = prompt.strip().lower()
 
-    # 1. Búsqueda directa de 4 dígitos de crotal
-    import re
-    m_crotal = re.search(r"\b(\d{4})\b", p)
-    if ("parto" in p or "cría" in p or "hijo" in p) and m_crotal:
-        return IntentType.CONSULTAR_PARTOS_MADRE.value, {"crotal_4": m_crotal.group(1)}
-    if m_crotal and ("ficha" in p or "vaca" in p or "animal" in p or len(p) <= 6):
-        return IntentType.CONSULTAR_FICHA_ANIMAL.value, {"crotal_4": m_crotal.group(1)}
+    # Normalizar espacios en números de 4 dígitos partidos por Whisper (ej. "10 45" -> "1045")
+    p = re.sub(r"\b(\d{2})\s+(\d{2})\b", r"\1\2", p)
 
-    # 2. Corrales conocidos
-    for c in ["dueña", "espadaña", "rivera", "vega", "cebadero"]:
-        if c in p:
-            return IntentType.LISTAR_ANIMALES_CORRAL.value, {"corral": c.upper(), "solo_activos": True}
+    # 0. Detección de crotal: 4 dígitos o crotal oficial completo (ej. ES083710104599 -> 4599)
+    m_oficial = re.search(r"\b(?:es)?\d{8,12}(\d{4})\b", p)
+    m_4dig = re.search(r"\b(\d{4})\b", p)
+    crotal_detectado = m_4dig.group(1) if m_4dig else (m_oficial.group(1) if m_oficial else None)
 
-    # 3. Vacas sin parir / vacías
-    if "sin parir" in p or "vacia" in p or "vacía" in p:
-        return IntentType.LISTAR_VACAS_SIN_PARIR.value, {}
+    # 1. Partos / genealogía de madre
+    palabras_parto = ["parto", "cría", "cria", "hijo", "descendencia", "becerro", "ternero", "nacid"]
+    if crotal_detectado and any(w in p for w in palabras_parto):
+        return IntentType.CONSULTAR_PARTOS_MADRE.value, {"crotal_4": crotal_detectado}
 
-    # 4. Supresiones sanitarias
-    if "supresion" in p or "supresión" in p or "retirada" in p or "medicamento" in p:
-        return IntentType.CONSULTAR_SUPRESIONES_ACTIVAS.value, {"limite": 20}
+    # 2. Ficha de animal
+    palabras_ficha = ["ficha", "vaca", "animal", "crotal", "dato"]
+    if crotal_detectado and (any(w in p for w in palabras_ficha) or len(p.split()) <= 2):
+        return IntentType.CONSULTAR_FICHA_ANIMAL.value, {"crotal_4": crotal_detectado}
 
-    # 5. Traspasos al cebadero
-    if "traspaso" in p or "cebadero" in p:
+    # 3. Traspasos y movimientos entre explotaciones (evaluar antes de corrales para 'cebadero')
+    if "traspaso" in p or "traslad" in p or "movimiento" in p:
         return IntentType.LISTAR_ULTIMOS_TRASPASOS.value, {"origen": "121", "destino": "122", "limite": 20}
 
-    # 6. Compras de pienso
-    if "pienso" in p or "alimento" in p or "compra" in p:
+    # 4. Compras de pienso y gastos de alimentación (evaluar antes de corrales)
+    if "pienso" in p or "alimento" in p or "compra" in p or "gasto" in p or "tolva" in p or "albaran" in p or "albarán" in p:
         return IntentType.CONSULTAR_COMPRAS_ALIMENTO.value, {"limite": 20}
+
+    # 5. Medicamento más usado o tratamiento frecuente
+    if ("medicamento" in p or "tratamiento" in p) and ("más" in p or "mas" in p or "frecuente" in p or "usado" in p or "recetad" in p):
+        return IntentType.CONSULTAR_MEDICAMENTO_MAS_USADO.value, {"explotacion_codigo": "121", "limite": 10}
+
+    # 6. Supresiones sanitarias / retirada de medicamentos
+    if "supresion" in p or "supresión" in p or "retirada" in p or "tratamiento" in p or "medicamento" in p or "receta" in p:
+        return IntentType.CONSULTAR_SUPRESIONES_ACTIVAS.value, {"limite": 20}
+
+    # 7. Vacas sin parir / vacías
+    if "sin parir" in p or "vacia" in p or "vacía" in p or "no pare" in p or "no paren" in p or "nodriza" in p:
+        return IntentType.LISTAR_VACAS_SIN_PARIR.value, {}
+
+    # 8. Corrales conocidos
+    for c in ["dueña", "duena", "espadaña", "espadana", "rivera", "vega", "cebadero"]:
+        if c in p:
+            norm_c = "DUEÑA" if "due" in c else ("ESPADAÑA" if "espad" in c else c.upper())
+            return IntentType.LISTAR_ANIMALES_CORRAL.value, {"corral": norm_c, "solo_activos": True}
 
     return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {
         "respuesta": "No se pudo clasificar la consulta de forma determinista en modo sin cobertura."
