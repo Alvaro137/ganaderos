@@ -2,7 +2,7 @@
   "name": "Ganaderos Campo",
   "short_name": "Campo",
   "description": "Consulta de censo, movimientos y partos de vacuno de carne 100% offline",
-  "id": "./",
+  "id": "campo-pwa",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
