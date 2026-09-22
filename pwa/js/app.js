@@ -110,11 +110,60 @@ async function iniciarAplicacion() {
   }
 }
 
+let deferredInstallPrompt = null;
+
+function inicializarPWAInstall() {
+  const btnInstall = document.getElementById("btn-install-pwa");
+  if (!btnInstall) return;
+
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+  if (isStandalone) {
+    btnInstall.style.display = "none";
+    return;
+  }
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    btnInstall.style.display = "inline-flex";
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    btnInstall.style.display = "none";
+    console.log("[PWA] Aplicación instalada exitosamente.");
+  });
+
+  btnInstall.addEventListener("click", async () => {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === "accepted") {
+        btnInstall.style.display = "none";
+      }
+      deferredInstallPrompt = null;
+    } else {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      if (isIOS) {
+        alert("Para instalar en iPhone/iPad:\n1. Toca el botón Compartir (cuadrado con flecha hacia arriba).\n2. Selecciona 'Añadir a la pantalla de inicio'.");
+      } else {
+        alert("Para instalar la aplicación:\n1. Abre el menú del navegador (los 3 puntos ⋮).\n2. Selecciona 'Instalar aplicación' o 'Añadir a la pantalla principal'.");
+      }
+    }
+  });
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS && !isStandalone) {
+    btnInstall.style.display = "inline-flex";
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch((err) => {
       console.warn("Service Worker no registrado:", err);
     });
   }
+  inicializarPWAInstall();
   await iniciarAplicacion();
 });

@@ -9,10 +9,14 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" type="image/x-icon" href="./favicon.ico">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
-  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="./icon-512.png">
   <meta name="theme-color" content="#1e3a2b">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Campo">
+  <meta name="application-name" content="Ganaderos Campo">
 
   <link rel="stylesheet" href="./css/app.css">
 </head>
@@ -29,6 +33,15 @@
       </div>
 
       <div class="header-right">
+        <button id="btn-install-pwa" class="header-install-btn" style="display: none;" title="Instalar aplicación en tu dispositivo">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Instalar</span>
+        </button>
+
         <a href="/" class="header-meteo-btn" title="Ir a Estación Meteorológica">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path>
@@ -149,7 +162,7 @@
           </div>
           <div>
             <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main);">Asistente Ganadero</h3>
-            <span style="font-size: 0.78rem; color: var(--text-muted);">Consultas por voz y lenguaje natural con Grok</span>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Consultas por voz y lenguaje natural con IA</span>
           </div>
         </div>
         <button class="btn-close-modal" id="btn-close-ai">✕</button>
@@ -157,10 +170,10 @@
 
       <!-- Selector de Modelo y Proveedor -->
       <div class="ai-model-selector-bar">
-        <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;">
+        <div class="ai-model-select-wrapper">
           <label for="select-ai-model">IA:</label>
           <select id="select-ai-model" class="ai-model-select">
-            <option value="auto">⚡ Automático (Rotación activa con fallback)</option>
+            <option value="auto">⚡ Automático (Mayor Inteligencia)</option>
           </select>
         </div>
         <button class="btn-clear-ai-history" id="btn-clear-ai-history" title="Nueva conversación (limpiar contexto previo)">
@@ -170,7 +183,7 @@
             <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
             <path d="M3 21v-5h5"></path>
           </svg>
-          <span>Nueva consulta</span>
+          <span class="btn-clear-text">Nueva consulta</span>
         </button>
       </div>
 

@@ -1,8 +1,15 @@
 {
   "version": "1.0.0",
   "description": "Catalogo de modelos multi-proveedor priorizado por inteligencia y disponibilidad",
-  "total_modelos": 19,
+  "total_modelos": 22,
   "modelos": [
+    {
+      "provider": "mistral",
+      "model": "mistral-large-2512",
+      "name": "Mistral Large 2512 (Flagship Mistral AI)",
+      "url": "https://api.mistral.ai/v1/chat/completions",
+      "score": 98
+    },
     {
       "provider": "openrouter",
       "model": "poolside/laguna-s-2.1:free",
@@ -58,6 +65,20 @@
       "name": "OpenRouter Qwen: Qwen3.8 27B (free)",
       "url": "https://openrouter.ai/api/v1/chat/completions",
       "score": 70
+    },
+    {
+      "provider": "mistral",
+      "model": "codestral-2508",
+      "name": "Mistral Codestral 2508 (Razonamiento y Código)",
+      "url": "https://api.mistral.ai/v1/chat/completions",
+      "score": 88
+    },
+    {
+      "provider": "mistral",
+      "model": "mistral-small-2603",
+      "name": "Mistral Small 2603 (Rápido y Ligero)",
+      "url": "https://api.mistral.ai/v1/chat/completions",
+      "score": 80
     },
     {
       "provider": "openrouter",
