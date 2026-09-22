@@ -8,9 +8,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 # Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
 if importlib.util.find_spec("fastapi") is None:
-    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     _VENV_CANDIDATES = [
         os.path.join(_REPO_ROOT, "venv", "bin", "python"),
         os.path.join(_REPO_ROOT, "venv", "bin", "python3"),
@@ -19,7 +22,9 @@ if importlib.util.find_spec("fastapi") is None:
     ]
     _TARGET_PYTHON = next((p for p in _VENV_CANDIDATES if os.path.exists(p)), None)
     if _TARGET_PYTHON and os.path.abspath(sys.executable) != os.path.abspath(_TARGET_PYTHON):
-        os.execv(_TARGET_PYTHON, [_TARGET_PYTHON] + sys.argv)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = _REPO_ROOT + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
+        os.execve(_TARGET_PYTHON, [_TARGET_PYTHON] + sys.argv, env)
 
 import httpx
 from fastapi import (
