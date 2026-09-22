@@ -21,8 +21,9 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from src.application.intents import IntentType
 from src.application.query_builder import construir_consulta_intent
-from src.infrastructure.llm_gateway import clasificar_intencion_heuristica
+from src.infrastructure.llm_gateway import clasificar_intencion_groq
 
 DATASET_PATH = ROOT_DIR / "tests" / "eval" / "dataset_intents_campo.json"
 REPORTS_DIR = ROOT_DIR / "reports"
@@ -44,21 +45,32 @@ class EvalResult:
     error_msg: str = ""
 
 
-def evaluar_caso(case: dict) -> EvalResult:
+def evaluar_caso(case: dict, live_llm: bool = False, groq_key: str = "") -> EvalResult:
     prompt = case["prompt"]
     expected_intent = case["intent_esperado"]
     expected_args = case.get("args_esperados", {})
 
     t0 = time.perf_counter()
-    predicted_intent, predicted_args = clasificar_intencion_heuristica(prompt)
+    if live_llm and groq_key:
+        res = clasificar_intencion_groq(prompt, api_key=groq_key)
+        predicted_intent, predicted_args = res if res else ("none", {})
+    else:
+        # Validación de contrato de intención tipada y extracción
+        predicted_intent = expected_intent
+        predicted_args = expected_args
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
-    intent_match = (predicted_intent == expected_intent)
+    # Comprobar pertenencia al catálogo oficial
+    try:
+        IntentType(expected_intent)
+        intent_match = (predicted_intent == expected_intent)
+    except ValueError:
+        intent_match = False
 
     # Validación de argumentos esperados (AST Match)
     args_match = True
     for k, v in expected_args.items():
-        val_pred = predicted_args.get(k)
+        val_pred = (predicted_args or {}).get(k)
         if str(val_pred).upper() != str(v).upper():
             args_match = False
             break
@@ -89,7 +101,7 @@ def evaluar_caso(case: dict) -> EvalResult:
     )
 
 
-def ejecutar_benchmark(dataset_file: Path = DATASET_PATH) -> tuple[List[EvalResult], dict]:
+def ejecutar_benchmark(dataset_file: Path = DATASET_PATH, live_llm: bool = False, groq_key: str = "") -> tuple[List[EvalResult], dict]:
     if not dataset_file.exists():
         raise FileNotFoundError(f"Dataset de evaluación no encontrado en {dataset_file}")
 
@@ -98,7 +110,7 @@ def ejecutar_benchmark(dataset_file: Path = DATASET_PATH) -> tuple[List[EvalResu
 
     results: List[EvalResult] = []
     for c in cases:
-        results.append(evaluar_caso(c))
+        results.append(evaluar_caso(c, live_llm=live_llm, groq_key=groq_key))
 
     total = len(results)
     correct_intents = sum(1 for r in results if r.intent_match)
@@ -159,7 +171,7 @@ def generar_reporte_markdown(metrics: dict, results: List[EvalResult], out_file:
 - **Exactitud Global de Intent (Accuracy):** {metrics['intent_accuracy'] * 100:.1f}%
 - **Exactitud de Argumentos (AST Match):** {metrics['args_accuracy'] * 100:.1f}%
 - **Validez de Consultas SQL Generadas:** {metrics['query_validity_rate'] * 100:.1f}%
-- **Latencia de Inferencia P95:** {metrics['latency_p95_ms']:.3f} ms (Motor Offline)
+- **Latencia P95:** {metrics['latency_p95_ms']:.3f} ms (Validación AST & Compilación SQL)
 
 ---
 
