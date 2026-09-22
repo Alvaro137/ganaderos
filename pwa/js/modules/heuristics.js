@@ -23,6 +23,16 @@ export function resolverConsultaOffline(textoPrompt) {
     };
   }
 
+  if (p.includes("traspaso") || p.includes("traslado")) {
+    return {
+      sql: "SELECT m.id, m.crotal, m.fecha, m.tipo, m.origen, m.destino, m.corral, a.crotal_4, a.sexo, a.raza FROM movimientos m LEFT JOIN animales a ON m.crotal = a.crotal WHERE m.origen LIKE '%121%' AND m.destino LIKE '%122%' ORDER BY m.fecha DESC LIMIT 20",
+      params: [],
+      interpretacion: "Últimos traspasos registrados hacia el cebadero 122 (Modo sin cobertura).",
+      tipo_resultado: "movimientos",
+      offline: true
+    };
+  }
+
   const corrales = ["dueña", "espadaña", "rivera", "vega", "cebadero"];
   for (const c of corrales) {
     if (p.includes(c)) {
@@ -52,16 +62,6 @@ export function resolverConsultaOffline(textoPrompt) {
       params: [],
       interpretacion: "Tratamientos veterinarios con retirada sanitaria activa (Modo sin cobertura).",
       tipo_resultado: "recetas",
-      offline: true
-    };
-  }
-
-  if (p.includes("traspaso") || p.includes("cebadero")) {
-    return {
-      sql: "SELECT m.id, m.crotal, m.fecha, m.tipo, m.origen, m.destino, m.corral, a.crotal_4, a.sexo, a.raza FROM movimientos m LEFT JOIN animales a ON m.crotal = a.crotal WHERE m.origen LIKE '%121%' AND m.destino LIKE '%122%' ORDER BY m.fecha DESC LIMIT 20",
-      params: [],
-      interpretacion: "Últimos traspasos registrados hacia el cebadero 122 (Modo sin cobertura).",
-      tipo_resultado: "movimientos",
       offline: true
     };
   }
