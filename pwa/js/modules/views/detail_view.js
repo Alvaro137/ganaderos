@@ -18,6 +18,25 @@ import {
 import { obtenerDetalleAnimal, obtenerAnimalesDeLote } from '../db.js';
 import { renderVistaAnimales } from './cattle_view.js';
 
+function adjuntarEventosDetalle(contenedor) {
+  if (!contenedor) return;
+  contenedor.querySelectorAll('[data-action="back"]').forEach((btn) => {
+    btn.addEventListener("click", () => volverAtras());
+  });
+  contenedor.querySelectorAll('[data-action="select-animal"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const crotal = btn.dataset.crotal;
+      if (crotal) seleccionarAnimal(crotal, true);
+    });
+  });
+  contenedor.querySelectorAll('[data-action="view-corral"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const corral = btn.dataset.corral;
+      if (corral) verDetalleCorral(corral, true);
+    });
+  });
+}
+
 export function seleccionarAnimal(crotal, pushHistory = true) {
   if (!crotal) return;
 
@@ -53,11 +72,13 @@ export function seleccionarAnimal(crotal, pushHistory = true) {
     const rightPanel = document.getElementById("detail-panel");
     if (rightPanel) {
       rightPanel.innerHTML = htmlFicha;
+      adjuntarEventosDetalle(rightPanel);
     }
   } else {
     const container = document.getElementById("app-container");
     if (container) {
       container.innerHTML = htmlFicha;
+      adjuntarEventosDetalle(container);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
@@ -83,7 +104,7 @@ export function verDetalleCorral(nombreLote, pushHistory = true) {
 
   const htmlCorral = `
     <div class="detail-card">
-      <button class="btn-back-link" onclick="volverAtras()">
+      <button class="btn-back-link" data-action="back">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="19" y1="12" x2="5" y2="12"></line>
           <polyline points="12 19 5 12 12 5"></polyline>
@@ -112,7 +133,7 @@ export function verDetalleCorral(nombreLote, pushHistory = true) {
         ${animalesLote
           .map(
             (a) => `
-          <div class="animal-card" onclick="seleccionarAnimal('${escapeHtml(a.crotal)}', true)">
+          <div class="animal-card" data-action="select-animal" data-crotal="${escapeHtml(a.crotal)}" style="cursor: pointer;">
             <div class="card-header-row">
               <span class="crotal-4-digits">${escapeHtml(a.crotal_4)}</span>
               <span class="status-pill activo">Activo</span>
@@ -136,11 +157,13 @@ export function verDetalleCorral(nombreLote, pushHistory = true) {
     const rightPanel = document.getElementById("detail-panel");
     if (rightPanel) {
       rightPanel.innerHTML = htmlCorral;
+      adjuntarEventosDetalle(rightPanel);
     }
   } else {
     const container = document.getElementById("app-container");
     if (container) {
       container.innerHTML = htmlCorral;
+      adjuntarEventosDetalle(container);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
@@ -193,7 +216,7 @@ export function generarHtmlDetalleAnimal(animal) {
             ${
               p.cria_crotal
                 ? `
-                <button class="clickable-chip chip-cria" onclick="seleccionarAnimal('${escapeHtml(p.cria_crotal)}', true)">
+                <button class="clickable-chip chip-cria" data-action="select-animal" data-crotal="${escapeHtml(p.cria_crotal)}">
                   <div style="display: flex; align-items: center; gap: 8px;">
                     <span style="font-weight: 800; font-size: 1.05rem; color: var(--brand-primary);">${escapeHtml(digitosCria)}</span>
                     <span style="font-size: 0.84rem; color: var(--text-muted);">${escapeHtml(p.cria_crotal)} • ${escapeHtml(sexoTexto)}</span>
@@ -234,7 +257,7 @@ export function generarHtmlDetalleAnimal(animal) {
   if (animal.madre_crotal) {
     const madre4 = extraer4Digitos(animal.madre_crotal);
     componenteMadre = `
-      <button class="clickable-chip chip-madre" onclick="seleccionarAnimal('${escapeHtml(animal.madre_crotal)}', true)">
+      <button class="clickable-chip chip-madre" data-action="select-animal" data-crotal="${escapeHtml(animal.madre_crotal)}">
         <span>Vaca <strong>${escapeHtml(madre4)}</strong> (${escapeHtml(animal.madre_crotal)})</span>
         <span class="chip-action">Ver madre →</span>
       </button>
@@ -246,7 +269,7 @@ export function generarHtmlDetalleAnimal(animal) {
   if (animal.corral && animal.corral.trim()) {
     const corralNombre = animal.corral.trim();
     componenteCorral = `
-      <button class="clickable-chip chip-corral" onclick="verDetalleCorral('${escapeHtml(corralNombre)}', true)">
+      <button class="clickable-chip chip-corral" data-action="view-corral" data-corral="${escapeHtml(corralNombre)}">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
           <circle cx="12" cy="10" r="3"></circle>
@@ -259,7 +282,7 @@ export function generarHtmlDetalleAnimal(animal) {
 
   return `
     <div class="detail-card">
-      <button class="btn-back-link" onclick="volverAtras()">
+      <button class="btn-back-link" data-action="back">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="19" y1="12" x2="5" y2="12"></line>
           <polyline points="12 19 5 12 12 5"></polyline>
@@ -314,11 +337,4 @@ export function generarHtmlDetalleAnimal(animal) {
       <div>${htmlMovimientos}</div>
     </div>
   `;
-}
-
-// Interoperabilidad global en ventana para llamadas inline desde HTML generado
-if (typeof window !== "undefined") {
-  window.seleccionarAnimal = seleccionarAnimal;
-  window.verDetalleCorral = verDetalleCorral;
-  window.volverAtras = volverAtras;
 }
