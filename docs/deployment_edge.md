@@ -153,7 +153,23 @@ Este comando:
 
 ---
 
-## 6. Verificación Final de la Instalación
+## 6. Verificación Automatizada Pre-Vuelo (`scripts/verify_edge.py`)
+
+Para validar que todos los archivos de configuración, límites de memoria y rutas están configurados correctamente sin colisiones antes de desplegar en producción, ejecuta el script de validación determinista:
+
+```bash
+python3 scripts/verify_edge.py
+```
+
+Este script comprueba automáticamente:
+- **Caddyfile.snippet:** Presencia de `/campo*`, `strip_prefix`, proxy a `8010` y cabecera `Service-Worker-Allowed`.
+- **ganaderos.service:** Directiva `Restart=always`, límites de memoria `MemoryMax` para 1GB RAM y puerto `8010`.
+- **compose.prod.yaml:** Mapeo de puerto a `127.0.0.1:8010`, límites de CPU/RAM y sonda `healthcheck`.
+- **backup_db.py:** Uso de API SQLite en caliente (`sqlite3.backup()`) y rotación de copias.
+
+---
+
+## 7. Verificación Final de la Instalación
 
 1. **Web Meteorológica:** Acceder a `https://varo137.ddns.net/` y comprobar que la telemetría del ESP32 sigue operando con normalidad.
 2. **Ganaderos Campo PWA:** Acceder a `https://varo137.ddns.net/campo/` y verificar:

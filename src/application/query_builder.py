@@ -59,7 +59,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
         )
 
     elif nombre_intent == IntentType.CONSULTAR_PARTOS_MADRE.value:
-        c4 = str(args.get("crotal_4", "")).strip()[-4:]
+        c4 = str(args.get("crotal_4") or args.get("madre_crotal_4") or "").strip()[-4:]
         sql = """
             SELECT
                 p.id,
