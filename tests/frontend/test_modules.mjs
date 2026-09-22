@@ -146,6 +146,40 @@ async function runAllTests() {
     assert.strictEqual(cargoModulo, false, "heuristics.js debe estar eliminado de la arquitectura.");
   });
 
+  await test("Dominio Movimientos: Clasificación de Ventas desde Cebadero (122)", () => {
+    assert.strictEqual(typeof AppState.limiteMovimientos, "number");
+    assert.strictEqual(AppState.limiteMovimientos >= 50, true);
+
+    // Simulación de regla de dominio de ventas
+    function clasificarMovimientoDominio(orig, dest, tipoOrig) {
+      const esSalidaCebadero = orig.endsWith("122") &&
+        !dest.endsWith("121") &&
+        !dest.endsWith("671") &&
+        !dest.endsWith("591") &&
+        dest !== "";
+
+      if (esSalidaCebadero) {
+        return { tipo_display: "VENTA", subtipo: "Salida Cebadero / Venta" };
+      }
+      return { tipo_display: tipoOrig, subtipo: null };
+    }
+
+    // Salida de cebadero 122 a matadero externo: VENTA
+    const movCebadero = clasificarMovimientoDominio("ES371261100122", "ES373762000081", "SACRIFICIO");
+    assert.strictEqual(movCebadero.tipo_display, "VENTA");
+    assert.strictEqual(movCebadero.subtipo, "Salida Cebadero / Venta");
+
+    // Traspaso de 121 a 122: TRASPASO
+    const movTraspaso = clasificarMovimientoDominio("ES371261100121", "ES371261100122", "TRASPASO");
+    assert.strictEqual(movTraspaso.tipo_display, "TRASPASO");
+    assert.strictEqual(movTraspaso.subtipo, null);
+
+    // Sacrificio / culling de nodriza en 121: SACRIFICIO
+    const movVida = clasificarMovimientoDominio("ES371261100121", "ES373762000081", "SACRIFICIO");
+    assert.strictEqual(movVida.tipo_display, "SACRIFICIO");
+  });
+
+
   console.log("==================================================");
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);
   console.log("==================================================");

@@ -370,7 +370,7 @@ class CampoDB {
   }
 
   obtenerMovimientos(params = {}) {
-    const { filtro = "", tipo = "TODOS", anio = "TODOS", destino = "TODOS", limite = 120 } = params;
+    const { filtro = "", tipo = "TODOS", anio = "TODOS", destino = "TODOS", limite = 100, offset = 0 } = params;
     const condiciones = [];
     const valores = [];
 
@@ -380,7 +380,14 @@ class CampoDB {
       valores.push(f, f, f, f, f);
     }
 
-    if (tipo && tipo !== "TODOS") {
+    if (tipo === "VENTA") {
+      // Regla de dominio: se considera venta cualquier registro formal de VENTA
+      // O cualquier salida desde el cebadero (122) hacia destinos externos (no 121, ni 671, ni 591)
+      condiciones.push("((m.tipo = 'VENTA' AND m.destino NOT LIKE '%121' AND m.destino NOT LIKE '%122') OR (m.origen LIKE '%122' AND m.destino NOT LIKE '%121' AND m.destino NOT LIKE '%671' AND m.destino NOT LIKE '%591' AND m.destino IS NOT NULL AND m.destino <> ''))");
+    } else if (tipo === "SACRIFICIO") {
+      // Sacrificios propios (excluyendo salidas comerciales de cebadero que computan como ventas)
+      condiciones.push("(m.tipo = 'SACRIFICIO' AND NOT (m.origen LIKE '%122' AND m.destino NOT LIKE '%121' AND m.destino NOT LIKE '%671' AND m.destino NOT LIKE '%591'))");
+    } else if (tipo && tipo !== "TODOS") {
       condiciones.push("m.tipo = ?");
       valores.push(tipo);
     }
@@ -393,15 +400,31 @@ class CampoDB {
     if (destino === "122") {
       condiciones.push("(m.destino LIKE '%122' OR m.corral LIKE '%CEBAD%')");
     } else if (destino === "121") {
-      condiciones.push("(m.destino LIKE '%121' OR m.origen LIKE '%121')");
-    } else if (destino === "671") {
-      condiciones.push("(m.destino LIKE '%671' OR m.origen LIKE '%671')");
-    } else if (destino === "591") {
-      condiciones.push("(m.destino LIKE '%591' OR m.origen LIKE '%591')");
+      condiciones.push("(m.destino LIKE '%121' OR (m.origen LIKE '%121' AND (m.destino IS NULL OR m.destino = '' OR m.destino LIKE '%121')))");
+    } else if (destino === "EXTERNO") {
+      condiciones.push("(m.origen LIKE '%122' AND m.destino NOT LIKE '%121' AND m.destino NOT LIKE '%671' AND m.destino NOT LIKE '%591' AND m.destino IS NOT NULL AND m.destino <> '')");
+    } else if (destino === "HISTORICO") {
+      condiciones.push("(m.origen LIKE '%671' OR m.origen LIKE '%591' OR m.destino LIKE '%671' OR m.destino LIKE '%591')");
+    } else {
+      // TODOS: Por defecto mostrar las explotaciones activas (121 y 122), omitiendo registros puramente internos de 671 y 591
+      condiciones.push("(m.origen LIKE '%121' OR m.origen LIKE '%122' OR m.destino LIKE '%121' OR m.destino LIKE '%122')");
     }
 
     const whereClause = condiciones.length > 0 ? `WHERE ${condiciones.join(" AND ")}` : "";
 
+    // 1. Obtener conteo exacto de movimientos que cumplen el criterio
+    const countSql = `
+      SELECT COUNT(1) as total
+      FROM movimientos m
+      LEFT JOIN animales a ON m.crotal = a.crotal
+      ${whereClause}
+    `;
+    const countRows = this.ejecutarQuery(countSql, valores);
+    const totalCount = (countRows && countRows.length > 0 && countRows[0].total != null) 
+      ? Number(countRows[0].total) 
+      : 0;
+
+    // 2. Obtener lote de filas paginadas
     const sql = `
       SELECT 
         m.id, 
@@ -419,11 +442,34 @@ class CampoDB {
       LEFT JOIN animales a ON m.crotal = a.crotal
       ${whereClause}
       ORDER BY m.fecha DESC, m.id DESC
-      LIMIT ?
+      LIMIT ? OFFSET ?
     `;
-    valores.push(limite);
+    const valoresPaginados = [...valores, limite, offset];
+    const rows = this.ejecutarQuery(sql, valoresPaginados) || [];
 
-    return this.ejecutarQuery(sql, valores);
+    // Etiquetado semántico de dominio en cada fila devuelta
+    for (const row of rows) {
+      const orig = row.origen || "";
+      const dest = row.destino || "";
+      const esSalidaCebadero = orig.endsWith("122") &&
+        !dest.endsWith("121") &&
+        !dest.endsWith("671") &&
+        !dest.endsWith("591") &&
+        dest !== "";
+
+      if (esSalidaCebadero) {
+        row.es_venta_cebadero = true;
+        row.tipo_display = "VENTA";
+        row.subtipo_display = "Salida Cebadero / Venta";
+      } else {
+        row.es_venta_cebadero = false;
+        row.tipo_display = row.tipo || "MOVIMIENTO";
+        row.subtipo_display = null;
+      }
+    }
+
+    rows.total = totalCount;
+    return rows;
   }
 
   obtenerAniosMovimientos() {

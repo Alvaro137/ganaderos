@@ -10,7 +10,7 @@ import {
   formatearFecha,
   formatearExplotacionAmigable
 } from '../config.js';
-import { obtenerMovimientos } from '../db.js';
+import { obtenerMovimientos, obtenerAniosMovimientos } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
 
 export function renderVistaMovimientos() {
@@ -19,15 +19,18 @@ export function renderVistaMovimientos() {
 
   const tipos = [
     { id: "TODOS", label: "Todos" },
+    { id: "VENTA", label: "Ventas" },
     { id: "TRASPASO", label: "Traspasos (121 ➔ 122)" },
     { id: "NACIMIENTO", label: "Nacimientos" },
     { id: "SACRIFICIO", label: "Sacrificios" },
     { id: "MUERTE", label: "Bajas en campo" },
-    { id: "VENTA", label: "Ventas" },
     { id: "COMPRA", label: "Compras" }
   ];
 
-  const anios = ["TODOS", "2025", "2024", "2023", "2022", "2021", "2020"];
+  const aniosDb = obtenerAniosMovimientos();
+  const anios = (aniosDb && aniosDb.length > 0)
+    ? aniosDb
+    : ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 
   const chipsHtml = tipos
     .map(
@@ -40,7 +43,6 @@ export function renderVistaMovimientos() {
     .join("");
 
   const aniosOptions = anios
-    .filter((a) => a !== "TODOS")
     .map(
       (a) => `
       <option value="${a}" ${AppState.anioMovimiento === a ? "selected" : ""}>Año ${a}</option>
@@ -55,7 +57,7 @@ export function renderVistaMovimientos() {
           Movimientos del Censo
         </h2>
         <p style="font-size: 0.9rem; color: var(--text-muted);">
-          Trazabilidad completa de nacimientos, traspasos entre la 121 (vida) y 122 (cebadero), sacrificios y bajas.
+          Trazabilidad completa de nacimientos, traspasos entre la 121 (vida) y 122 (cebadero), ventas comerciales y bajas.
         </p>
       </div>
 
@@ -79,11 +81,11 @@ export function renderVistaMovimientos() {
 
         <div class="movimientos-filtros-secundarios">
           <select id="select-mov-destino" class="mov-select">
-            <option value="TODOS" ${AppState.destinoMovimiento === "TODOS" ? "selected" : ""}>Todos los destinos</option>
+            <option value="TODOS" ${AppState.destinoMovimiento === "TODOS" ? "selected" : ""}>Todos los destinos (Activos)</option>
             <option value="122" ${AppState.destinoMovimiento === "122" ? "selected" : ""}>Hacia 122 (Cebadero)</option>
             <option value="121" ${AppState.destinoMovimiento === "121" ? "selected" : ""}>En 121 (Vida / Nodrizas)</option>
-            <option value="671" ${AppState.destinoMovimiento === "671" ? "selected" : ""}>Hacia 671 (Cipérez - Antigua)</option>
-            <option value="591" ${AppState.destinoMovimiento === "591" ? "selected" : ""}>Hacia 591 (Cerezal - Antigua)</option>
+            <option value="EXTERNO" ${AppState.destinoMovimiento === "EXTERNO" ? "selected" : ""}>Salidas a Ventas / Matadero</option>
+            <option value="HISTORICO" ${AppState.destinoMovimiento === "HISTORICO" ? "selected" : ""}>Histórico antiguo (671 / 591)</option>
           </select>
 
           <select id="select-mov-anio" class="mov-select">
@@ -107,6 +109,7 @@ export function renderVistaMovimientos() {
   if (inputMov) {
     inputMov.addEventListener("input", (e) => {
       AppState.filtroMovimientos = e.target.value;
+      AppState.limiteMovimientos = 100;
       ejecutarBusquedaMovimientos();
     });
     if (esPantallaEscritorio()) {
@@ -118,6 +121,7 @@ export function renderVistaMovimientos() {
   if (btnClearMov) {
     btnClearMov.addEventListener("click", () => {
       AppState.filtroMovimientos = "";
+      AppState.limiteMovimientos = 100;
       if (inputMov) {
         inputMov.value = "";
         inputMov.focus();
@@ -132,6 +136,7 @@ export function renderVistaMovimientos() {
       const btn = e.target.closest(".chip-filtro-mov");
       if (!btn) return;
       AppState.tipoMovimiento = btn.dataset.tipo;
+      AppState.limiteMovimientos = 100;
       chipsContainer.querySelectorAll(".chip-filtro-mov").forEach((b) => {
         b.classList.toggle("active", b.dataset.tipo === AppState.tipoMovimiento);
       });
@@ -143,6 +148,7 @@ export function renderVistaMovimientos() {
   if (selectDestino) {
     selectDestino.addEventListener("change", (e) => {
       AppState.destinoMovimiento = e.target.value;
+      AppState.limiteMovimientos = 100;
       ejecutarBusquedaMovimientos();
     });
   }
@@ -151,6 +157,7 @@ export function renderVistaMovimientos() {
   if (selectAnio) {
     selectAnio.addEventListener("change", (e) => {
       AppState.anioMovimiento = e.target.value;
+      AppState.limiteMovimientos = 100;
       ejecutarBusquedaMovimientos();
     });
   }
@@ -158,13 +165,21 @@ export function renderVistaMovimientos() {
   const listaContenedor = document.getElementById("movimientos-list");
   if (listaContenedor) {
     listaContenedor.addEventListener("click", (e) => {
-      const target = e.target.closest('[data-action="select-animal"]');
-      if (target && target.dataset.crotal) {
+      const targetAnimal = e.target.closest('[data-action="select-animal"]');
+      if (targetAnimal && targetAnimal.dataset.crotal) {
         if (AppState.tabActual !== "animales") {
           const tabBtn = document.querySelector('.nav-link[data-tab="animales"]') || document.querySelector('.mobile-tab-btn[data-tab="animales"]');
           if (tabBtn) tabBtn.click();
         }
-        seleccionarAnimal(target.dataset.crotal, true);
+        seleccionarAnimal(targetAnimal.dataset.crotal, true);
+        return;
+      }
+
+      const loadMoreBtn = e.target.closest('[data-action="load-more-movimientos"]');
+      if (loadMoreBtn) {
+        AppState.limiteMovimientos = (AppState.limiteMovimientos || 100) + 50;
+        ejecutarBusquedaMovimientos();
+        return;
       }
     });
   }
@@ -182,11 +197,18 @@ export function ejecutarBusquedaMovimientos() {
     tipo: AppState.tipoMovimiento,
     anio: AppState.anioMovimiento,
     destino: AppState.destinoMovimiento,
-    limite: 150,
+    limite: AppState.limiteMovimientos || 100,
+    offset: 0
   });
 
+  const total = (movs && movs.total != null) ? movs.total : (movs ? movs.length : 0);
+
   if (countLabel) {
-    countLabel.textContent = `${movs.length} movimientos`;
+    if (movs.length < total) {
+      countLabel.textContent = `Mostrando ${movs.length} de ${total.toLocaleString("es-ES")} movimientos`;
+    } else {
+      countLabel.textContent = `${total.toLocaleString("es-ES")} movimientos`;
+    }
   }
 
   if (movs.length === 0) {
@@ -199,15 +221,15 @@ export function ejecutarBusquedaMovimientos() {
     return;
   }
 
-  listContainer.innerHTML = movs
+  const cardsHtml = movs
     .map((m) => {
-      const tipoRaw = (m.tipo || "").toUpperCase();
+      const tipoRaw = (m.tipo_display || m.tipo || "").toUpperCase();
       let tipoClase = "otro";
-      if (tipoRaw.includes("TRASPASO") || tipoRaw.includes("TRASLADO")) tipoClase = "traspaso";
+      if (tipoRaw.includes("VENTA") || m.es_venta_cebadero) tipoClase = "venta";
+      else if (tipoRaw.includes("TRASPASO") || tipoRaw.includes("TRASLADO")) tipoClase = "traspaso";
       else if (tipoRaw.includes("NACIMIENTO")) tipoClase = "nacimiento";
       else if (tipoRaw.includes("SACRIFICIO")) tipoClase = "sacrificio";
       else if (tipoRaw.includes("MUERTE")) tipoClase = "muerte";
-      else if (tipoRaw.includes("VENTA")) tipoClase = "venta";
       else if (tipoRaw.includes("COMPRA")) tipoClase = "compra";
 
       const crotal4 = m.crotal_4 || (m.crotal && m.crotal.length >= 4 ? m.crotal.slice(-4) : m.crotal);
@@ -216,13 +238,18 @@ export function ejecutarBusquedaMovimientos() {
         : '<span style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600;">Baja</span>';
 
       const corralInfo = m.corral_actual ? `• Lote actual: <strong>${escapeHtml(m.corral_actual)}</strong>` : (m.corral ? `• Lote: ${escapeHtml(m.corral)}` : "");
+      const badgeTexto = m.tipo_display || m.tipo || "MOVIMIENTO";
+      const subtipoTag = m.subtipo_display ? `<span class="mov-subtipo-tag">${escapeHtml(m.subtipo_display)}</span>` : "";
 
       return `
         <article class="movimiento-card">
           <div class="mov-header-row">
-            <span class="badge-tipo-mov ${tipoClase}">
-              ${escapeHtml(m.tipo || "MOVIMIENTO")}
-            </span>
+            <div style="display: flex; align-items: center;">
+              <span class="badge-tipo-mov ${tipoClase}">
+                ${escapeHtml(badgeTexto)}
+              </span>
+              ${subtipoTag}
+            </div>
             <span class="mov-fecha">${formatearFecha(m.fecha)}</span>
           </div>
 
@@ -263,4 +290,20 @@ export function ejecutarBusquedaMovimientos() {
       `;
     })
     .join("");
+
+  const btnMasHtml = movs.length < total ? `
+    <div style="text-align: center; margin-top: 24px; margin-bottom: 30px;">
+      <button 
+        class="btn-mostrar-mas-movimientos" 
+        id="btn-mostrar-mas-movimientos" 
+        data-action="load-more-movimientos">
+        Mostrar más movimientos (+50)
+      </button>
+      <div style="font-size: 0.8rem; color: var(--text-dim); margin-top: 8px;">
+        Quedan ${(total - movs.length).toLocaleString("es-ES")} movimientos por mostrar
+      </div>
+    </div>
+  ` : "";
+
+  listContainer.innerHTML = cardsHtml + btnMasHtml;
 }

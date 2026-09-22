@@ -63,7 +63,14 @@ export function obtenerMovimientos(opciones = {}) {
   return db.obtenerMovimientos(opciones);
 }
 
+export function obtenerAniosMovimientos() {
+  const db = getDB();
+  if (!db || typeof db.obtenerAniosMovimientos !== "function") return [];
+  return db.obtenerAniosMovimientos();
+}
+
 export function getMetadata() {
   const db = getDB();
   return db ? db.meta : {};
 }
+
