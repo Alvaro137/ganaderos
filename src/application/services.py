@@ -73,7 +73,10 @@ class AsistenteService:
         self.query_builder = query_builder
 
     def procesar_intencion(
-        self, prompt: str, historial: Optional[List[dict]] = None
+        self,
+        prompt: str,
+        historial: Optional[List[dict]] = None,
+        modelo_solicitado: Optional[str] = None,
     ) -> Optional[AsistenteResultado]:
         """Coordina la resolución de intenciones y la generación de consultas SQL/respuestas.
 
@@ -83,7 +86,16 @@ class AsistenteService:
         if not self.intent_resolver or not self.query_builder:
             raise RuntimeError("AsistenteService no tiene configurados los resolvers necesarios.")
 
-        nombre_intent, args, offline_mode = self.intent_resolver(prompt, historial)
+        try:
+            if modelo_solicitado is not None:
+                nombre_intent, args, offline_mode = self.intent_resolver(
+                    prompt, historial, modelo_solicitado=modelo_solicitado
+                )
+            else:
+                nombre_intent, args, offline_mode = self.intent_resolver(prompt, historial)
+        except TypeError:
+            nombre_intent, args, offline_mode = self.intent_resolver(prompt, historial)
+
         if not nombre_intent:
             return None
 

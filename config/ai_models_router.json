@@ -1,0 +1,203 @@
+{
+  "version": "1.0.0",
+  "description": "Catalogo de modelos multi-proveedor priorizado por inteligencia y disponibilidad",
+  "total_modelos": 28,
+  "modelos": [
+    {
+      "provider": "gemini",
+      "model": "gemini-3.8-flash",
+      "name": "Gemini gemini-3.8-flash (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 380
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.7-flash",
+      "name": "Gemini gemini-3.7-flash (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 370
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.6-flash",
+      "name": "Gemini gemini-3.6-flash (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 360
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash",
+      "name": "Gemini gemini-3.5-flash (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 350
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3-flash-preview",
+      "name": "Gemini gemini-3-flash-preview (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 300
+    },
+    {
+      "provider": "openrouter",
+      "model": "poolside/laguna-s-2.1:free",
+      "name": "OpenRouter Poolside: Laguna S 2.1 (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 100
+    },
+    {
+      "provider": "openrouter",
+      "model": "nex-agi/nex-n2.5-pro:free",
+      "name": "OpenRouter Nex AGI: Nex-N2.5-Pro (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 95
+    },
+    {
+      "provider": "openrouter",
+      "model": "inclusionai/ling-3.0-flash-sante:free",
+      "name": "OpenRouter inclusionAI: Ling 3.0 Flash Sante (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 90
+    },
+    {
+      "provider": "openrouter",
+      "model": "inclusionai/ling-3.0-flash-fin:free",
+      "name": "OpenRouter inclusionAI: Ling 3.0 Flash Fin (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 88
+    },
+    {
+      "provider": "openrouter",
+      "model": "inclusionai/ling-3.0-flash-vl:free",
+      "name": "OpenRouter inclusionAI: Ling 3.0 Flash VL (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 85
+    },
+    {
+      "provider": "openrouter",
+      "model": "thinkingmachines/inkling-small:free",
+      "name": "OpenRouter Thinking Machines: Inkling Small (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 82
+    },
+    {
+      "provider": "openrouter",
+      "model": "thinkingmachines/inkling:free",
+      "name": "OpenRouter Thinking Machines: Inkling (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 80
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "name": "Groq Qwen 3.8 27B (Ultra-rápido)",
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "score": 75
+    },
+    {
+      "provider": "openrouter",
+      "model": "qwen/qwen3.8-27b:free",
+      "name": "OpenRouter Qwen: Qwen3.8 27B (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 70
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "name": "Gemini gemini-3.5-flash-lite (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 335
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite-preview",
+      "name": "Gemini gemini-3.1-flash-lite-preview (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 295
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "name": "Gemini gemini-3.1-flash-lite (Google AI)",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      "score": 295
+    },
+    {
+      "provider": "openrouter",
+      "model": "nex-agi/nex-n2.5-mini:free",
+      "name": "OpenRouter Nex AGI: Nex-N2.5-Mini (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 78
+    },
+    {
+      "provider": "openrouter",
+      "model": "poolside/laguna-xs-2.1:free",
+      "name": "OpenRouter Poolside: Laguna XS 2.1 (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 75
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "name": "OpenRouter NVIDIA: Nemotron 3 Super (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 68
+    },
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-31b-it:free",
+      "name": "OpenRouter Google: Gemma 4 31B (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 65
+    },
+    {
+      "provider": "openrouter",
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "name": "OpenRouter Google: Gemma 4 26B A4B  (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 60
+    },
+    {
+      "provider": "openrouter",
+      "model": "liquid/lfm-2.5-2.6b:free",
+      "name": "OpenRouter LiquidAI: LFM2.5-2.6B (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 50
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "name": "OpenRouter NVIDIA: Nemotron 3 Ultra (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 45
+    },
+    {
+      "provider": "openrouter",
+      "model": "dots-studio/dots-3-note-preview:free",
+      "name": "OpenRouter Dots Studio: Dots3-Note Preview (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 40
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3.5-lightning:free",
+      "name": "OpenRouter NVIDIA: Nemotron 3.5 Lightning (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 40
+    },
+    {
+      "provider": "openrouter",
+      "model": "cohere/north-mini-code:free",
+      "name": "OpenRouter Cohere: North Mini Code (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 40
+    },
+    {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "name": "OpenRouter NVIDIA: Nemotron 3 Nano Omni (free)",
+      "url": "https://openrouter.ai/api/v1/chat/completions",
+      "score": 40
+    }
+  ]
+}

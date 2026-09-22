@@ -20,6 +20,7 @@ class AuthTokenResponse(BaseModel):
 class IntentRequest(BaseModel):
     prompt: str
     historial: List[Dict[str, Any]] = Field(default_factory=list)
+    model_id: Optional[str] = "auto"
 
 class IntentResponse(BaseModel):
     ok: bool
