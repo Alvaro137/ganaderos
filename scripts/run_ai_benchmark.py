@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
@@ -25,7 +23,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.application.intents import IntentType
 from src.application.query_builder import construir_consulta_intent
-from src.infrastructure.llm_gateway import clasificar_intencion_groq
+from src.infrastructure.llm_gateway import (
+    clasificar_intencion_groq,
+    clasificar_intencion_offline,
+)
 
 DATASET_PATH = ROOT_DIR / "tests" / "eval" / "dataset_intents_campo.json"
 REPORTS_DIR = ROOT_DIR / "reports"
@@ -45,84 +46,6 @@ class EvalResult:
     query_built_ok: bool
     latency_ms: float
     error_msg: str = ""
-
-
-def _normalizar_texto(texto: str) -> str:
-    texto = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("utf-8")
-    return texto.lower().strip()
-
-
-def clasificar_intencion_offline(prompt: str) -> tuple[str, dict[str, Any]]:
-    """Clasificador semántico y extractor determinista para evaluación cuantitativa offline."""
-    p_norm = _normalizar_texto(prompt)
-
-    # Detección de ataques o consultas fuera de dominio (adversarios)
-    patrones_adversarios = [
-        r"drop\s+table",
-        r"select\s+\*",
-        r"--;",
-        r"contrasena",
-        r"password",
-        r"capital\s+de",
-        r"chiste",
-        r"tiempo\s+va\s+a\s+hacer",
-        r"clima",
-    ]
-    for pat in patrones_adversarios:
-        if re.search(pat, p_norm):
-            return "consulta_informativa_general", {}
-
-    # Sanitización de espaciado Whisper (ej: '10 45' -> '1045')
-    prompt_sanitizado = re.sub(r"\b(\d{2})\s+(\d{2})\b", r"\1\2", prompt)
-    p_norm_s = _normalizar_texto(prompt_sanitizado)
-
-    crotal_4 = None
-    match_oficial = re.search(r"\b[A-Za-z]{2}\d{10,12}\b", prompt_sanitizado)
-    if match_oficial:
-        crotal_4 = match_oficial.group(0)[-4:]
-    else:
-        match_4 = re.search(r"\b(\d{4})\b", prompt_sanitizado)
-        if match_4:
-            crotal_4 = match_4.group(1)
-
-    if any(k in p_norm_s for k in ["parto", "cria", "hijo", "descendencia", "becerro"]):
-        if any(k in p_norm_s for k in ["sin parir", "vacia", "no paren"]):
-            return "listar_vacas_sin_parir", {}
-        if crotal_4:
-            return "consultar_partos_madre", {"crotal_4": crotal_4}
-
-    if any(k in p_norm_s for k in ["sin parir", "vacia", "no paren", "nodrizas"]):
-        return "listar_vacas_sin_parir", {}
-
-    if any(k in p_norm_s for k in ["retirada", "supresion", "tiempo de carne", "medicamento", "receta", "tratamiento"]):
-        if any(k in p_norm_s for k in ["mas usado", "mas recetado", "mas frecuente", "frecuente"]):
-            return "consultar_medicamento_mas_usado", {}
-        return "consultar_supresiones_activas", {}
-
-    if any(k in p_norm_s for k in ["pienso", "alimento", "albaran", "tolva"]):
-        return "consultar_compras_alimento", {}
-
-    corrales_conocidos = {
-        "duena": "DUEÑA",
-        "espadana": "ESPADAÑA",
-        "rivera": "RIVERA",
-        "vega": "VEGA",
-        "cebadero": "CEBADERO",
-    }
-    # Distinguir traspasos de corrales
-    if any(k in p_norm_s for k in ["traspaso", "trasladado", "movimiento"]):
-        if "reciente" in p_norm_s and "cebadero" in p_norm_s:
-            return "listar_ultimos_traspasos", {"origen": "121", "destino": "122"}
-        return "listar_ultimos_traspasos", {}
-
-    for alias, nombre_oficial in corrales_conocidos.items():
-        if alias in p_norm_s:
-            return "listar_animales_corral", {"corral": nombre_oficial}
-
-    if crotal_4:
-        return "consultar_ficha_animal", {"crotal_4": crotal_4}
-
-    return "consulta_informativa_general", {}
 
 
 def evaluar_caso(case: dict, live_llm: bool = False, groq_key: str = "") -> EvalResult:

@@ -4,7 +4,7 @@
  */
 
 import { AppState, esPantallaEscritorio, escapeHtml, formatearFecha, formatearMoneda, formatearKg } from '../config.js';
-import { obtenerAuthHeaders } from '../auth.js';
+import { obtenerAuthHeaders, mostrarPantallaLogin } from '../auth.js';
 import { ejecutarConsulta } from '../db.js';
 import { VoiceManager } from '../voice.js';
 import { seleccionarAnimal, verDetalleCorral } from './detail_view.js';
@@ -187,6 +187,11 @@ export function setupAsistenteIA() {
       const resp = await fetch("./api/ai/models", {
         headers: obtenerAuthHeaders()
       });
+      if (resp.status === 401) {
+        localStorage.removeItem("campo_pwa_token");
+        mostrarPantallaLogin("Tu sesión ha caducado. Introduce la contraseña de nuevo.");
+        return;
+      }
       if (!resp.ok) return;
       const data = await resp.json();
       if (data.ok && Array.isArray(data.models) && data.models.length > 0) {
@@ -275,6 +280,14 @@ export function setupAsistenteIA() {
           model_id: modelId
         })
       });
+
+      if (resp.status === 401) {
+        localStorage.removeItem("campo_pwa_token");
+        cerrarModal();
+        mostrarPantallaLogin("Tu sesión ha caducado. Vuelve a introducir la contraseña de la explotación.");
+        ejecutandoConsulta = false;
+        return;
+      }
 
       if (resp.ok) {
         const resJson = await resp.json();
