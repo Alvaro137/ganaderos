@@ -1,0 +1,36 @@
+services:
+  ganaderos-campo:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ganaderos-campo:prod
+    container_name: ganaderos-campo-edge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8000"
+    environment:
+      - APP_PORT=8000
+      - PWA_PASSWORD=${PWA_PASSWORD:-mvp-testing}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - BACKUP_RETENTION=7
+    volumes:
+      - ../pwa:/app/pwa
+      - ../backups:/app/backups
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 256M
+        reservations:
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

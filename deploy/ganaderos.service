@@ -1,0 +1,33 @@
+[Unit]
+Description=Ganaderos Campo PWA (Backend FastAPI & SQLite WASM Server)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=varo
+Group=varo
+WorkingDirectory=/home/varo/ganaderos_pwa
+Environment=PYTHONUNBUFFERED=1
+Environment=APP_PORT=8010
+EnvironmentFile=-/home/varo/ganaderos_pwa/.env
+
+# Ejecución mediante el entorno virtual aislado en la Orange Pi
+ExecStart=/home/varo/ganaderos_pwa/venv/bin/python scripts/run_server.py
+
+# Política de recuperación ante cortes eléctricos en la finca
+Restart=always
+RestartSec=5s
+
+# Seguridad y contención del proceso
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/varo/ganaderos_pwa/pwa /home/varo/ganaderos_pwa/backups
+NoNewPrivileges=true
+
+# Límites de memoria para placa SBC con 1 GB RAM
+MemoryMax=350M
+MemoryHigh=280M
+
+[Install]
+WantedBy=multi-user.target
