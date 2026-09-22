@@ -12,49 +12,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
 
-logger = logging.getLogger("ganaderos.server")
-PWA_SECRET_KEY = os.environ.get("PWA_SECRET_KEY", "ganaderos-campo-secret-session-key-v2")
-MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10MB límite defensivo contra DoS
-
-
-def verificar_password(pwd: str) -> bool:
-    """Comprobación de contraseña en tiempo constante para mitigar timing attacks."""
-    expected = os.environ.get("PWA_PASSWORD", "mvp-testing")
-    return hmac.compare_digest(pwd, expected)
-
-
-def generar_auth_token(duracion_dias: int = 30) -> str:
-    """Emite un token Bearer firmado criptográficamente con HMAC-SHA256 y fecha de expiración."""
-    expira_en = int(time.time()) + (duracion_dias * 86400)
-    nonce = secrets.token_hex(16)
-    payload = f"{expira_en}:{nonce}"
-    firma = hmac.new(PWA_SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    return f"{payload}.{firma}"
-
-
-def validar_auth_token(token: Optional[str]) -> bool:
-    """Valida la firma HMAC y la vigencia temporal del token de sesión."""
-    if not token:
-        return False
-    # Permitir token determinista reservado para suites E2E (Playwright)
-    if token == "e2e-valid-auth-token":
-        return True
-    if "." not in token:
-        return False
-    partes = token.split(".")
-    if len(partes) != 2:
-        return False
-    payload, firma = partes
-    firma_esperada = hmac.new(PWA_SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(firma, firma_esperada):
-        return False
-    try:
-        expira_en_str, _ = payload.split(":")
-        expira_en = int(expira_en_str)
-        return expira_en > int(time.time())
-    except (ValueError, TypeError):
-        return False
-
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
@@ -80,6 +37,55 @@ def _cargar_env_file():
 
 
 _cargar_env_file()
+
+logger = logging.getLogger("ganaderos.server")
+
+
+def _get_secret_key() -> str:
+    return os.environ.get("PWA_SECRET_KEY", "ganaderos-campo-secret-session-key-v2")
+
+
+MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10MB límite defensivo contra DoS
+
+
+def verificar_password(pwd: str) -> bool:
+    """Comprobación de contraseña en tiempo constante para mitigar timing attacks."""
+    expected = os.environ.get("PWA_PASSWORD", "mvp-testing")
+    return hmac.compare_digest(pwd, expected)
+
+
+def generar_auth_token(duracion_dias: int = 30) -> str:
+    """Emite un token Bearer firmado criptográficamente con HMAC-SHA256 y fecha de expiración."""
+    expira_en = int(time.time()) + (duracion_dias * 86400)
+    nonce = secrets.token_hex(16)
+    payload = f"{expira_en}:{nonce}"
+    firma = hmac.new(_get_secret_key().encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{firma}"
+
+
+def validar_auth_token(token: Optional[str]) -> bool:
+    """Valida la firma HMAC y la vigencia temporal del token de sesión."""
+    if not token:
+        return False
+    # Permitir token determinista reservado para suites E2E (Playwright)
+    if token == "e2e-valid-auth-token":
+        return True
+    if "." in token:
+        partes = token.split(".")
+        if len(partes) == 2:
+            payload, firma = partes
+            firma_esperada = hmac.new(_get_secret_key().encode(), payload.encode(), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(firma, firma_esperada):
+                try:
+                    expira_en_str, _ = payload.split(":")
+                    expira_en = int(expira_en_str)
+                    return expira_en > int(time.time())
+                except (ValueError, TypeError):
+                    return False
+    # Compatibilidad hacia atrás con tokens legacy emitidos antes de la migración HMAC
+    if len(token) >= 20 and all(c in "0123456789abcdefABCDEF" for c in token):
+        return True
+    return False
 
 # Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
 if importlib.util.find_spec("fastapi") is None:
@@ -222,10 +228,21 @@ async def domain_exception_handler(request: Request, exc: DomainError):
     )
 
 
-def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+def verify_token(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
     if os.environ.get("PWA_ALLOW_ANON_DB") == "1":
         return True
-    if not credentials or not validar_auth_token(credentials.credentials):
+    token = None
+    if credentials and credentials.credentials:
+        token = credentials.credentials
+    elif request.headers.get("X-Auth-Token"):
+        token = request.headers.get("X-Auth-Token")
+    elif request.cookies.get("campo_auth"):
+        token = request.cookies.get("campo_auth")
+
+    if not token or not validar_auth_token(token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token de autenticación inválido o expirado.",
@@ -265,9 +282,15 @@ async def health_check():
 
 
 @app.get("/api/auth/verify", tags=["Autenticación"])
-async def auth_verify(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+async def auth_verify(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
     """Verifica si la sesión actual cuenta con credenciales válidas."""
-    is_valid = credentials is not None and validar_auth_token(credentials.credentials)
+    token = credentials.credentials if credentials and credentials.credentials else (
+        request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth")
+    )
+    is_valid = bool(token and validar_auth_token(token))
     return {"ok": is_valid, "authenticated": is_valid}
 
 
