@@ -1,0 +1,33 @@
+# Snippet de configuración para Caddy v2 (/etc/caddy/Caddyfile)
+# Permite la convivencia pacífica de Ganaderos Campo (puerto 8010) junto a la
+# estación meteorológica Sainlogic en Espadaña (puerto 8000) bajo el mismo dominio.
+
+# Insertar dentro del bloque del dominio (ej. varo137.ddns.net):
+# -------------------------------------------------------------
+
+handle /campo* {
+    # Eliminar prefijo /campo para reenviar limpiamente al backend FastAPI
+    uri strip_prefix /campo
+
+    reverse_proxy 127.0.0.1:8010 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Buffering optimizado para archivos grandes (base de datos SQLite)
+        buffer_requests false
+    }
+
+    # Compresión acelerada para descarga en campo (SQLite WebAssembly y JS Modules)
+    encode zstd gzip
+
+    # Cabeceras de seguridad y soporte para Service Worker en subpath
+    header {
+        Service-Worker-Allowed "/campo/"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+}
