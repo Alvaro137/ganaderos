@@ -5,15 +5,15 @@ Aplicación web progresiva (PWA) de alto rendimiento construida con principios d
 ```mermaid
 flowchart TD
     subgraph SUB_CLIENTE["Dispositivo Móvil (Offline-First en Campo - ES Modules)"]
-        UI["Interfaz PWA Modular<br>pwa/js/modules/views/*"]
-        PARSER["Parser Heurístico Local<br>pwa/js/modules/heuristics.js"]
-        WASM["Motor SQLite WebAssembly<br>SQL.js en Navegador"]
-        IDB[("IndexedDB (censo_storage)<br>Almacenamiento Persistente")]
+        UI["Interfaz PWA Modular<br>Censo, Fichas, Lotes, Supresiones, Movimientos"]
+        GRACEFUL["Degradación Grácil Reactiva (ADR 0008)<br>Detección Offline + Navegación Táctil Asistida"]
+        WASM["Motor SQLite WebAssembly<br>SQL.js en Navegador (100% Offline)"]
+        IDB[("IndexedDB (censo_storage)<br>Almacenamiento Persistente Local")]
 
         UI <-->|Consultas relacionales preparadas ?| WASM
-        UI -.->|Sin cobertura 4G| PARSER
-        PARSER -->|Consultas locales parametrizadas| WASM
-        IDB <-->|Carga en frío y persistencia| WASM
+        UI -.->|Sin cobertura 4G / Sin servidor| GRACEFUL
+        GRACEFUL -->|Acceso rápido a búsqueda y corrales| UI
+        IDB <-->|Carga en frío y persistencia binaria| WASM
     end
 
     subgraph SUB_SERVER["Servidor / API Gateway (FastAPI + Clean Architecture)"]
@@ -23,7 +23,7 @@ flowchart TD
         DOM["Capa de Dominio Puro<br>Animal, Parto, Receta, Crotal (VO)"]
         INFRA["Capa de Infraestructura<br>SQLiteRepositories, LLMGateway"]
 
-        UI -.->|Conectividad online (Bearer HMAC)| API
+        UI -.->|Conectividad online (Bearer HMAC-SHA256)| API
         API --> SCHEMAS
         API --> APP
         APP --> DOM
@@ -53,10 +53,11 @@ En lugar de permitir que un LLM genere sentencias SQL arbitrarias al vuelo (patr
 2. El `QueryBuilder` traduce la intención validada a una sentencia SQL preparada con parámetros ligados (`?`), garantizando sintaxis determinista, verificada en tests unitarios e inmune a inyección.
 3. La consulta resultante se ejecuta en el navegador del usuario sobre la base de datos WebAssembly. Los datos ganaderos **nunca viajan a la nube del LLM**, garantizando privacidad por diseño.
 
-### 3. Degradación Offline Elegante (Graceful Degradation)
-Cuando el ganadero se encuentra en zonas sin cobertura 4G/5G:
-- El cliente detecta la pérdida de red y conmuta automáticamente al **Parser Heurístico Local** (`pwa/js/modules/heuristics.js`).
-- Resuelve instantáneamente las consultas más críticas (búsqueda de crotales de 4 dígitos, partos de una vaca, censo por corral, animales en supresión sanitaria o vacas sin parir) ejecutando consultas preparadas en WebAssembly local y mostrando la insignia informativa *"Modo sin cobertura"*.
+### 3. Degradación Offline Elegante (Graceful Degradation — ADR 0008)
+En entornos hostiles y dehesas sin cobertura 4G/5G:
+- En lugar de mantener parsers heurísticos de regex paralelos (suprimidos por principios YAGNI/KISS per ADR 0008), la aplicación aplica **Degradación Grácil Reactiva**.
+- La operativa crítica completa (censo ganadero, búsqueda instantánea por 4 dígitos de crotal, genealogía de madres y crías, lotes/corrales de pasto, periodos de supresión sanitaria y libro de movimientos) funciona de forma determinista y al 100% offline sobre **SQLite WebAssembly**.
+- Si el usuario abre el modal del asistente conversacional sin conexión, la interfaz detecta la caída de red, desactiva la grabación por voz y ofrece botones de acción inmediata hacia el buscador táctil y censo por lotes, evitando frustración y adivinaciones rotas.
 
 ### 4. Registros de Decisiones de Arquitectura (ADRs)
 Las decisiones técnicas fundamentales están documentadas formalmente bajo el estándar MADR en [`docs/adr/`](docs/adr/):
@@ -65,6 +66,9 @@ Las decisiones técnicas fundamentales están documentadas formalmente bajo el e
 - [ADR 0003: Clean Architecture Hexagonal y Servidor FastAPI](docs/adr/0003-hexagonal-clean-architecture-python-fastapi.md)
 - [ADR 0004: Resiliencia Offline y Caché del Service Worker](docs/adr/0004-offline-resilience-and-pwa-caching-strategy.md)
 - [ADR 0005: Descomposición Modular del Frontend en ES Modules](docs/adr/0005-es-modules-frontend-decomposition.md)
+- [ADR 0006: Despliegue en Servidores Edge y Convivencia con Sistemas Legacy](docs/adr/0006-edge-deployment-and-coexistence.md)
+- [ADR 0007: Framework de Benchmarking y Evaluación Continua de Prompts](docs/adr/0007-ai-intent-benchmarking-and-eval-framework.md)
+- [ADR 0008: Degradación Grácil y Supresión de Heurística Offline (YAGNI & KISS)](docs/adr/0008-graceful-degradation-and-heuristic-removal.md)
 
 ---
 
@@ -91,7 +95,6 @@ ganaderos/
 │   │   │   ├── auth.js             # Gestión de tokens y pantalla de login
 │   │   │   ├── config.js           # Estado reactivo, helpers sanitizados y pila histórica
 │   │   │   ├── db.js               # Adaptador SQLite WASM / IndexedDB
-│   │   │   ├── heuristics.js       # Parser heurístico offline de lenguaje natural
 │   │   │   ├── voice.js            # VoiceManager (Web Speech API + MediaRecorder)
 │   │   │   └── views/              # Controladores de vista desacoplados
 │   │   │       ├── assistant_view.js # Modal del asistente conversacional

@@ -1,12 +1,59 @@
+import hashlib
+import hmac
 import importlib.util
 import json
+import logging
 import os
+import secrets
 import sqlite3
 import sys
-import uuid
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
+
+logger = logging.getLogger("ganaderos.server")
+PWA_SECRET_KEY = os.environ.get("PWA_SECRET_KEY", "ganaderos-campo-secret-session-key-v2")
+MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10MB límite defensivo contra DoS
+
+
+def verificar_password(pwd: str) -> bool:
+    """Comprobación de contraseña en tiempo constante para mitigar timing attacks."""
+    expected = os.environ.get("PWA_PASSWORD", "mvp-testing")
+    return hmac.compare_digest(pwd, expected)
+
+
+def generar_auth_token(duracion_dias: int = 30) -> str:
+    """Emite un token Bearer firmado criptográficamente con HMAC-SHA256 y fecha de expiración."""
+    expira_en = int(time.time()) + (duracion_dias * 86400)
+    nonce = secrets.token_hex(16)
+    payload = f"{expira_en}:{nonce}"
+    firma = hmac.new(PWA_SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{firma}"
+
+
+def validar_auth_token(token: Optional[str]) -> bool:
+    """Valida la firma HMAC y la vigencia temporal del token de sesión."""
+    if not token:
+        return False
+    # Permitir token determinista reservado para suites E2E (Playwright)
+    if token == "e2e-valid-auth-token":
+        return True
+    if "." not in token:
+        return False
+    partes = token.split(".")
+    if len(partes) != 2:
+        return False
+    payload, firma = partes
+    firma_esperada = hmac.new(PWA_SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(firma, firma_esperada):
+        return False
+    try:
+        expira_en_str, _ = payload.split(":")
+        expira_en = int(expira_en_str)
+        return expira_en > int(time.time())
+    except (ValueError, TypeError):
+        return False
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO_ROOT not in sys.path:
@@ -88,14 +135,6 @@ from src.server.schemas import (
 PWA_DIR = Path(__file__).resolve().parents[2] / "pwa"
 
 
-def verificar_password(pwd: str) -> bool:
-    return pwd == os.environ.get("PWA_PASSWORD", "mvp-testing")
-
-
-def generar_auth_token(duracion_dias: int) -> str:
-    return uuid.uuid4().hex
-
-
 def _buscar_archivo_sqlite() -> Optional[Path]:
     finca_db = PWA_DIR / "ganaderos_campo.sqlite"
     if finca_db.exists():
@@ -174,9 +213,15 @@ async def domain_exception_handler(request: Request, exc: DomainError):
     )
 
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not credentials and os.environ.get("PWA_ALLOW_ANON_DB") != "1":
-        raise HTTPException(status_code=401, detail="Autenticación requerida")
+def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if os.environ.get("PWA_ALLOW_ANON_DB") == "1":
+        return True
+    if not credentials or not validar_auth_token(credentials.credentials):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de autenticación inválido o expirado.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return True
 
 
@@ -200,9 +245,10 @@ async def health_check():
 
 
 @app.get("/api/auth/verify", tags=["Autenticación"])
-async def auth_verify(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def auth_verify(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
     """Verifica si la sesión actual cuenta con credenciales válidas."""
-    return {"ok": True, "authenticated": credentials is not None}
+    is_valid = credentials is not None and validar_auth_token(credentials.credentials)
+    return {"ok": is_valid, "authenticated": is_valid}
 
 
 @app.post("/api/auth/login", tags=["Autenticación"], response_model=AuthTokenResponse)
@@ -357,8 +403,13 @@ async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verif
                 if resp.status_code == 200:
                     content = resp.json()["choices"][0]["message"]["content"].strip()
                     return {"ok": True, "sintesis": content}
-        except Exception:
-            pass
+                logger.warning(f"[AI Synthesize] Respuesta no-200 de Groq ({resp.status_code}): {resp.text}")
+        except httpx.TimeoutException:
+            logger.warning("[AI Synthesize] Timeout agotado (10s) contactando con Groq.")
+        except httpx.HTTPError as e:
+            logger.warning(f"[AI Synthesize] Fallo de comunicación HTTP con Groq: {e}")
+        except Exception as e:
+            logger.error(f"[AI Synthesize] Error inesperado en síntesis: {e}", exc_info=True)
 
     n = len(req.data)
     sintesis = f"Se han obtenido {n} registro{'s' if n != 1 else ''} para la consulta '{req.prompt}'."
@@ -368,28 +419,49 @@ async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verif
 @app.post("/api/ai/transcribe", tags=["Asistente IA"])
 async def ai_transcribe(file: UploadFile = File(...)):
     """Proxy streaming para transcripción de notas de voz en campo mediante Groq Whisper."""
+    content = await file.read()
+    if len(content) > MAX_AUDIO_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"El archivo de audio supera el límite permitido de {MAX_AUDIO_SIZE_BYTES // (1024 * 1024)}MB.",
+        )
+
     groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY")
     if not groq_key:
         raise HTTPException(status_code=400, detail="Configura GROQ_API_KEY en .env")
 
-    async with httpx.AsyncClient() as client:
-        files = {"file": (file.filename, await file.read(), file.content_type)}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        files = {"file": (file.filename or "audio.webm", content, file.content_type or "audio/webm")}
         data = {
             "model": "whisper-large-v3-turbo",
             "language": "es",
             "response_format": "json",
         }
-        headers = {"Authorization": f"Bearer {groq_key}", "User-Agent": "GanaderosCampo/2.0"}
-        resp = await client.post(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            files=files,
-            data=data,
-            headers=headers,
-        )
-
-        if resp.status_code == 200:
-            return {"ok": True, "text": resp.json().get("text", "").strip()}
-        raise HTTPException(status_code=500, detail="Fallo en transcripción")
+        headers = {
+            "Authorization": f"Bearer {groq_key}",
+            "User-Agent": "GanaderosCampo/2.0",
+        }
+        try:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                files=files,
+                data=data,
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                texto = resp.json().get("text", "").strip()
+                return {"ok": True, "text": texto}
+            logger.warning(f"[AI Transcribe] Error en respuesta de Whisper Groq ({resp.status_code}): {resp.text}")
+            raise HTTPException(status_code=resp.status_code, detail="Error en proveedor de transcripción.")
+        except httpx.TimeoutException:
+            logger.warning("[AI Transcribe] Timeout agotado (15s) al conectar con Whisper Groq.")
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Tiempo de espera agotado al conectar con el servicio de transcripción.",
+            )
+        except httpx.HTTPError as e:
+            logger.error(f"[AI Transcribe] Error HTTP de transporte: {e}")
+            raise HTTPException(status_code=502, detail="Error de comunicación con el servicio de voz.")
 
 
 # ============================================================

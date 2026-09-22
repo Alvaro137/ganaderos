@@ -78,3 +78,35 @@ class TestFastAPI(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertEqual(data["error"], "CrotalInvalidoError")
         self.assertIn("formato oficial", data["detail"])
+
+    def test_auth_login_success_and_token_validation(self):
+        # 1. Login exitoso con contraseña por defecto
+        login_resp = self.client.post("/api/auth/login", json={"password": "mvp-testing"})
+        self.assertEqual(login_resp.status_code, 200)
+        token = login_resp.json()["token"]
+        self.assertIn(".", token)
+
+        # 2. Verificación de token legítimo
+        headers = {"Authorization": f"Bearer {token}"}
+        verify_resp = self.client.get("/api/auth/verify", headers=headers)
+        self.assertEqual(verify_resp.status_code, 200)
+        self.assertTrue(verify_resp.json()["authenticated"])
+
+        # 3. Verificación de token manipulado / firma inválida
+        tampered_token = token[:-4] + "ffff"
+        verify_bad = self.client.get("/api/auth/verify", headers={"Authorization": f"Bearer {tampered_token}"})
+        self.assertEqual(verify_bad.status_code, 200)
+        self.assertFalse(verify_bad.json()["authenticated"])
+
+    def test_auth_login_failure(self):
+        login_resp = self.client.post("/api/auth/login", json={"password": "password_incorrecta"})
+        self.assertEqual(login_resp.status_code, 401)
+
+    def test_ai_transcribe_payload_too_large(self):
+        # Simular fichero de audio mayor a 10MB
+        huge_content = b"0" * (10 * 1024 * 1024 + 1024)
+        files = {"file": ("big_audio.webm", huge_content, "audio/webm")}
+        response = self.client.post("/api/ai/transcribe", files=files)
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("supera el límite", response.json()["detail"])
+

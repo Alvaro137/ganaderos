@@ -1,11 +1,14 @@
 """Pasarela de comunicación con modelos de lenguaje mediante Tool/Intent Calling estructurado."""
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
 from typing import Any, Optional, Tuple
 
 from src.application.intents import CATALOGO_HERRAMIENTAS_LLM, IntentType
+
+logger = logging.getLogger("ganaderos.ai")
 
 SYSTEM_INSTRUCTION = """Eres el clasificador de intenciones del sistema de gestión de vacuno extensivo Ganaderos Campo.
 Tu única función es analizar la consulta del ganadero y seleccionar la herramienta/función más adecuada del catálogo con sus parámetros correspondientes.
@@ -72,7 +75,8 @@ def clasificar_intencion_groq(
                 nombre = tool["name"]
                 try:
                     args = json.loads(tool["arguments"])
-                except Exception:
+                except Exception as json_err:
+                    logger.warning(f"[LLM Gateway] Error al decodificar argumentos JSON de la herramienta '{nombre}': {json_err}")
                     args = {}
                 return nombre, args
 
@@ -81,8 +85,12 @@ def clasificar_intencion_groq(
             if content:
                 return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
 
+    except urllib.error.HTTPError as http_err:
+        logger.warning(f"[LLM Gateway] Error HTTP al comunicar con Groq ({http_err.code}): {http_err.reason}")
+    except urllib.error.URLError as url_err:
+        logger.warning(f"[LLM Gateway] Error de conexión URL con Groq: {url_err.reason}")
     except Exception as e:
-        print(f"[LLM Gateway] Error en llamada a Groq: {e}")
+        logger.error(f"[LLM Gateway] Error inesperado en llamada a Groq: {e}", exc_info=True)
 
     return None
 
