@@ -1,10 +1,25 @@
+import importlib.util
 import json
 import os
 import sqlite3
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
+
+# Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
+if importlib.util.find_spec("fastapi") is None:
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _VENV_CANDIDATES = [
+        os.path.join(_REPO_ROOT, "venv", "bin", "python"),
+        os.path.join(_REPO_ROOT, "venv", "bin", "python3"),
+        os.path.join(_REPO_ROOT, ".venv", "bin", "python"),
+        os.path.join(_REPO_ROOT, "venv", "Scripts", "python.exe"),
+    ]
+    _TARGET_PYTHON = next((p for p in _VENV_CANDIDATES if os.path.exists(p)), None)
+    if _TARGET_PYTHON and os.path.abspath(sys.executable) != os.path.abspath(_TARGET_PYTHON):
+        os.execv(_TARGET_PYTHON, [_TARGET_PYTHON] + sys.argv)
 
 import httpx
 from fastapi import (
@@ -352,12 +367,15 @@ async def ai_transcribe(file: UploadFile = File(...)):
 app.mount("/", StaticFiles(directory=str(PWA_DIR), html=True), name="static")
 
 
-def run_server(port: int = 8000, host: str = "0.0.0.0"):
+def run_server(port: int = 8010, host: str = "0.0.0.0"):
     import uvicorn
 
     uvicorn.run("src.server.app:app", host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":
-    puerto = int(os.environ.get("APP_PORT", 8000))
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+        puerto = int(sys.argv[1])
+    else:
+        puerto = int(os.environ.get("APP_PORT", 8010))
     run_server(port=puerto)
