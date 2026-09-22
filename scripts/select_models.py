@@ -52,6 +52,19 @@ OPENROUTER_FREE_INTELLIGENCE_WEIGHTS = {
     "liquid/lfm-2.5-2.6b:free": 50,
 }
 
+# Ranking para modelos de Mistral AI según rate-limits.md
+MISTRAL_INTELLIGENCE_WEIGHTS = {
+    "mistral-large-2512": 98,
+    "zai-glm-5-3": 92,
+    "glm-5-2": 90,
+    "codestral-2508": 88,
+    "mistral-medium-latest": 85,
+    "mistral-small-2603": 80,
+    "ministral-14b-2512": 70,
+    "ministral-8b-2512": 65,
+    "ministral-3b-2512": 55,
+}
+
 
 def obtener_claves_entorno() -> Dict[str, str]:
     """Recupera las claves API desde variables de entorno o archivo .env en Orange Pi/local."""
@@ -59,10 +72,11 @@ def obtener_claves_entorno() -> Dict[str, str]:
         "groq": os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY", ""),
         "openrouter": os.environ.get("OPENROUTER_API_KEY", ""),
         "gemini": os.environ.get("GEMINI_API_KEY", ""),
+        "mistral": os.environ.get("MISTRAL_API_KEY", ""),
     }
     # Intentar cargar .env si las variables no están en el entorno
     env_file = ROOT_DIR / ".env"
-    if env_file.exists() and (not claves["groq"] or not claves["openrouter"] or not claves["gemini"]):
+    if env_file.exists():
         try:
             with open(env_file, "r", encoding="utf-8") as f:
                 for line in f:
@@ -77,6 +91,8 @@ def obtener_claves_entorno() -> Dict[str, str]:
                         claves["openrouter"] = v
                     elif k == "GEMINI_API_KEY" and not claves["gemini"]:
                         claves["gemini"] = v
+                    elif k == "MISTRAL_API_KEY" and not claves["mistral"]:
+                        claves["mistral"] = v
         except Exception as e:
             logger.warning(f"No se pudo parsear .env: {e}")
 
@@ -243,6 +259,43 @@ def descubrir_groq_models(api_key: str, excluir_gpt_oss: bool = False) -> List[D
     return activos
 
 
+def descubrir_mistral_models(api_key: str) -> List[Dict[str, Any]]:
+    """Descubre los modelos activos en Mistral AI y los clasifica por inteligencia."""
+    if not api_key:
+        return []
+
+    url = "https://api.mistral.ai/v1/models"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "User-Agent": "GanaderosCampo/2.0",
+        },
+    )
+    candidatos = []
+    try:
+        with urllib.request.urlopen(req, timeout=10.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            ids = [m.get("id", "") for m in data.get("data", [])]
+            for mid in ids:
+                if any(k in mid for k in ["embed", "moderation"]):
+                    continue
+                score = MISTRAL_INTELLIGENCE_WEIGHTS.get(mid, 60)
+                candidatos.append({
+                    "provider": "mistral",
+                    "model": mid,
+                    "name": f"Mistral {mid}",
+                    "url": "https://api.mistral.ai/v1/chat/completions",
+                    "soporta_tools": True,
+                    "score": score,
+                })
+    except Exception as e:
+        logger.error(f"[Mistral] Error consultando modelos: {e}")
+
+    candidatos.sort(key=lambda x: x["score"], reverse=True)
+    return candidatos
+
+
 def test_model_tool_calling(cand: Dict[str, Any], api_key: str) -> Tuple[bool, str]:
     """Prueba en vivo si el modelo responde a Tool Calling con el catálogo ganadero."""
     headers = {
@@ -290,44 +343,50 @@ def compilar_catalogo_priorizado(
     excluir_gpt_oss: bool = False,
     probar_en_vivo: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Construye la lista ordenada global combinando Gemini, OpenRouter Free y Groq."""
+    """Construye la lista ordenada global combinando Gemini, OpenRouter Free, Groq y Mistral."""
     logger.info("Iniciando descubrimiento de modelos en APIs...")
 
     modelos_gemini = descubrir_gemini_models(claves.get("gemini", ""))
     modelos_openrouter = descubrir_openrouter_free()
     modelos_groq = descubrir_groq_models(claves.get("groq", ""), excluir_gpt_oss=excluir_gpt_oss)
+    modelos_mistral = descubrir_mistral_models(claves.get("mistral", ""))
 
     # Filtrar OpenRouter solo a aquellos con soporte explícito de tools
     openrouter_tools = [m for m in modelos_openrouter if m["soporta_tools"]]
 
-    logger.info(f"Descubiertos: {len(modelos_gemini)} Gemini, {len(openrouter_tools)} OpenRouter Free (con tools), {len(modelos_groq)} Groq.")
+    logger.info(
+        f"Descubiertos: {len(modelos_gemini)} Gemini, {len(openrouter_tools)} OpenRouter Free (con tools), "
+        f"{len(modelos_groq)} Groq, {len(modelos_mistral)} Mistral."
+    )
 
     # Ensamblar por niveles de inteligencia
-    # Nivel 1: Gemini Flagships (3.8, 3.7, 3.6, 3.5 no-lite)
-    tier_1_gemini_flagship = [m for m in modelos_gemini if not m.get("es_lite", False)]
+    # Nivel 1: Flagships máximos (Gemini 3.8/3.7/3.6/3.5 y Mistral Large)
+    tier_1_flagships = [m for m in modelos_gemini if not m.get("es_lite", False)]
+    tier_1_flagships += [m for m in modelos_mistral if m["score"] >= 95]
 
     # Nivel 2: OpenRouter Top Tier Free (score >= 80: Laguna S 2.1, Nex Pro, Ling Sante, Inkling)
     tier_2_openrouter_top = [m for m in openrouter_tools if m["score"] >= 80]
 
-    # Nivel 3: Qwen 27B (Groq y OpenRouter)
-    tier_3_qwen = [m for m in modelos_groq if "qwen" in m["model"]]
-    tier_3_qwen += [m for m in openrouter_tools if "qwen" in m["model"] and m not in tier_2_openrouter_top]
+    # Nivel 3: Razonamiento rápido (Groq Qwen 27B, OpenRouter Qwen 27B, Codestral/Mistral Small)
+    tier_3_fast_reasoning = [m for m in modelos_groq if "qwen" in m["model"]]
+    tier_3_fast_reasoning += [m for m in openrouter_tools if "qwen" in m["model"] and m not in tier_2_openrouter_top]
+    tier_3_fast_reasoning += [m for m in modelos_mistral if m["score"] < 95]
 
-    # Nivel 4: Gemini High-Quota Tier (Lite: 3.5-lite, 3.1-lite)
+    # Nivel 4: Gemini High-Quota Tier (Lite: 3.5-lite, 3.1-lite con 500 RPD)
     tier_4_gemini_lite = [m for m in modelos_gemini if m.get("es_lite", False)]
 
     # Nivel 5: OpenRouter Secondary Free (score < 80)
     tier_5_openrouter_sec = [m for m in openrouter_tools if m["score"] < 80 and "qwen" not in m["model"]]
 
-    # Nivel 6: Groq GPT-OSS (relegado al final como red de seguridad)
+    # Nivel 6: Groq GPT-OSS (MANTENIDO COMO ÚLTIMO RECURSO / RED DE SEGURIDAD ANTES DE FALLAR)
     tier_6_safety_groq = [m for m in modelos_groq if "gpt-oss" in m["model"]]
 
     lista_completa = []
     vistos = set()
     for lista_tier in [
-        tier_1_gemini_flagship,
+        tier_1_flagships,
         tier_2_openrouter_top,
-        tier_3_qwen,
+        tier_3_fast_reasoning,
         tier_4_gemini_lite,
         tier_5_openrouter_sec,
         tier_6_safety_groq,
