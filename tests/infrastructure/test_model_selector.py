@@ -110,6 +110,30 @@ class TestModelSelector(unittest.TestCase):
         self.assertEqual(len(modelos_sin), 1)
         self.assertEqual(modelos_sin[0]["model"], "qwen/qwen3.8-27b")
 
+    @patch("urllib.request.urlopen")
+    def test_descubrir_mistral_models(self, mock_urlopen):
+        """Valida que Mistral clasifique correctamente los modelos y descarte embeddings."""
+        from scripts.select_models import descubrir_mistral_models
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"""{
+            "data": [
+                {"id": "mistral-embed"},
+                {"id": "mistral-small-2603"},
+                {"id": "mistral-large-2512"},
+                {"id": "codestral-2508"}
+            ]
+        }"""
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        modelos = descubrir_mistral_models("fake-key")
+        ids = [m["model"] for m in modelos]
+        self.assertNotIn("mistral-embed", ids)
+        # mistral-large-2512 debe tener score mayor que codestral y small
+        self.assertEqual(ids[0], "mistral-large-2512")
+        self.assertEqual(ids[1], "codestral-2508")
+        self.assertEqual(ids[2], "mistral-small-2603")
+
 
 if __name__ == "__main__":
     unittest.main()

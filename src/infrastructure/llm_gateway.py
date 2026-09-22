@@ -129,6 +129,7 @@ def _obtener_claves_api() -> dict[str, str]:
         "groq": os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY", ""),
         "openrouter": os.environ.get("OPENROUTER_API_KEY", ""),
         "gemini": os.environ.get("GEMINI_API_KEY", ""),
+        "mistral": os.environ.get("MISTRAL_API_KEY", ""),
     }
 
 
