@@ -23,6 +23,10 @@ RUN groupadd -g 1001 appgroup && \
     useradd -u 1001 -g appgroup -s /bin/bash -m appuser && \
     chown -R appuser:appgroup /app
 
+# Instalar dependencias del proyecto
+COPY pyproject.toml /app/
+RUN pip install --no-cache-dir .
+
 USER appuser
 
 # Si no existe base de datos, generar el dataset demo determinista
@@ -33,4 +37,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)" || exit 1
 
-ENTRYPOINT ["python3", "scripts/run_server.py"]
+ENTRYPOINT ["uvicorn", "src.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
