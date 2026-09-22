@@ -22,7 +22,7 @@ class TestDomainValueObjects(unittest.TestCase):
         with self.assertRaises(CrotalInvalidoError):
             Crotal("ES12345")  # Demasiado corto
         with self.assertRaises(CrotalInvalidoError):
-            Crotal("PT083710104599")  # País erróneo
+            Crotal("XX083710104599")  # País no reconocido UE
         with self.assertRaises(CrotalInvalidoError):
             Crotal("ES08371010459A")  # Caracter no numérico
 
