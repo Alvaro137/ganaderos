@@ -75,8 +75,7 @@ def detectar_python_32() -> Optional[Path]:
     candidatos = [
         os.environ.get("GANADEROS_PY32"),
         Path(__file__).resolve().parents[2] / ".tools" / "py32" / "python.exe",
-        Path(r"c:\Users\varo\Documents\Proyectos\Ganaderos-v2\python\recetas-mvp\.tools\py32\python.exe"),
-        Path(r"C:\GANADEROS 10\python\python.exe"),
+        Path("C:/GANADEROS 10/python/python.exe"),
     ]
     for c in candidatos:
         if c:
@@ -92,16 +91,15 @@ def detectar_ruta_bd() -> Path:
     if env_path and Path(env_path).exists():
         return Path(env_path)
     candidatos = [
-        Path(r"C:\GANADEROS 10\bdlibro.mdb"),
-        Path(r"C:\Ganaderos 10\bdlibro.mdb"),
-        Path(r"C:\Ganaderos\bdlibro.mdb"),
+        Path("C:/GANADEROS 10/bdlibro.mdb"),
+        Path("C:/Ganaderos 10/bdlibro.mdb"),
+        Path("C:/Ganaderos/bdlibro.mdb"),
         Path(__file__).resolve().parents[2] / "data" / "bdlibro.mdb",
-        Path(r"c:\Users\varo\Documents\Proyectos\Ganaderos-v2\example-export-data\bdlibro.mdb"),
     ]
     for ruta in candidatos:
         if ruta.exists():
             return ruta
-    return Path(r"C:\GANADEROS 10\bdlibro.mdb")
+    return Path("C:/GANADEROS 10/bdlibro.mdb")
 
 
 def conn_str_for(path: Path, password: Optional[str] = None) -> str:
