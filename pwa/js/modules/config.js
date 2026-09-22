@@ -15,6 +15,7 @@ export const AppState = {
   tipoMovimiento: "TODOS",
   anioMovimiento: "TODOS",
   destinoMovimiento: "TODOS",
+  limiteMovimientos: 100,
   tecladoTactilVisible: false,
   // Historial conversacional para preguntas de seguimiento (multi-turno) con IA
   conversacionIA: [],
