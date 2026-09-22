@@ -8,7 +8,8 @@ import {
   esPantallaEscritorio,
   escapeHtml,
   formatearFecha,
-  formatearExplotacionAmigable
+  formatearExplotacionAmigable,
+  clasificarMovimientoUnificado
 } from '../config.js';
 import { obtenerMovimientos, obtenerAniosMovimientos } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
@@ -20,9 +21,9 @@ export function renderVistaMovimientos() {
   const tipos = [
     { id: "TODOS", label: "Todos" },
     { id: "VENTA", label: "Ventas" },
-    { id: "TRASPASO", label: "Traspasos (121 ➔ 122)" },
+    { id: "TRASPASO_CEBADERO", label: "Traspasos a Cebadero" },
+    { id: "MOVIMIENTO_INTERNO", label: "Movimientos Internos" },
     { id: "NACIMIENTO", label: "Nacimientos" },
-    { id: "SACRIFICIO", label: "Sacrificios" },
     { id: "MUERTE", label: "Bajas en campo" },
     { id: "COMPRA", label: "Compras" }
   ];
@@ -241,14 +242,9 @@ export function ejecutarBusquedaMovimientos() {
 }
 
 export function generarCardMovimientoHtml(m) {
-  const tipoRaw = (m.tipo_display || m.tipo || "").toUpperCase();
-  let tipoClase = "otro";
-  if (tipoRaw.includes("VENTA") || m.es_venta_cebadero) tipoClase = "venta";
-  else if (tipoRaw.includes("TRASPASO") || tipoRaw.includes("TRASLADO")) tipoClase = "traspaso";
-  else if (tipoRaw.includes("NACIMIENTO")) tipoClase = "nacimiento";
-  else if (tipoRaw.includes("SACRIFICIO")) tipoClase = "sacrificio";
-  else if (tipoRaw.includes("MUERTE")) tipoClase = "muerte";
-  else if (tipoRaw.includes("COMPRA")) tipoClase = "compra";
+  const clasificacion = clasificarMovimientoUnificado(m.origen, m.destino, m.tipo);
+  const badgeClase = m.badge_class || clasificacion.badge_class || "otro";
+  const badgeTexto = m.label_display || clasificacion.label || m.tipo_display || m.tipo || "MOVIMIENTO";
 
   const crotal4 = m.crotal_4 || (m.crotal && m.crotal.length >= 4 ? m.crotal.slice(-4) : m.crotal);
   const estadoBadge = m.estado === "A" 
@@ -256,17 +252,14 @@ export function generarCardMovimientoHtml(m) {
     : '<span style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600;">Baja</span>';
 
   const corralInfo = m.corral_actual ? `• Lote actual: <strong>${escapeHtml(m.corral_actual)}</strong>` : (m.corral ? `• Lote: ${escapeHtml(m.corral)}` : "");
-  const badgeTexto = m.tipo_display || m.tipo || "MOVIMIENTO";
-  const subtipoTag = m.subtipo_display ? `<span class="mov-subtipo-tag">${escapeHtml(m.subtipo_display)}</span>` : "";
 
   return `
     <article class="movimiento-card">
       <div class="mov-header-row">
         <div style="display: flex; align-items: center;">
-          <span class="badge-tipo-mov ${tipoClase}">
+          <span class="badge-tipo-mov ${badgeClase}">
             ${escapeHtml(badgeTexto)}
           </span>
-          ${subtipoTag}
         </div>
         <span class="mov-fecha">${formatearFecha(m.fecha)}</span>
       </div>

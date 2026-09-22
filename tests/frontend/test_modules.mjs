@@ -17,7 +17,8 @@ import {
   escapeHtml,
   formatearExplotacionAmigable,
   registrarPasoHistorial,
-  obtenerTextoBotonVolver
+  obtenerTextoBotonVolver,
+  clasificarMovimientoUnificado
 } from '../../pwa/js/modules/config.js';
 
 console.log("==================================================");
@@ -146,37 +147,55 @@ async function runAllTests() {
     assert.strictEqual(cargoModulo, false, "heuristics.js debe estar eliminado de la arquitectura.");
   });
 
-  await test("Dominio Movimientos: Clasificación de Ventas desde Cebadero (122)", () => {
+  await test("Dominio Movimientos: Modelo Unificado (Internos, Ventas, Cebadero, etc.)", () => {
     assert.strictEqual(typeof AppState.limiteMovimientos, "number");
     assert.strictEqual(AppState.limiteMovimientos >= 50, true);
 
-    // Simulación de regla de dominio de ventas
-    function clasificarMovimientoDominio(orig, dest, tipoOrig) {
-      const esSalidaCebadero = orig.endsWith("122") &&
-        !dest.endsWith("121") &&
-        !dest.endsWith("671") &&
-        !dest.endsWith("591") &&
-        dest !== "";
+    // 1. Movimientos internos entre 121, 671 y 591 (origen y destino en fincas de vida/cría)
+    const movInterno1 = clasificarMovimientoUnificado("ES372621100591", "ES371261100121", "TRASPASO");
+    assert.strictEqual(movInterno1.tipo_display, "MOVIMIENTO_INTERNO");
+    assert.strictEqual(movInterno1.label, "Movimiento Interno");
+    assert.strictEqual(movInterno1.badge_class, "interno");
 
-      if (esSalidaCebadero) {
-        return { tipo_display: "VENTA", subtipo: "Salida Cebadero / Venta" };
-      }
-      return { tipo_display: tipoOrig, subtipo: null };
-    }
+    // Incluso si en el Access antiguo se guardó como VENTA o COMPRA entre fincas propias:
+    const movInternoErrorAccess = clasificarMovimientoUnificado("ES371061100671", "ES371261100121", "VENTA");
+    assert.strictEqual(movInternoErrorAccess.tipo_display, "MOVIMIENTO_INTERNO");
 
-    // Salida de cebadero 122 a matadero externo: VENTA
-    const movCebadero = clasificarMovimientoDominio("ES371261100122", "ES373762000081", "SACRIFICIO");
-    assert.strictEqual(movCebadero.tipo_display, "VENTA");
-    assert.strictEqual(movCebadero.subtipo, "Salida Cebadero / Venta");
+    // Cambio de ubicación dentro de la misma finca:
+    const movUbicacion = clasificarMovimientoUnificado("ES371261100121", "ES371261100121", "UBICACIÓN");
+    assert.strictEqual(movUbicacion.tipo_display, "MOVIMIENTO_INTERNO");
 
-    // Traspaso de 121 a 122: TRASPASO
-    const movTraspaso = clasificarMovimientoDominio("ES371261100121", "ES371261100122", "TRASPASO");
-    assert.strictEqual(movTraspaso.tipo_display, "TRASPASO");
-    assert.strictEqual(movTraspaso.subtipo, null);
+    // 2. Traspasos a Cebadero (122) desde vida/cría (121, 671)
+    const movTraspasoCeb = clasificarMovimientoUnificado("ES371261100121", "ES371261100122", "TRASPASO");
+    assert.strictEqual(movTraspasoCeb.tipo_display, "TRASPASO_CEBADERO");
+    assert.strictEqual(movTraspasoCeb.label, "Traspaso Cebadero");
+    assert.strictEqual(movTraspasoCeb.badge_class, "traspaso");
 
-    // Sacrificio / culling de nodriza en 121: SACRIFICIO
-    const movVida = clasificarMovimientoDominio("ES371261100121", "ES373762000081", "SACRIFICIO");
-    assert.strictEqual(movVida.tipo_display, "SACRIFICIO");
+    // 3. Salida de cebadero 122 a matadero: VENTA
+    const movCebaderoMat = clasificarMovimientoUnificado("ES371261100122", "ES373762000081", "SACRIFICIO");
+    assert.strictEqual(movCebaderoMat.tipo_display, "VENTA");
+    assert.strictEqual(movCebaderoMat.label, "Venta");
+    assert.strictEqual(movCebaderoMat.badge_class, "venta");
+
+    // Salida directa de vida 121 a matadero (desvieje): VENTA
+    const movVidaMat = clasificarMovimientoUnificado("ES371261100121", "ES373762000081", "SACRIFICIO");
+    assert.strictEqual(movVidaMat.tipo_display, "VENTA");
+    assert.strictEqual(movVidaMat.label, "Venta");
+
+    // 4. Fidelidad a DB: Muerte en campo
+    const movMuerte = clasificarMovimientoUnificado("ES371261100121", "", "MUERTE");
+    assert.strictEqual(movMuerte.tipo_display, "MUERTE");
+    assert.strictEqual(movMuerte.label, "Baja en campo");
+
+    // 5. Nacimientos
+    const movNac = clasificarMovimientoUnificado("ES371261100121", "ES371261100121", "NACIMIENTO");
+    assert.strictEqual(movNac.tipo_display, "NACIMIENTO");
+    assert.strictEqual(movNac.label, "Nacimiento");
+
+    // 6. Compras externas
+    const movCompra = clasificarMovimientoUnificado("ES371261100031", "ES371261100121", "COMPRA");
+    assert.strictEqual(movCompra.tipo_display, "COMPRA");
+    assert.strictEqual(movCompra.label, "Compra");
   });
 
   await test("Búsqueda Incremental: Comparación por prefijo de crotal_4", () => {
