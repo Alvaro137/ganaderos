@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -19,11 +20,14 @@ from fastapi.staticfiles import StaticFiles
 from src.application.query_builder import construir_consulta_intent
 from src.infrastructure.llm_gateway import resolver_intencion_usuario
 from src.server.schemas import (
+    AIModelResponse,
     AuthTokenResponse,
     HealthResponse,
     IntentRequest,
     IntentResponse,
     LoginRequest,
+    SynthesizeRequest,
+    SynthesizeResponse,
 )
 
 
@@ -90,6 +94,54 @@ async def ai_intent(req: IntentRequest, authorized: bool = Depends(verify_token)
         "respuesta_directa": query_result.respuesta_directa,
         "offline_mode": es_offline,
     }
+
+@app.get("/api/ai/models", response_model=AIModelResponse)
+async def ai_models(authorized: bool = Depends(verify_token)):
+    return {
+        "ok": True,
+        "models": [
+            {"id": "auto", "name": "Automático (Recomendado)"},
+            {"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (Cloud)"},
+            {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B (Cloud)"},
+            {"id": "offline", "name": "Heurística Local (100% Offline)"},
+        ],
+    }
+
+
+@app.post("/api/ai/synthesize", response_model=SynthesizeResponse)
+async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verify_token)):
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if groq_key and req.model_id != "offline" and req.data:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                prompt_text = (
+                    f"Eres un asesor técnico y veterinario de una explotación de vacuno de carne en pastos.\n"
+                    f"El ganadero ha preguntado: '{req.prompt}'\n"
+                    f"Los datos obtenidos de la base de datos son:\n{json.dumps(req.data[:15], ensure_ascii=False)}\n"
+                    f"Resume en 1 o 2 frases breves, directas y claras en lenguaje ganadero la respuesta práctica."
+                )
+                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt_text}],
+                    "temperature": 0.2,
+                    "max_tokens": 150,
+                }
+                resp = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+                if resp.status_code == 200:
+                    content = resp.json()["choices"][0]["message"]["content"].strip()
+                    return {"ok": True, "sintesis": content}
+        except Exception:
+            pass
+
+    n = len(req.data)
+    sintesis = f"Se han obtenido {n} registro{'s' if n != 1 else ''} para la consulta '{req.prompt}'."
+    return {"ok": True, "sintesis": sintesis}
+
 
 @app.post("/api/ai/transcribe")
 async def ai_transcribe(file: UploadFile = File(...)):
