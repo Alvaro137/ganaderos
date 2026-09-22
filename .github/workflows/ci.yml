@@ -19,8 +19,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Ruff
-        run: pip install ruff
+      - name: Install dependencies
+        run: pip install .[dev] ruff
 
       - name: Run Ruff Linter
         run: ruff check src/ scripts/ tests/
