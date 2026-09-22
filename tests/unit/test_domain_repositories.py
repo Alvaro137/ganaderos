@@ -148,6 +148,31 @@ class TestSQLiteRepositories(unittest.TestCase):
         self.assertEqual(len(exps), 1)
         self.assertEqual(exps[0]["cea"], "ES371261100121")
 
+    def test_animal_repository_defensive_date_parsing(self):
+        # Insertar animal con fechas heterogéneas, vacías o corruptas
+        cur = self.conn.cursor()
+        cur.execute("""
+            INSERT INTO animales (
+                crotal, nombre, sexo, raza, fecha_nacimiento, madre_crotal, padre_crotal,
+                estado, vida, corral, fecha_alta, fecha_ult_parto, total_partos
+            ) VALUES (
+                'ES083710107777', 'FechaRara', 'H', 'Cruzada', 'FECHA_INVALIDA_XYZ', NULL, NULL,
+                'A', 1, 'DUEÑA', '   ', '2023-05-15 14:30:00', NULL
+            )
+        """)
+        self.conn.commit()
+
+        animal = self.animal_repo.get_by_crotal("ES083710107777")
+        self.assertIsNotNone(animal)
+        # La fecha inválida no rompe y se mapea a None
+        self.assertIsNone(animal.fecha_nacimiento)
+        # La fecha con solo espacios se mapea a None
+        self.assertIsNone(animal.fecha_alta)
+        # El timestamp ISO largo se parsea correctamente a su fecha date(2023, 5, 15)
+        self.assertEqual(animal.fecha_ult_parto, date(2023, 5, 15))
+        # Total partos nulo se mapea a 0 por defecto
+        self.assertEqual(animal.total_partos, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

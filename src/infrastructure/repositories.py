@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from src.domain.models import Animal, Parto, RecetaSanitaria
@@ -10,6 +10,25 @@ from src.domain.repositories import (
     RecetaRepository,
 )
 from src.domain.value_objects import Crotal, ExplotacionCEA, PeriodoSupresion
+
+
+def _parse_fecha_segura(val: Optional[str]) -> Optional[date]:
+    """Parsea fechas de forma defensiva tolerando formatos heterogéneos o cadenas vacías/corruptas."""
+    if not val:
+        return None
+    val_str = str(val).strip()
+    if not val_str:
+        return None
+    # Formato estándar ISO (AAAA-MM-DD) y prefijo de timestamp (AAAA-MM-DD HH:MM:SS)
+    try:
+        return datetime.strptime(val_str[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        pass
+    # Formato europeo alternativo (DD/MM/AAAA)
+    try:
+        return datetime.strptime(val_str[:10], "%d/%m/%Y").date()
+    except (ValueError, TypeError):
+        return None
 
 
 class SQLiteAnimalRepository(AnimalRepository):
@@ -36,15 +55,15 @@ class SQLiteAnimalRepository(AnimalRepository):
             nombre=row['nombre'],
             sexo=row['sexo'],
             raza=row['raza'],
-            fecha_nacimiento=datetime.strptime(row['fecha_nacimiento'], "%Y-%m-%d").date() if row['fecha_nacimiento'] else None,
+            fecha_nacimiento=_parse_fecha_segura(row['fecha_nacimiento']),
             madre_crotal=row['madre_crotal'],
             padre_crotal=row['padre_crotal'],
             estado=row['estado'],
             vida=row['vida'],
             corral=row['corral'],
-            fecha_alta=datetime.strptime(row['fecha_alta'], "%Y-%m-%d").date() if row['fecha_alta'] else None,
-            fecha_ult_parto=datetime.strptime(row['fecha_ult_parto'], "%Y-%m-%d").date() if row['fecha_ult_parto'] else None,
-            total_partos=row['total_partos']
+            fecha_alta=_parse_fecha_segura(row['fecha_alta']),
+            fecha_ult_parto=_parse_fecha_segura(row['fecha_ult_parto']),
+            total_partos=row['total_partos'] or 0
         )
 
 
@@ -66,7 +85,7 @@ class SQLitePartoRepository(PartoRepository):
     def _map_to_domain(self, row: sqlite3.Row) -> Parto:
         return Parto(
             madre_crotal=row['madre_crotal'],
-            fecha_parto=datetime.strptime(row['fecha_parto'], "%Y-%m-%d").date() if row['fecha_parto'] else None,
+            fecha_parto=_parse_fecha_segura(row['fecha_parto']),
             cria_crotal=row['cria_crotal'],
             cria_sexo=row['cria_sexo'],
             incidencias=row['incidencias'],
@@ -86,7 +105,7 @@ class SQLiteRecetaRepository(RecetaRepository):
 
     def _map_to_domain(self, row: sqlite3.Row) -> RecetaSanitaria:
         return RecetaSanitaria(
-            fecha=datetime.strptime(row['fecha'], "%Y-%m-%d").date() if row['fecha'] else None,
+            fecha=_parse_fecha_segura(row['fecha']),
             receta=row['receta'],
             medicamento=row['medicamento'],
             unidades=row['unidades'],
