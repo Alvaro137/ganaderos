@@ -1,0 +1,23 @@
+{
+  "name": "ganaderos-campo-pwa",
+  "version": "1.0.0",
+  "description": "PWA offline-first para gestión y censo de vacuno en campo con SQLite WebAssembly",
+  "type": "module",
+  "scripts": {
+    "test:unit": "node tests/frontend/test_modules.mjs",
+    "test:e2e": "playwright test",
+    "test": "npm run test:unit && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "keywords": [
+    "pwa",
+    "offline-first",
+    "sqlite-wasm",
+    "agrotech",
+    "ganaderia"
+  ],
+  "author": "Alvaro <alvarogil137@gmail.com>",
+  "license": "MIT"
+}
