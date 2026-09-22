@@ -12,6 +12,28 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+
+def _cargar_env_file():
+    """Carga variables del archivo .env si existen y no están ya en os.environ."""
+    env_path = os.path.join(_REPO_ROOT, ".env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = val
+        except Exception:
+            pass
+
+
+_cargar_env_file()
+
 # Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
 if importlib.util.find_spec("fastapi") is None:
     _VENV_CANDIDATES = [
@@ -341,7 +363,7 @@ async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verif
 @app.post("/api/ai/transcribe", tags=["Asistente IA"])
 async def ai_transcribe(file: UploadFile = File(...)):
     """Proxy streaming para transcripción de notas de voz en campo mediante Groq Whisper."""
-    groq_key = os.environ.get("GROQ_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY")
     if not groq_key:
         raise HTTPException(status_code=400, detail="Configura GROQ_API_KEY en .env")
 
