@@ -52,3 +52,16 @@ class TestFastAPI(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["args"].get("crotal_4"), "1045")
         self.assertIn("sql", data)
+
+    def test_censo_list_animales(self):
+        response = self.client.get("/api/censo/animales")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.json(), list)
+
+    def test_censo_crotal_invalido_domain_error(self):
+        response = self.client.get("/api/censo/animales/CROTAL_INVALIDO")
+        self.assertEqual(response.status_code, 422)
+        data = response.json()
+        self.assertFalse(data["ok"])
+        self.assertEqual(data["error"], "CrotalInvalidoError")
+        self.assertIn("formato oficial", data["detail"])
