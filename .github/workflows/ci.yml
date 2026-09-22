@@ -37,6 +37,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install project dependencies
+        run: pip install .
+
       - name: Generate Demo Database
         run: python3 scripts/generate_demo_db.py --animales 100
 
@@ -44,6 +47,14 @@ jobs:
         env:
           PYTHONPATH: .
         run: python3 -m unittest discover tests
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run Frontend Tests
+        run: node tests/frontend/test_modules.mjs
 
   docker-build:
     name: Docker Build Verification
