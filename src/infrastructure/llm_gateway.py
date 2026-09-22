@@ -42,8 +42,9 @@ def clasificar_intencion_groq(
             messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
     messages.append({"role": "user", "content": prompt})
 
+    model_name = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": model_name,
         "messages": messages,
         "tools": CATALOGO_HERRAMIENTAS_LLM,
         "tool_choice": "auto",

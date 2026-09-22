@@ -314,20 +314,24 @@ async def ai_intent(req: IntentRequest, authorized: bool = Depends(verify_token)
 @app.get("/api/ai/models", tags=["Asistente IA"], response_model=AIModelResponse)
 async def ai_models(authorized: bool = Depends(verify_token)):
     """Devuelve el catálogo de modelos disponibles para inferencia y asistencia."""
+    current_model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+    models = [
+        {"id": "auto", "name": "Automático (Recomendado)"},
+        {"id": current_model, "name": f"Groq {current_model} (Cloud/Edge)"},
+    ]
+    if current_model != "llama-3.3-70b-versatile":
+        models.append({"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (Cloud/Edge)"})
+    models.append({"id": "qwen/qwen3.8-27b", "name": "Groq Qwen 3.8 27B (Ultra-rápido)"})
     return {
         "ok": True,
-        "models": [
-            {"id": "auto", "name": "Automático (Recomendado)"},
-            {"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (Cloud/Edge)"},
-            {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B (Cloud/Edge)"},
-        ],
+        "models": models,
     }
 
 
 @app.post("/api/ai/synthesize", tags=["Asistente IA"], response_model=SynthesizeResponse)
 async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verify_token)):
     """Sintetiza en lenguaje ganadero directo los resultados obtenidos de la base de datos."""
-    groq_key = os.environ.get("GROQ_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY")
     if groq_key and req.data:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -338,8 +342,9 @@ async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verif
                     f"Resume en 1 o 2 frases breves, directas y claras en lenguaje ganadero la respuesta práctica."
                 )
                 headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                model_name = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
                 payload = {
-                    "model": "llama-3.3-70b-versatile",
+                    "model": model_name,
                     "messages": [{"role": "user", "content": prompt_text}],
                     "temperature": 0.2,
                     "max_tokens": 150,
