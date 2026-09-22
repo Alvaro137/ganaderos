@@ -43,8 +43,10 @@ class TestFastAPI(unittest.TestCase):
         self.assertIn("1", data["sintesis"])
 
     def test_ai_intent_endpoint_success(self):
+        import sys
         from unittest.mock import patch
-        with patch("src.server.app.resolver_intencion_usuario", return_value=("consultar_ficha_animal", {"crotal_4": "1045"}, False)):
+        app_mod = sys.modules["src.server.app"]
+        with patch.object(app_mod, "resolver_intencion_usuario", return_value=("consultar_ficha_animal", {"crotal_4": "1045"}, False)):
             payload = {"prompt": "vaca 1045"}
             response = self.client.post("/api/ai/intent", json=payload)
             self.assertEqual(response.status_code, 200)
@@ -55,8 +57,10 @@ class TestFastAPI(unittest.TestCase):
             self.assertFalse(data["offline_mode"])
 
     def test_ai_intent_endpoint_service_unavailable(self):
+        import sys
         from unittest.mock import patch
-        with patch("src.server.app.resolver_intencion_usuario", return_value=(None, {}, False)):
+        app_mod = sys.modules["src.server.app"]
+        with patch.object(app_mod, "resolver_intencion_usuario", return_value=(None, {}, False)):
             payload = {"prompt": "consulta sin conexion"}
             response = self.client.post("/api/ai/intent", json=payload)
             self.assertEqual(response.status_code, 503)
