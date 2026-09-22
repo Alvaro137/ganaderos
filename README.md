@@ -1,36 +1,38 @@
 # Ganaderos — PWA Offline-First para Gestión Ganadera en Extensivo
 
-Aplicación web progresiva (PWA) de alto rendimiento construida con principios de **Clean Architecture**, diseñada específicamente para la gestión operativa de vacuno de carne en pastos y dehesas. Resuelve el problema de la ausencia de cobertura móvil en el campo ejecutando un motor relacional SQLite completo en el navegador del cliente mediante **WebAssembly (SQL.js)** y persistencia en **IndexedDB**, complementado por un asistente de voz y lenguaje natural basado en **Intent Calling tipado** con degradación offline elegante.
+Aplicación web progresiva (PWA) de alto rendimiento construida con principios de **Clean Architecture (Puertos y Adaptadores)**, diseñada específicamente para la gestión operativa de vacuno de carne en pastos y dehesas. Resuelve el problema de la ausencia de cobertura móvil en el campo ejecutando un motor relacional SQLite completo en el navegador del cliente mediante **WebAssembly (SQL.js)** y persistencia en **IndexedDB**, complementado por un backend **FastAPI** asíncrono y un asistente conversacional basado en **Intent Calling tipado** con degradación offline elegante.
 
 ```mermaid
 flowchart TD
-    subgraph SUB_CLIENTE["Dispositivo Movil (Offline-First en Campo)"]
-        UI["Interfaz Movil PWA<br>HTML5 + CSS Safe Areas"]
-        PARSER["Parser Heuristico Local<br>Modo Sin Cobertura"]
+    subgraph SUB_CLIENTE["Dispositivo Móvil (Offline-First en Campo - ES Modules)"]
+        UI["Interfaz PWA Modular<br>pwa/js/modules/views/*"]
+        PARSER["Parser Heurístico Local<br>pwa/js/modules/heuristics.js"]
         WASM["Motor SQLite WebAssembly<br>SQL.js en Navegador"]
-        IDB[("IndexedDB<br>Almacenamiento Persistente")]
+        IDB[("IndexedDB (censo_storage)<br>Almacenamiento Persistente")]
 
-        UI <-->|Consultas relacionales preparadas| WASM
+        UI <-->|Consultas relacionales preparadas ?| WASM
         UI -.->|Sin cobertura 4G| PARSER
-        PARSER -->|Consultas locales| WASM
-        IDB <-->|Carga en frio y persistencia| WASM
+        PARSER -->|Consultas locales parametrizadas| WASM
+        IDB <-->|Carga en frío y persistencia| WASM
     end
 
-    subgraph SUB_SERVER["Servidor / API Gateway (Clean Architecture)"]
-        API["Capa de Presentacion / HTTP Server<br>src/server/app.py"]
-        APP["Capa de Aplicacion<br>Intent Calling y Query Builder"]
-        DOM["Capa de Dominio<br>Entidades y Value Objects Ganaderos"]
-        INFRA["Capa de Infraestructura<br>Adaptadores LLM y SQLite"]
+    subgraph SUB_SERVER["Servidor / API Gateway (FastAPI + Clean Architecture)"]
+        API["FastAPI ASGI Router<br>src/server/app.py"]
+        SCHEMAS["Esquemas Pydantic v2<br>src/server/schemas.py"]
+        APP["Capa de Aplicación<br>CensoService, SanidadService, QueryBuilder"]
+        DOM["Capa de Dominio Puro<br>Animal, Parto, Receta, Crotal (VO)"]
+        INFRA["Capa de Infraestructura<br>SQLiteRepositories, LLMGateway"]
 
-        UI -.->|Conectividad online| API
+        UI -.->|Conectividad online (Bearer HMAC)| API
+        API --> SCHEMAS
         API --> APP
         APP --> DOM
         APP <--> INFRA
     end
 
     subgraph SUB_AI["Servicios de Inteligencia Artificial (Online)"]
-        GROQ["Groq Cloud<br>Whisper v3 Turbo + Tool Calling"]
-        INFRA <-->|Extraccion estructurada de intenciones| GROQ
+        GROQ["Groq Cloud<br>Whisper v3 Turbo + Llama 3.3 70B"]
+        API <-->|Streaming de audio y síntesis explicativa| GROQ
     end
 ```
 
@@ -38,23 +40,31 @@ flowchart TD
 
 ## Decisiones Clave de Arquitectura e Ingeniería
 
-### 1. Clean Architecture (Ports & Adapters)
-El código desacopla las reglas esenciales del negocio ganadero de cualquier tecnología externa o framework web:
-- **`src/domain/`:** Núcleo puro de reglas de negocio. Contiene *Value Objects* inmutables (`Crotal`, `PeriodoSupresion`, `ExplotacionCEA`) y entidades (`Animal`, `Parto`, `RecetaSanitaria`, `Movimiento`, `CompraAlimento`).
-- **`src/application/`:** Casos de uso y orquestación. Define el catálogo cerrado de intenciones (`intents.py`) y el constructor determinista de sentencias SQL parametrizadas (`query_builder.py`).
-- **`src/infrastructure/`:** Adaptadores tecnológicos hacia el exterior (cliente de Tool Calling con LLMs, lectura de bases de datos Access heredadas y constructor SQLite).
-- **`src/server/`:** Adaptador de entrada HTTP ligero, sin dependencias pesadas, con autenticación criptográfica `HMAC-SHA256` y healthchecks.
+### 1. Clean Architecture Real (Ports & Adapters)
+El sistema separa estrictamente las reglas de negocio de la tecnología de persistencia y presentación:
+- **`src/domain/`:** Núcleo puro de reglas de negocio sin dependencias externas. Contiene *Value Objects* inmutables (`Crotal`, `PeriodoSupresion`, `ExplotacionCEA`), interfaces de repositorio (`repositories.py`) y entidades (`Animal`, `Parto`, `RecetaSanitaria`, `Movimiento`, `CompraAlimento`).
+- **`src/application/`:** Casos de uso y orquestación (`services.py` con `CensoService`, `SanidadService`, `GenealogiaService`), catálogo tipado de intenciones (`intents.py`) y constructor determinista de sentencias SQL parametrizadas (`query_builder.py`).
+- **`src/infrastructure/`:** Implementaciones SQLite de repositorios (`repositories.py`) con hidratación de entidades y validación de invariantes, pasarela de Tool Calling con LLMs (`llm_gateway.py`) y Anti-Corruption Layer para Access heredado (`access_reader.py`).
+- **`src/server/`:** Servidor asíncrono **FastAPI** con validación **Pydantic v2**, gestión de ciclo de vida con `lifespan`, documentación interactiva OpenAPI (`/docs`), proxy de audio Whisper y manejo tipado de excepciones de dominio (`DomainError` -> HTTP 422).
 
 ### 2. Intent Calling Tipado frente a Text-to-SQL Libre
-En lugar de permitir que un modelo de lenguaje genere sentencias SQL arbitrarias al vuelo (un patrón frágil, propenso a alucinaciones de nombres de columnas y vulnerable a inyecciones SQL), el sistema emplea **Tool / Intent Calling estructurado**:
+En lugar de permitir que un LLM genere sentencias SQL arbitrarias al vuelo (patrón vulnerable a alucinaciones de esquema y riesgos de inyección), el sistema emplea **Tool / Intent Calling estructurado**:
 1. El modelo LLM actúa únicamente como extractor semántico de intención y parámetros (ej. `intent: "consultar_partos_madre"`, `crotal_4: "1045"`).
-2. El `QueryBuilder` de la aplicación traduce la intención validada a una sentencia SQL preparada utilizando parámetros ligados (`?`), garantizando sintaxis 100% determinista, verificada en tests unitarios e inmune a inyección.
-3. La consulta resultante se envía al navegador del usuario para ejecutarse localmente sobre la base de datos WebAssembly. Los datos de la explotación ganadera **nunca viajan a la nube del LLM**, asegurando privacidad por diseño.
+2. El `QueryBuilder` traduce la intención validada a una sentencia SQL preparada con parámetros ligados (`?`), garantizando sintaxis determinista, verificada en tests unitarios e inmune a inyección.
+3. La consulta resultante se ejecuta en el navegador del usuario sobre la base de datos WebAssembly. Los datos ganaderos **nunca viajan a la nube del LLM**, garantizando privacidad por diseño.
 
 ### 3. Degradación Offline Elegante (Graceful Degradation)
-Cuando el ganadero se encuentra en una zona sin cobertura 4G/5G, la aplicación no se bloquea:
-- El cliente detecta la pérdida de red y activa el **Parser Heurístico Local**.
-- Resuelve instantáneamente las consultas más críticas de manejo (búsqueda de crotales de 4 dígitos, partos de una vaca, censo por corral, animales en supresión sanitaria o vacas sin parir) ejecutando consultas preparadas en WebAssembly local y mostrando la insignia informativa *"Modo sin cobertura"*.
+Cuando el ganadero se encuentra en zonas sin cobertura 4G/5G:
+- El cliente detecta la pérdida de red y conmuta automáticamente al **Parser Heurístico Local** (`pwa/js/modules/heuristics.js`).
+- Resuelve instantáneamente las consultas más críticas (búsqueda de crotales de 4 dígitos, partos de una vaca, censo por corral, animales en supresión sanitaria o vacas sin parir) ejecutando consultas preparadas en WebAssembly local y mostrando la insignia informativa *"Modo sin cobertura"*.
+
+### 4. Registros de Decisiones de Arquitectura (ADRs)
+Las decisiones técnicas fundamentales están documentadas formalmente bajo el estándar MADR en [`docs/adr/`](docs/adr/):
+- [ADR 0001: Motor Relacional Local-First con SQLite WASM e IndexedDB](docs/adr/0001-local-first-sqlite-wasm-indexeddb.md)
+- [ADR 0002: Intent Calling Tipado vs. Text-to-SQL Libre](docs/adr/0002-typed-intent-calling-vs-raw-text-to-sql.md)
+- [ADR 0003: Clean Architecture Hexagonal y Servidor FastAPI](docs/adr/0003-hexagonal-clean-architecture-python-fastapi.md)
+- [ADR 0004: Resiliencia Offline y Caché del Service Worker](docs/adr/0004-offline-resilience-and-pwa-caching-strategy.md)
+- [ADR 0005: Descomposición Modular del Frontend en ES Modules](docs/adr/0005-es-modules-frontend-decomposition.md)
 
 ---
 
@@ -64,12 +74,33 @@ Cuando el ganadero se encuentra en una zona sin cobertura 4G/5G, la aplicación 
 ganaderos/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                  # Pipeline de CI (linting ruff, tests unitarios, Docker build)
-├── pwa/                            # Cliente Web Offline-First
+│       └── ci.yml                  # CI: Ruff lint, tests Python (unittest), tests Node.js, Docker build
+├── docs/
+│   └── adr/                        # Architecture Decision Records (MADR)
+│       ├── 0001-local-first-sqlite-wasm-indexeddb.md
+│       ├── 0002-typed-intent-calling-vs-raw-text-to-sql.md
+│       ├── 0003-hexagonal-clean-architecture-python-fastapi.md
+│       ├── 0004-offline-resilience-and-pwa-caching-strategy.md
+│       └── 0005-es-modules-frontend-decomposition.md
+├── pwa/                            # Cliente Web Offline-First (ES Modules)
 │   ├── css/
 │   │   └── app.css                 # Estilos responsive, dark theme y safe-area insets
 │   ├── js/
-│   │   ├── app.js                  # UI Controller y Parser Heurístico Offline
+│   │   ├── modules/                # Módulos ECMAScript desacoplados
+│   │   │   ├── api.js              # Cliente HTTP para endpoints FastAPI
+│   │   │   ├── auth.js             # Gestión de tokens y pantalla de login
+│   │   │   ├── config.js           # Estado reactivo, helpers sanitizados y pila histórica
+│   │   │   ├── db.js               # Adaptador SQLite WASM / IndexedDB
+│   │   │   ├── heuristics.js       # Parser heurístico offline de lenguaje natural
+│   │   │   ├── voice.js            # VoiceManager (Web Speech API + MediaRecorder)
+│   │   │   └── views/              # Controladores de vista desacoplados
+│   │   │       ├── assistant_view.js # Modal del asistente conversacional
+│   │   │       ├── cattle_view.js    # Censo, buscador de 4 dígitos y teclado táctil
+│   │   │       ├── detail_view.js    # Ficha técnica, genealogía y lotes
+│   │   │       ├── feeds_view.js     # Compras de piensos y costes unitarios
+│   │   │       ├── movements_view.js # Trazabilidad y Libro Oficial de Movimientos
+│   │   │       └── sanitary_view.js  # Recetas y periodos de supresión en carne
+│   │   ├── app.js                  # Coordinador central y enrutador de pestañas
 │   │   ├── db_client.js            # Abstracción SQLite WASM e IndexedDB
 │   │   ├── sql-wasm.js             # Cargador WebAssembly
 │   │   └── sql-wasm.wasm           # Binario motor SQLite compilado a WASM
@@ -79,34 +110,42 @@ ganaderos/
 │   ├── icon.svg
 │   ├── index.html                  # Punto de entrada de la aplicación
 │   ├── manifest.json               # Manifiesto PWA instalable
-│   └── sw.js                       # Service Worker con caché offline
+│   └── sw.js                       # Service Worker con precaché de assets y módulos ES
 ├── src/
 │   ├── domain/                     # CAPA DE DOMINIO (Reglas de negocio puras)
-│   │   ├── exceptions.py           # Excepciones de negocio (CrotalInvalidoError, etc.)
-│   │   ├── models.py               # Entidades (Animal, Parto, Receta, Movimiento)
+│   │   ├── exceptions.py           # Excepciones de negocio (DomainError, CrotalInvalidoError)
+│   │   ├── models.py               # Entidades (Animal, Parto, Receta, Movimiento, CompraAlimento)
+│   │   ├── repositories.py         # Interfaces abstractas de repositorios
 │   │   └── value_objects.py        # Value Objects (Crotal, PeriodoSupresion, ExplotacionCEA)
 │   ├── application/                # CAPA DE APLICACIÓN (Casos de uso e intents)
 │   │   ├── intents.py              # Catálogo de herramientas tipadas para LLMs
-│   │   └── query_builder.py        # Mapeo determinista Intent -> SQL parametrizado
+│   │   ├── query_builder.py        # Mapeo determinista Intent -> SQL parametrizado
+│   │   └── services.py             # Servicios (CensoService, SanidadService, GenealogiaService)
 │   ├── infrastructure/             # CAPA DE INFRAESTRUCTURA (Adaptadores externos)
-│   │   ├── access_reader.py        # Anti-Corruption Layer para Access .mdb
+│   │   ├── access_reader.py        # Anti-Corruption Layer para Access .mdb heredado
 │   │   ├── llm_gateway.py          # Pasarela Tool Calling (Groq / Gemini / Local)
-│   │   └── sqlite_builder.py       # Constructor de base de datos SQLite relacional
-│   └── server/                     # CAPA DE SERVIDOR / API GATEWAY
-│       └── app.py                  # Servidor HTTP, auth HMAC y serving estático
+│   │   ├── repositories.py         # Implementación SQLite de repositorios de dominio
+│   │   └── sqlite_builder.py       # Constructor de base de datos relacional
+│   └── server/                     # CAPA DE PRESENTACIÓN / API GATEWAY
+│       ├── app.py                  # Aplicación FastAPI asíncrona y lifespan
+│       └── schemas.py              # Esquemas de validación Pydantic v2
 ├── scripts/
 │   ├── generate_demo_db.py         # Generador determinista de dataset sintético realista
-│   └── run_server.py               # Punto de entrada del servidor
-├── tests/                          # SUITE DE PRUEBAS ESTRATIFICADA
+│   └── run_server.py               # Punto de entrada del servidor Uvicorn
+├── tests/                          # SUITE COMPLETA DE PRUEBAS
+│   ├── frontend/
+│   │   └── test_modules.mjs        # Tests automáticos en Node.js (heurísticas, XSS, formateo)
 │   ├── unit/
-│   │   ├── test_domain.py          # Tests unitarios de reglas de dominio
-│   │   └── test_intents.py         # Tests de intents y sentencias parametrizadas
+│   │   ├── test_application_services.py # Tests unitarios de servicios de aplicación
+│   │   ├── test_domain.py          # Tests de entidades y Value Objects
+│   │   ├── test_domain_repositories.py  # Tests de repositorios SQLite de dominio
+│   │   └── test_intents.py         # Tests de intents y constructor SQL
 │   └── integration/
-│       ├── test_demo_db.py         # Tests de integridad relacional del dataset sintético
-│       └── test_server.py          # Tests de endpoints HTTP y autenticación
+│       ├── test_api_fastapi.py     # Tests de integración FastAPI y endpoints de IA
+│       └── test_demo_db.py         # Tests de integridad relacional del dataset sintético
 ├── compose.yaml                    # Orquestación Docker Compose
-├── Dockerfile                      # Construcción de contenedor multi-stage
-├── pyproject.toml                  # Configuración de paquete y linter Ruff
+├── Dockerfile                      # Construcción de contenedor multi-stage no-root
+├── pyproject.toml                  # Metadatos del paquete, dependencias y linter Ruff
 └── README.md
 ```
 
@@ -116,11 +155,11 @@ ganaderos/
 
 | Capa | Tecnologías | Propósito |
 | :--- | :--- | :--- |
-| **Frontend PWA** | Vanilla JavaScript, CSS3 moderno, HTML5 | Rendimiento nativo sin dependencias de frameworks, arranque instantáneo y uso táctil en exteriores. |
-| **Almacenamiento Local** | SQL.js (SQLite WebAssembly) + IndexedDB | Ejecución de consultas relacionales completas (JOINs, agregaciones) en el propio dispositivo móvil. |
-| **Backend / API** | Python 3.12 (Standard Library HTTP / ASGI) | Pasarela ligera (< 30 MB RAM) para autenticación HMAC, descarga segura de base de datos y proxy de voz/IA. |
-| **IA & Transcripción** | Groq Whisper Large v3 + Tool Calling | Transcripción de audio de baja latencia y clasificación estructurada de intenciones. |
-| **DevOps & CI/CD** | Docker, Docker Compose, GitHub Actions | Contenedorización segura (usuario no root, healthchecks) y verificación continua de calidad. |
+| **Frontend PWA** | Vanilla ES Modules (Nativo), CSS3 Moderno, HTML5 | Rendimiento nativo sin overhead de frameworks, arranque instantáneo y uso táctil en manga/campo. |
+| **Almacenamiento Local** | SQL.js (SQLite WebAssembly) + IndexedDB | Ejecución relacional completa (JOINs, filtros, agrupaciones) directamente en el dispositivo móvil. |
+| **Backend / API** | Python 3.12, FastAPI, Pydantic v2, Uvicorn (ASGI) | API asíncrona declarativa, schemas tipados, OpenAPI interactivo (`/docs`) y streaming de audio. |
+| **IA & Transcripción** | Groq Whisper Large v3 + Llama 3.3 70B | Transcripción de voz con latencia ultra-baja y síntesis ganadera en lenguaje natural. |
+| **DevOps & CI/CD** | Docker multi-stage, Compose, GitHub Actions | Contenedores seguros (usuario no-root, healthchecks) y verificación continua de linting y tests. |
 
 ---
 
@@ -128,70 +167,64 @@ ganaderos/
 
 ### Despliegue con Docker Compose (Recomendado)
 
-1. Clonar el repositorio:
-   ```bash
-   git clone https://github.com/Alvaro137/ganaderos.git
-   cd ganaderos
-   ```
+```bash
+git clone https://github.com/Alvaro137/ganaderos.git
+cd ganaderos
+docker compose up -d
+```
 
-2. Configurar variables de entorno (opcional si se utiliza el dataset demo):
-   ```bash
-   cp .env.example .env
-   ```
+Abrir en el navegador: `http://localhost:8000` *(Contraseña predeterminada de acceso: `mvp-testing`)*.
 
-3. Levantar el servicio:
-   ```bash
-   docker compose up -d
-   ```
-
-4. Abrir en el navegador:
-   ```text
-   http://localhost:8000
-   ```
-   *(Contraseña predeterminada de acceso al censo: `mvp-testing`)*
+La documentación interactiva de la API está disponible en: `http://localhost:8000/docs`.
 
 ---
 
-### Ejecución Local en Python
+### Ejecución Local en Desarrollo
 
-1. Requisitos: Python 3.10 o superior.
+1. Requisitos: Python 3.10+ y Node.js 18+.
 
-2. Generar el dataset demo sintético con razas autóctonas (Morucha, Limusina, Charolesa):
+2. Instalar dependencias:
+   ```bash
+   pip install -e .
+   ```
+
+3. Generar el dataset demo sintético con razas autóctonas (Morucha, Limusina, Charolesa):
    ```bash
    python scripts/generate_demo_db.py --animales 150
    ```
 
-3. Iniciar el servidor local:
+4. Iniciar el servidor local:
    ```bash
    python scripts/run_server.py
    ```
 
-4. Acceder a `http://localhost:8000`.
+5. Acceder a `http://localhost:8000`.
 
 ---
 
-## Control de Calidad y Pruebas
+## Control de Calidad y Pruebas Automatizadas
 
-Ejecutar la suite estratificada completa de pruebas unitarias y de integración:
+La suite de pruebas continua garantiza la fiabilidad de todas las capas del sistema:
 
 ```bash
+# 1. Linting y chequeo de estilo estricto
+ruff check .
+
+# 2. Tests de frontend con Node.js (heurísticas, XSS, formateadores, integridad ES Modules)
+node tests/frontend/test_modules.mjs
+
+# 3. Tests de backend y dominio (entidades, repositorios, servicios, FastAPI)
 python -m unittest discover tests
-```
-
-Validación de estilo y análisis estático de código:
-
-```bash
-ruff check src/ scripts/ tests/
 ```
 
 ---
 
 ## Seguridad y Privacidad de Datos
 
-- **Privacidad de Censo:** Los registros de la explotación nunca se envían al modelo de lenguaje. El LLM únicamente procesa el lenguaje natural para extraer la intención y devuelve la función correspondiente; la consulta resultante se ejecuta en el navegador del usuario.
-- **Autenticación HMAC:** Las sesiones emiten tokens criptográficos firmados con `HMAC-SHA256` y expiración automática para proteger la descarga de la base de datos relacional.
-- **Inmunidad a Inyección:** El `QueryBuilder` utiliza consultas estrictamente parametrizadas con variables ligadas (`?`), garantizando aislamiento total frente a entradas de usuario maliciosas.
-- **Dataset Demo Anonimizado:** El repositorio público no incluye información personal ni registros de producción; incluye un generador determinista (`generate_demo_db.py`) para pruebas locales y demostraciones.
+- **Privacidad Absoluta de Datos:** Los registros de la explotación nunca se envían al modelo de lenguaje en la nube. El LLM únicamente procesa el texto para extraer la intención; la consulta SQL resultante se ejecuta 100% en el dispositivo del ganadero.
+- **Inmunidad a Inyección SQL:** El `QueryBuilder` genera sentencias SQL deterministas utilizando exclusivamente parámetros ligados (`?`), aislando por completo la base de datos de entradas maliciosas.
+- **Mapeo de Errores de Dominio:** Excepciones de negocio (`CrotalInvalidoError`, `ExplotacionInvalidaError`) se transforman automáticamente en respuestas HTTP 422 estandarizadas.
+- **Dataset Demo Anonimizado:** El repositorio público no contiene datos de explotaciones reales; incluye un generador determinista (`generate_demo_db.py`) para pruebas y evaluación técnica.
 
 ---
 
