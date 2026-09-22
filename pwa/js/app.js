@@ -85,11 +85,12 @@ async function iniciarAplicacion() {
             <p style="color: var(--text-muted); font-size: 0.9rem; max-width: 340px; line-height: 1.5; margin-bottom: 20px;">
               Este dispositivo no dispone todavía del censo almacenado. Conéctate a internet una vez para descargarlo. A partir de ese momento, la app funcionará siempre 100% offline en el campo.
             </p>
-            <button class="nav-link active" onclick="location.reload()" style="background: var(--brand-primary); color: #fff; padding: 10px 24px; border-radius: var(--radius-sm); font-size: 0.95rem; font-weight: 600; cursor: pointer;">
+            <button class="nav-link active btn-retry-reload" style="background: var(--brand-primary); color: #fff; padding: 10px 24px; border-radius: var(--radius-sm); font-size: 0.95rem; font-weight: 600; cursor: pointer;">
               Reintentar
             </button>
           </div>
         `;
+        container.querySelectorAll(".btn-retry-reload").forEach((b) => b.addEventListener("click", () => location.reload()));
       }
       return;
     }
@@ -99,11 +100,12 @@ async function iniciarAplicacion() {
         <div class="loading-state">
           <h2 style="color: #991b1b;">Error al abrir base de datos</h2>
           <p style="color: var(--text-muted);">${err.message}</p>
-          <button class="nav-link active" onclick="location.reload()" style="margin-top: 15px; background: var(--brand-primary); color: #fff; cursor: pointer;">
+          <button class="nav-link active btn-retry-reload" style="margin-top: 15px; background: var(--brand-primary); color: #fff; cursor: pointer;">
             Reintentar
           </button>
         </div>
       `;
+      container.querySelectorAll(".btn-retry-reload").forEach((b) => b.addEventListener("click", () => location.reload()));
     }
   }
 }
