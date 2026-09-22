@@ -9,18 +9,19 @@ from src.domain.exceptions import CrotalInvalidoError, ExplotacionInvalidaError
 
 @dataclass(frozen=True)
 class Crotal:
-    """Identificador oficial e inmutable de identificación animal (bovino).
+    """Identificador oficial e inmutable de identificación animal (bovino europeo).
 
-    Estructura en España: Prefijo país (ES) + 12 dígitos numéricos (Total: 14 caracteres).
+    Estructura en la UE (Reglamento UE 2016/429): Código ISO de país (ej. ES, FR, PT, DE, IE)
+    seguido de 8 a 12 dígitos numéricos.
     Los últimos 4 dígitos son el identificador operativo rápido en campo (crotal_4).
     """
     codigo: str
 
     def __post_init__(self):
         limpio = self.codigo.strip().upper()
-        if not re.match(r"^ES\d{12}$", limpio):
+        if not re.match(r"^(ES|FR|PT|DE|IT|IE|AT|BE|NL|PL)\d{8,12}$", limpio):
             raise CrotalInvalidoError(
-                f"Crotal '{self.codigo}' no cumple el formato oficial español (ES + 12 dígitos)."
+                f"Crotal '{self.codigo}' no cumple el formato oficial bovino UE (código país UE + 8-12 dígitos)."
             )
         object.__setattr__(self, "codigo", limpio)
 
