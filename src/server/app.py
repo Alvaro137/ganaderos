@@ -15,6 +15,7 @@ from fastapi import (
     Request,
     Response,
     UploadFile,
+    status,
 )
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -248,7 +249,12 @@ async def get_animal_por_crotal(
 @app.post("/api/ai/intent", tags=["Asistente IA"], response_model=IntentResponse)
 async def ai_intent(req: IntentRequest, authorized: bool = Depends(verify_token)):
     """Traduce lenguaje natural a un Intent tipado y genera la consulta SQL parametrizada."""
-    nombre_intent, args, es_offline = resolver_intencion_usuario(req.prompt, req.historial)
+    nombre_intent, args, _ = resolver_intencion_usuario(req.prompt, req.historial)
+    if not nombre_intent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio de inferencia LLM no disponible o sin credenciales de API activas.",
+        )
     query_result = construir_consulta_intent(nombre_intent, args)
     return {
         "ok": True,
@@ -259,7 +265,7 @@ async def ai_intent(req: IntentRequest, authorized: bool = Depends(verify_token)
         "interpretacion": query_result.interpretacion,
         "tipo_resultado": query_result.tipo_resultado,
         "respuesta_directa": query_result.respuesta_directa,
-        "offline_mode": es_offline,
+        "offline_mode": False,
     }
 
 
@@ -270,9 +276,8 @@ async def ai_models(authorized: bool = Depends(verify_token)):
         "ok": True,
         "models": [
             {"id": "auto", "name": "Automático (Recomendado)"},
-            {"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (Cloud)"},
-            {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B (Cloud)"},
-            {"id": "offline", "name": "Heurística Local (100% Offline)"},
+            {"id": "llama-3.3-70b-versatile", "name": "Groq Llama 3.3 70B (Cloud/Edge)"},
+            {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B (Cloud/Edge)"},
         ],
     }
 
@@ -281,7 +286,7 @@ async def ai_models(authorized: bool = Depends(verify_token)):
 async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verify_token)):
     """Sintetiza en lenguaje ganadero directo los resultados obtenidos de la base de datos."""
     groq_key = os.environ.get("GROQ_API_KEY")
-    if groq_key and req.model_id != "offline" and req.data:
+    if groq_key and req.data:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 prompt_text = (

@@ -6,7 +6,6 @@
  */
 
 import assert from 'node:assert';
-import { resolverConsultaOffline } from '../../pwa/js/modules/heuristics.js';
 import {
   AppState,
   extraer4Digitos,
@@ -42,81 +41,7 @@ async function test(nombre, fn) {
 }
 
 async function runAllTests() {
-  // 1. Tests de Heurísticas Offline de Campo
-  await test("Heurística: Búsqueda por 4 dígitos directa", () => {
-    const res = resolverConsultaOffline("dame la vaca 1045");
-    assert.ok(res, "Debe clasificar consulta");
-    assert.strictEqual(res.tipo_resultado, "animales");
-    assert.strictEqual(res.params[0], "1045");
-    assert.ok(res.sql.includes("WHERE crotal_4 = ?"));
-  });
-
-  await test("Heurística: Partos y descendencia de madre por 4 dígitos", () => {
-    const res = resolverConsultaOffline("partos y crías de la 2030");
-    assert.ok(res, "Debe clasificar consulta");
-    assert.strictEqual(res.tipo_resultado, "partos");
-    assert.strictEqual(res.params[0], "2030");
-    assert.ok(res.sql.includes("partos"));
-  });
-
-  await test("Heurística: Censo por corral de pasto (Dueña)", () => {
-    const res = resolverConsultaOffline("animales en corral Dueña");
-    assert.ok(res, "Debe detectar corral Dueña");
-    assert.strictEqual(res.tipo_resultado, "animales");
-    assert.deepStrictEqual(res.params, ["%DUEÑA%"]);
-    assert.ok(res.sql.includes("UPPER(corral) LIKE ?"));
-  });
-
-  await test("Heurística: Vacas adultas sin parir", () => {
-    const res = resolverConsultaOffline("vacas sin parir este año");
-    assert.ok(res, "Debe detectar intención de nodrizas vacías");
-    assert.strictEqual(res.tipo_resultado, "animales");
-    assert.ok(res.sql.includes("fecha_ult_parto IS NULL"));
-  });
-
-  await test("Heurística: Tratamientos con supresión sanitaria activa", () => {
-    const res = resolverConsultaOffline("¿Qué medicamentos tienen retirada sanitaria o supresión?");
-    assert.ok(res, "Debe detectar consulta sanitaria");
-    assert.strictEqual(res.tipo_resultado, "recetas");
-    assert.ok(res.sql.includes("tiempo_carne > 0"));
-  });
-
-  await test("Heurística: Traspasos hacia cebadero 122", () => {
-    const res = resolverConsultaOffline("traspasos recientes al cebadero");
-    assert.ok(res, "Debe detectar movimiento de traspaso");
-    assert.strictEqual(res.tipo_resultado, "movimientos");
-    assert.ok(res.sql.includes("121") && res.sql.includes("122"));
-  });
-
-  await test("Heurística: Crotal oficial completo de 14 dígitos", () => {
-    const res = resolverConsultaOffline("vaca ES083710104599");
-    assert.ok(res, "Debe detectar crotal oficial");
-    assert.strictEqual(res.tipo_resultado, "animales");
-    assert.strictEqual(res.params[0], "4599");
-  });
-
-  await test("Heurística: Compras de pienso y alimentación", () => {
-    const res = resolverConsultaOffline("compras de pienso de este mes");
-    assert.ok(res, "Debe detectar intención de alimentos");
-    assert.strictEqual(res.tipo_resultado, "alimentos");
-    assert.ok(res.sql.includes("compras_alimento"));
-  });
-
-  await test("Heurística: Medicamento veterinario más usado", () => {
-    const res = resolverConsultaOffline("¿Cuál es el medicamento más usado?");
-    assert.ok(res, "Debe detectar medicamento más frecuente");
-    assert.strictEqual(res.tipo_resultado, "recetas");
-    assert.ok(res.sql.includes("COUNT(*) AS total_recetas"));
-  });
-
-  await test("Heurística: Normalización de números con espacios Whisper (10 45)", () => {
-    const res = resolverConsultaOffline("vaca 10 45");
-    assert.ok(res, "Debe normalizar espacios y detectar animal");
-    assert.strictEqual(res.tipo_resultado, "animales");
-    assert.strictEqual(res.params[0], "1045");
-  });
-
-  // 2. Tests de Formateo y Utilidades de Negocio Ganadero
+  // 1. Tests de Utilidades de Negocio Ganadero y Formateo
   await test("Extraer últimos 4 dígitos de crotal oficial", () => {
     assert.strictEqual(extraer4Digitos("ES083710104599"), "4599");
     assert.strictEqual(extraer4Digitos("ES050987654321"), "4321");
@@ -185,16 +110,40 @@ async function runAllTests() {
     assert.strictEqual(typeof modDb.buscarAnimales, "function");
   });
 
-  await test("Integridad ES Modules: Exportaciones de views modulares", async () => {
-    const modCattle = await import('../../pwa/js/modules/views/cattle_view.js');
-    assert.strictEqual(typeof modCattle.renderVistaAnimales, "function");
+  await test("Integridad ES Modules: Exportaciones de views de dominio (recetas, piensos, movimientos)", async () => {
+    const modSanitary = await import('../../pwa/js/modules/views/sanitary_view.js');
+    assert.strictEqual(typeof modSanitary.renderVistaRecetas, "function");
 
-    const modDetail = await import('../../pwa/js/modules/views/detail_view.js');
-    assert.strictEqual(typeof modDetail.seleccionarAnimal, "function");
-    assert.strictEqual(typeof modDetail.verDetalleCorral, "function");
+    const modFeeds = await import('../../pwa/js/modules/views/feeds_view.js');
+    assert.strictEqual(typeof modFeeds.renderVistaAlimentos, "function");
 
-    const modAssistant = await import('../../pwa/js/modules/views/assistant_view.js');
-    assert.strictEqual(typeof modAssistant.setupAsistenteIA, "function");
+    const modMovements = await import('../../pwa/js/modules/views/movements_view.js');
+    assert.strictEqual(typeof modMovements.renderVistaMovimientos, "function");
+  });
+
+  await test("Integridad ES Modules: Exportaciones de auth, voice y api", async () => {
+    const modAuth = await import('../../pwa/js/modules/auth.js');
+    assert.strictEqual(typeof modAuth.obtenerAuthHeaders, "function");
+    assert.strictEqual(typeof modAuth.mostrarPantallaLogin, "function");
+
+    const modVoice = await import('../../pwa/js/modules/voice.js');
+    assert.strictEqual(typeof modVoice.VoiceManager, "function");
+
+    const modApi = await import('../../pwa/js/modules/api.js');
+    assert.strictEqual(typeof modApi.fetchIntent, "function");
+    assert.strictEqual(typeof modApi.fetchModels, "function");
+    assert.strictEqual(typeof modApi.fetchSynthesize, "function");
+  });
+
+  await test("Arquitectura Limpia: Supresión verificada de heuristics.js", async () => {
+    let cargoModulo = false;
+    try {
+      await import('../../pwa/js/modules/heuristics.js');
+      cargoModulo = true;
+    } catch {
+      cargoModulo = false;
+    }
+    assert.strictEqual(cargoModulo, false, "heuristics.js debe estar eliminado de la arquitectura.");
   });
 
   console.log("==================================================");
