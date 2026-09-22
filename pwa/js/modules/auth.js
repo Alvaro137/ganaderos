@@ -1,5 +1,5 @@
 // modules/auth.js
-import { escapeHtml } from './config.js';
+import { escapeHtml, esPantallaEscritorio } from './config.js';
 
 export function obtenerAuthHeaders() {
   const token = localStorage.getItem("campo_pwa_token") || "";
@@ -50,7 +50,7 @@ export function mostrarPantallaLogin(mensajeError = "") {
 
   const form = document.getElementById("form-auth-login");
   const input = document.getElementById("input-auth-pass");
-  if (input) setTimeout(() => input.focus(), 150);
+  if (input && esPantallaEscritorio()) setTimeout(() => input.focus(), 150);
 
   if (form) {
     form.addEventListener("submit", async (e) => {
