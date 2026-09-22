@@ -566,7 +566,7 @@ export function renderResultadosIA(filas, tipoResultado, container, cerrarModal)
                 if (k.toLowerCase().includes("corral") || k.toLowerCase().includes("lote")) {
                   return `
                     <td style="padding: 10px 12px;">
-                      <button class="clickable-chip chip-corral" onclick="cerrarYVerCorral('${escapeHtml(val)}')">
+                      <button class="clickable-chip chip-corral" data-action="view-corral-ai" data-corral="${escapeHtml(val)}">
                         ${escapeHtml(val || "Sin lote")}
                       </button>
                     </td>
@@ -581,12 +581,15 @@ export function renderResultadosIA(filas, tipoResultado, container, cerrarModal)
     </div>
   `;
 
-  window.cerrarYVerCorral = function (nombreCorral) {
-    cerrarModal();
-    if (AppState.tabActual !== "animales") {
-      const tabBtn = document.querySelector('.nav-link[data-tab="animales"]') || document.querySelector('.mobile-tab-btn[data-tab="animales"]');
-      if (tabBtn) tabBtn.click();
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-action="view-corral-ai"]');
+    if (btn && btn.dataset.corral) {
+      cerrarModal();
+      if (AppState.tabActual !== "animales") {
+        const tabBtn = document.querySelector('.nav-link[data-tab="animales"]') || document.querySelector('.mobile-tab-btn[data-tab="animales"]');
+        if (tabBtn) tabBtn.click();
+      }
+      verDetalleCorral(btn.dataset.corral, true);
     }
-    verDetalleCorral(nombreCorral, true);
-  };
+  });
 }

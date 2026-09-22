@@ -88,6 +88,34 @@ async function runAllTests() {
     assert.ok(res.sql.includes("121") && res.sql.includes("122"));
   });
 
+  await test("Heurística: Crotal oficial completo de 14 dígitos", () => {
+    const res = resolverConsultaOffline("vaca ES083710104599");
+    assert.ok(res, "Debe detectar crotal oficial");
+    assert.strictEqual(res.tipo_resultado, "animales");
+    assert.strictEqual(res.params[0], "4599");
+  });
+
+  await test("Heurística: Compras de pienso y alimentación", () => {
+    const res = resolverConsultaOffline("compras de pienso de este mes");
+    assert.ok(res, "Debe detectar intención de alimentos");
+    assert.strictEqual(res.tipo_resultado, "alimentos");
+    assert.ok(res.sql.includes("compras_alimento"));
+  });
+
+  await test("Heurística: Medicamento veterinario más usado", () => {
+    const res = resolverConsultaOffline("¿Cuál es el medicamento más usado?");
+    assert.ok(res, "Debe detectar medicamento más frecuente");
+    assert.strictEqual(res.tipo_resultado, "recetas");
+    assert.ok(res.sql.includes("COUNT(*) AS total_recetas"));
+  });
+
+  await test("Heurística: Normalización de números con espacios Whisper (10 45)", () => {
+    const res = resolverConsultaOffline("vaca 10 45");
+    assert.ok(res, "Debe normalizar espacios y detectar animal");
+    assert.strictEqual(res.tipo_resultado, "animales");
+    assert.strictEqual(res.params[0], "1045");
+  });
+
   // 2. Tests de Formateo y Utilidades de Negocio Ganadero
   await test("Extraer últimos 4 dígitos de crotal oficial", () => {
     assert.strictEqual(extraer4Digitos("ES083710104599"), "4599");

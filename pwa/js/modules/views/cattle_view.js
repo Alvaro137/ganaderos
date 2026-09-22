@@ -156,6 +156,16 @@ export function renderVistaAnimales() {
     });
   }
 
+  const resultsListEl = document.getElementById("results-list");
+  if (resultsListEl) {
+    resultsListEl.addEventListener("click", (e) => {
+      const card = e.target.closest(".animal-card");
+      if (card && card.dataset.crotal) {
+        seleccionarAnimal(card.dataset.crotal, true);
+      }
+    });
+  }
+
   ejecutarBusquedaYListar();
 }
 
@@ -190,7 +200,7 @@ export function ejecutarBusquedaYListar() {
       const partosTexto = a.total_partos > 0 ? `${a.total_partos} partos` : "Sin partos";
 
       return `
-        <article class="animal-card ${esSelected}" onclick="seleccionarAnimal('${escapeHtml(a.crotal)}', true)" data-crotal="${escapeHtml(a.crotal)}">
+        <article class="animal-card ${esSelected}" data-crotal="${escapeHtml(a.crotal)}">
           <div class="card-header-row">
             <div class="crotal-box">
               <span class="crotal-4-digits">${escapeHtml(a.crotal_4)}</span>

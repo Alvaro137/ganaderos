@@ -155,6 +155,20 @@ export function renderVistaMovimientos() {
     });
   }
 
+  const listaContenedor = document.getElementById("movimientos-list");
+  if (listaContenedor) {
+    listaContenedor.addEventListener("click", (e) => {
+      const target = e.target.closest('[data-action="select-animal"]');
+      if (target && target.dataset.crotal) {
+        if (AppState.tabActual !== "animales") {
+          const tabBtn = document.querySelector('.nav-link[data-tab="animales"]') || document.querySelector('.mobile-tab-btn[data-tab="animales"]');
+          if (tabBtn) tabBtn.click();
+        }
+        seleccionarAnimal(target.dataset.crotal, true);
+      }
+    });
+  }
+
   ejecutarBusquedaMovimientos();
 }
 
@@ -214,7 +228,7 @@ export function ejecutarBusquedaMovimientos() {
 
           <div class="mov-animal-row">
             <span class="mov-crotal-4">${escapeHtml(crotal4)}</span>
-            <span class="mov-crotal-completo" onclick="seleccionarAnimal('${escapeHtml(m.crotal)}')">
+            <span class="mov-crotal-completo" data-action="select-animal" data-crotal="${escapeHtml(m.crotal)}" style="cursor: pointer;">
               ${escapeHtml(m.crotal)}
             </span>
             ${estadoBadge}
@@ -239,8 +253,9 @@ export function ejecutarBusquedaMovimientos() {
             </div>
             <button 
               class="nav-link" 
-              style="padding: 4px 10px; font-size: 0.75rem; background: var(--bg-surface-subtle); border: 1px solid var(--border-color); border-radius: var(--radius-sm);" 
-              onclick="seleccionarAnimal('${escapeHtml(m.crotal)}')">
+              style="padding: 4px 10px; font-size: 0.75rem; background: var(--bg-surface-subtle); border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;" 
+              data-action="select-animal" 
+              data-crotal="${escapeHtml(m.crotal)}">
               Ver ficha animal →
             </button>
           </div>
