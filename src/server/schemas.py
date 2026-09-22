@@ -33,15 +33,24 @@ class IntentResponse(BaseModel):
     offline_mode: bool
     error: Optional[str] = None
 
+class AIModelItem(BaseModel):
+    id: str
+    name: str
+
 class AIModelResponse(BaseModel):
-    models: List[str]
+    ok: bool = True
+    models: List[AIModelItem]
 
 class SynthesizeRequest(BaseModel):
-    intent: str
-    data: List[Dict[str, Any]]
+    prompt: str
+    data: List[Dict[str, Any]] = Field(default_factory=list)
+    columns: Optional[List[str]] = None
+    history: Optional[List[Dict[str, Any]]] = None
+    model_id: Optional[str] = "auto"
 
 class SynthesizeResponse(BaseModel):
-    summary: str
+    ok: bool = True
+    sintesis: str
 
 class AnimalResponse(BaseModel):
     crotal: str
