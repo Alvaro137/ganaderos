@@ -102,6 +102,42 @@ class TestFastAPI(unittest.TestCase):
         login_resp = self.client.post("/api/auth/login", json={"password": "password_incorrecta"})
         self.assertEqual(login_resp.status_code, 401)
 
+    def test_auth_users_list(self):
+        response = self.client.get("/api/auth/users")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        users = data["users"]
+        self.assertGreaterEqual(len(users), 3)
+        user_ids = [u["id"] for u in users]
+        self.assertIn("usr_admin", user_ids)
+        self.assertIn("usr_paco", user_ids)
+        self.assertIn("usr_vet", user_ids)
+
+    def test_auth_login_pin_success_and_verify(self):
+        # Login de Paco con PIN por defecto '0000'
+        login_resp = self.client.post("/api/auth/login-pin", json={"user_id": "usr_paco", "pin": "0000"})
+        self.assertEqual(login_resp.status_code, 200)
+        data = login_resp.json()
+        self.assertTrue(data["ok"])
+        self.assertIn("token", data)
+        self.assertEqual(data["user"]["id"], "usr_paco")
+        self.assertEqual(data["user"]["rol"], "vaquero")
+
+        # Verificar token retornado
+        token = data["token"]
+        verify_resp = self.client.get("/api/auth/verify", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(verify_resp.status_code, 200)
+        vdata = verify_resp.json()
+        self.assertTrue(vdata["authenticated"])
+        self.assertEqual(vdata["user"]["id"], "usr_paco")
+        self.assertEqual(vdata["user"]["rol"], "vaquero")
+
+    def test_auth_login_pin_failure(self):
+        login_resp = self.client.post("/api/auth/login-pin", json={"user_id": "usr_paco", "pin": "9999"})
+        self.assertEqual(login_resp.status_code, 401)
+        self.assertIn("PIN incorrecto", login_resp.json()["detail"])
+
     def test_ai_transcribe_payload_too_large(self):
         # Simular fichero de audio mayor a 10MB
         huge_content = b"0" * (10 * 1024 * 1024 + 1024)

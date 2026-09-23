@@ -126,6 +126,10 @@ async function runAllTests() {
     const modAuth = await import('../../pwa/js/modules/auth.js');
     assert.strictEqual(typeof modAuth.obtenerAuthHeaders, "function");
     assert.strictEqual(typeof modAuth.mostrarPantallaLogin, "function");
+    assert.strictEqual(typeof modAuth.obtenerUsuarioActual, "function");
+    assert.strictEqual(typeof modAuth.guardarSesion, "function");
+    assert.strictEqual(typeof modAuth.cerrarSesion, "function");
+    assert.strictEqual(typeof modAuth.actualizarBadgeUsuario, "function");
 
     const modVoice = await import('../../pwa/js/modules/voice.js');
     assert.strictEqual(typeof modVoice.VoiceManager, "function");
