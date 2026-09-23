@@ -108,7 +108,7 @@ class Usuario:
     """Entidad que representa un usuario u operario del sistema ganadero."""
     id: str
     nombre: str
-    rol: str  # 'admin', 'vaquero', 'veterinario'
+    rol: str  # Interno/heredado del schema; sin permisos (login KISS por contraseña)
     pin_hash: str
     password_hash: Optional[str] = None
     activo: bool = True
