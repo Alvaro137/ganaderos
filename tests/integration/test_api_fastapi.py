@@ -82,15 +82,15 @@ class TestFastAPI(unittest.TestCase):
     def test_auth_login_success_and_token_validation(self):
         # 1. Login exitoso con la contraseña compartida y operador seleccionado
         login_resp = self.client.post(
-            "/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_paco"}
+            "/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_jose"}
         )
         self.assertEqual(login_resp.status_code, 200)
         data = login_resp.json()
         token = data["token"]
         self.assertIn(".", token)
-        self.assertEqual(data["user"]["id"], "usr_paco")
+        self.assertEqual(data["user"]["id"], "usr_jose")
 
-        # 2. Login sin user_id -> operador por defecto (Álvaro)
+        # 2. Login sin user_id -> operador por defecto (Álvaro, admin)
         default_resp = self.client.post("/api/auth/login", json={"password": "mvp-testing"})
         self.assertEqual(default_resp.status_code, 200)
         self.assertEqual(default_resp.json()["user"]["id"], "usr_admin")
@@ -100,7 +100,7 @@ class TestFastAPI(unittest.TestCase):
         verify_resp = self.client.get("/api/auth/verify", headers=headers)
         self.assertEqual(verify_resp.status_code, 200)
         self.assertTrue(verify_resp.json()["authenticated"])
-        self.assertEqual(verify_resp.json()["user"]["id"], "usr_paco")
+        self.assertEqual(verify_resp.json()["user"]["id"], "usr_jose")
 
         # 4. Verificación de token manipulado / firma inválida
         tampered_token = token[:-4] + "ffff"
@@ -120,11 +120,20 @@ class TestFastAPI(unittest.TestCase):
         data = response.json()
         self.assertTrue(data["ok"])
         users = data["users"]
-        self.assertGreaterEqual(len(users), 2)
+        self.assertGreaterEqual(len(users), 5)
         user_ids = [u["id"] for u in users]
         self.assertIn("usr_admin", user_ids)
-        self.assertIn("usr_paco", user_ids)
+        self.assertIn("usr_jose", user_ids)
+        self.assertIn("usr_amelia", user_ids)
+        self.assertIn("usr_alex", user_ids)
+        self.assertIn("usr_otro", user_ids)
+        self.assertNotIn("usr_paco", user_ids)
         self.assertNotIn("usr_vet", user_ids)
+        # Álvaro es el único admin; el resto comparten rol 'operador'
+        roles = {u["id"]: u["rol"] for u in users}
+        self.assertEqual(roles["usr_admin"], "admin")
+        for uid in ("usr_jose", "usr_amelia", "usr_alex", "usr_otro"):
+            self.assertEqual(roles[uid], "operador")
 
     def test_ai_transcribe_payload_too_large(self):
         # Simular fichero de audio mayor a 10MB
