@@ -7,7 +7,7 @@
 
 import { AppState, debounce, formatearFecha } from './modules/config.js';
 import { inicializarDB, getMetadata } from './modules/db.js';
-import { mostrarPantallaLogin } from './modules/auth.js';
+import { mostrarPantallaLogin, actualizarBadgeUsuario } from './modules/auth.js';
 import { renderVistaAnimales } from './modules/views/cattle_view.js';
 import { renderVistaRecetas } from './modules/views/sanitary_view.js';
 import { renderVistaAlimentos } from './modules/views/feeds_view.js';
@@ -48,6 +48,8 @@ async function iniciarAplicacion() {
     mostrarPantallaLogin();
     return;
   }
+
+  actualizarBadgeUsuario();
 
   try {
     await inicializarDB((mensaje) => {
