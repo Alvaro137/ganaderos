@@ -19,6 +19,7 @@ class UsersListResponse(BaseModel):
 
 class LoginRequest(BaseModel):
     password: str
+    user_id: Optional[str] = None  # Operador seleccionado (solo atribución, sin roles)
 
 class PinLoginRequest(BaseModel):
     user_id: str

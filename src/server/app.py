@@ -382,12 +382,33 @@ async def list_auth_users():
 
 @app.post("/api/auth/login", tags=["Autenticación"], response_model=AuthTokenResponse)
 async def auth_login(req: LoginRequest, response: Response):
-    """Autentica a un ganadero y emite un token Bearer seguro."""
+    """Autentica al operador seleccionado con la contraseña compartida de la explotación.
+
+    KISS: sin roles ni PINs. El user_id solo aporta atribución (quién consulta),
+    de cara a una futura consolidación/merge de bases de datos.
+    """
     if verificar_password(req.password):
-        token = generar_auth_token(30, user_id="usr_admin", rol="admin")
+        usuario = None
+        if req.user_id:
+            usuario = get_usuario_service().get_by_id(req.user_id)
+        if usuario is None:
+            # Fallback: operador por defecto (propietario)
+            token = generar_auth_token(30, user_id="usr_admin", rol="admin")
+            response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
+            return {
+                "ok": True,
+                "token": token,
+                "user": UserSummary(id="usr_admin", nombre="Álvaro", rol="admin"),
+                "message": "Autenticación exitosa.",
+            }
+        token = generar_auth_token(30, user_id=usuario.id, rol=usuario.rol)
         response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
-        admin_user = UserSummary(id="usr_admin", nombre="Álvaro (Administrador)", rol="admin")
-        return {"ok": True, "token": token, "user": admin_user, "message": "Autenticación exitosa."}
+        return {
+            "ok": True,
+            "token": token,
+            "user": UserSummary(id=usuario.id, nombre=usuario.nombre, rol=usuario.rol),
+            "message": f"Sesión iniciada como {usuario.nombre}.",
+        }
     raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
 
 
