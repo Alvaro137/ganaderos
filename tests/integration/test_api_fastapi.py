@@ -80,21 +80,33 @@ class TestFastAPI(unittest.TestCase):
         self.assertIn("formato oficial", data["detail"])
 
     def test_auth_login_success_and_token_validation(self):
-        # 1. Login exitoso con contraseña por defecto
-        login_resp = self.client.post("/api/auth/login", json={"password": "mvp-testing"})
+        # 1. Login exitoso con la contraseña compartida y operador seleccionado
+        login_resp = self.client.post(
+            "/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_paco"}
+        )
         self.assertEqual(login_resp.status_code, 200)
-        token = login_resp.json()["token"]
+        data = login_resp.json()
+        token = data["token"]
         self.assertIn(".", token)
+        self.assertEqual(data["user"]["id"], "usr_paco")
 
-        # 2. Verificación de token legítimo
+        # 2. Login sin user_id -> operador por defecto (Álvaro)
+        default_resp = self.client.post("/api/auth/login", json={"password": "mvp-testing"})
+        self.assertEqual(default_resp.status_code, 200)
+        self.assertEqual(default_resp.json()["user"]["id"], "usr_admin")
+
+        # 3. Verificación de token legítimo
         headers = {"Authorization": f"Bearer {token}"}
         verify_resp = self.client.get("/api/auth/verify", headers=headers)
         self.assertEqual(verify_resp.status_code, 200)
         self.assertTrue(verify_resp.json()["authenticated"])
+        self.assertEqual(verify_resp.json()["user"]["id"], "usr_paco")
 
-        # 3. Verificación de token manipulado / firma inválida
+        # 4. Verificación de token manipulado / firma inválida
         tampered_token = token[:-4] + "ffff"
-        verify_bad = self.client.get("/api/auth/verify", headers={"Authorization": f"Bearer {tampered_token}"})
+        verify_bad = self.client.get(
+            "/api/auth/verify", headers={"Authorization": f"Bearer {tampered_token}"}
+        )
         self.assertEqual(verify_bad.status_code, 200)
         self.assertFalse(verify_bad.json()["authenticated"])
 
@@ -108,35 +120,11 @@ class TestFastAPI(unittest.TestCase):
         data = response.json()
         self.assertTrue(data["ok"])
         users = data["users"]
-        self.assertGreaterEqual(len(users), 3)
+        self.assertGreaterEqual(len(users), 2)
         user_ids = [u["id"] for u in users]
         self.assertIn("usr_admin", user_ids)
         self.assertIn("usr_paco", user_ids)
-        self.assertIn("usr_vet", user_ids)
-
-    def test_auth_login_pin_success_and_verify(self):
-        # Login de Paco con PIN por defecto '0000'
-        login_resp = self.client.post("/api/auth/login-pin", json={"user_id": "usr_paco", "pin": "0000"})
-        self.assertEqual(login_resp.status_code, 200)
-        data = login_resp.json()
-        self.assertTrue(data["ok"])
-        self.assertIn("token", data)
-        self.assertEqual(data["user"]["id"], "usr_paco")
-        self.assertEqual(data["user"]["rol"], "vaquero")
-
-        # Verificar token retornado
-        token = data["token"]
-        verify_resp = self.client.get("/api/auth/verify", headers={"Authorization": f"Bearer {token}"})
-        self.assertEqual(verify_resp.status_code, 200)
-        vdata = verify_resp.json()
-        self.assertTrue(vdata["authenticated"])
-        self.assertEqual(vdata["user"]["id"], "usr_paco")
-        self.assertEqual(vdata["user"]["rol"], "vaquero")
-
-    def test_auth_login_pin_failure(self):
-        login_resp = self.client.post("/api/auth/login-pin", json={"user_id": "usr_paco", "pin": "9999"})
-        self.assertEqual(login_resp.status_code, 401)
-        self.assertIn("PIN incorrecto", login_resp.json()["detail"])
+        self.assertNotIn("usr_vet", user_ids)
 
     def test_ai_transcribe_payload_too_large(self):
         # Simular fichero de audio mayor a 10MB

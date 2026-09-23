@@ -162,9 +162,8 @@ class SQLiteUsuarioRepository(UsuarioRepository):
                 return hashlib.sha256(f"{uid}:{pin}".encode()).hexdigest()
 
             usuarios_defecto = [
-                ("usr_admin", "Álvaro (Administrador)", "admin", _hash_pin("usr_admin", "1234"), None, 1, now_str),
-                ("usr_paco", "Paco (Vaquero)", "vaquero", _hash_pin("usr_paco", "0000"), None, 1, now_str),
-                ("usr_vet", "Veterinario (Sanidad)", "veterinario", _hash_pin("usr_vet", "9999"), None, 1, now_str),
+                ("usr_admin", "Álvaro", "admin", _hash_pin("usr_admin", "1234"), None, 1, now_str),
+                ("usr_paco", "Paco", "vaquero", _hash_pin("usr_paco", "0000"), None, 1, now_str),
             ]
             cur.executemany("""
             INSERT INTO usuarios (id, nombre, rol, pin_hash, password_hash, activo, creado_en)
