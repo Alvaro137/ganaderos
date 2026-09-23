@@ -1,5 +1,7 @@
-// modules/auth.js
-import { escapeHtml, esPantallaEscritorio } from './config.js';
+// modules/auth.js — Login KISS: operador + contraseña compartida de la explotación.
+// Sin PINs, sin teclado numérico y sin roles visibles. El operador elegido solo
+// aporta atribución de sesión (quién consulta) para una futura consolidación de BDs.
+import { escapeHtml } from './config.js';
 
 export function obtenerAuthHeaders() {
   const token = localStorage.getItem("campo_pwa_token") || "";
@@ -68,14 +70,14 @@ function mostrarModalSesionUsuario(user) {
     <div class="user-session-modal-card">
       <div style="display: flex; align-items: center; gap: 12px;">
         <div style="font-size: 2rem; background: var(--md-surface-container-high); width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-          ${user.rol === "vaquero" ? "👨‍🌾" : user.rol === "veterinario" ? "🩺" : "👑"}
+          🧑‍🌾
         </div>
         <div>
           <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main); margin-bottom: 2px;">
             ${escapeHtml(user.nombre)}
           </h3>
-          <span style="font-size: 0.78rem; font-weight: 600; color: var(--brand-primary); text-transform: uppercase; letter-spacing: 0.04em;">
-            Rol: ${escapeHtml(user.rol)}
+          <span style="font-size: 0.78rem; font-weight: 600; color: var(--brand-primary);">
+            Sesión activa en este dispositivo
           </span>
         </div>
       </div>
@@ -102,10 +104,11 @@ function mostrarModalSesionUsuario(user) {
   });
 }
 
+// === LOGIN SCREEN (parte 2) ===
+
 const DEFAULT_USERS = [
-  { id: "usr_paco", nombre: "Paco (Vaquero)", rol: "vaquero" },
-  { id: "usr_vet", nombre: "Veterinario (Sanidad)", rol: "veterinario" },
-  { id: "usr_admin", nombre: "Álvaro (Administrador)", rol: "admin" }
+  { id: "usr_admin", nombre: "Álvaro", rol: "admin" },
+  { id: "usr_paco", nombre: "Paco", rol: "vaquero" }
 ];
 
 export async function mostrarPantallaLogin(mensajeError = "") {
@@ -116,7 +119,7 @@ export async function mostrarPantallaLogin(mensajeError = "") {
   const btnUser = document.getElementById("btn-header-user");
   if (btnUser) btnUser.style.display = "none";
 
-  // Intentar cargar usuarios activos desde API o caché local
+  // Cargar operadores activos desde la API (con caché local de respaldo)
   let users = DEFAULT_USERS;
   try {
     const resp = await fetch("./api/auth/users");
@@ -134,18 +137,14 @@ export async function mostrarPantallaLogin(mensajeError = "") {
     }
   }
 
-  function getAvatarForRole(rol) {
-    if (rol === "vaquero") return "👨‍🌾";
-    if (rol === "veterinario") return "🩺";
-    return "👑";
-  }
+  let operadorSeleccionado = null; // null => el backend usa el operador por defecto
 
   container.innerHTML = `
     <div class="auth-card-container">
       <div class="auth-header-section">
         <img src="./icon-192.png" alt="Ganaderos" class="auth-logo">
         <h2 class="auth-title">Ganaderos Campo</h2>
-        <p class="auth-subtitle">Acceso seguro y registro de actividad ganadera</p>
+        <p class="auth-subtitle">¿Quién eres? Elige tu nombre y entra con la contraseña de la explotación</p>
       </div>
 
       ${mensajeError ? `
@@ -154,222 +153,97 @@ export async function mostrarPantallaLogin(mensajeError = "") {
         </div>
       ` : ""}
 
-      <!-- 1. SELECCIÓN DE OPERADOR -->
+      <!-- 1. SELECCIÓN DE OPERADOR (solo atribución, sin roles ni PIN) -->
       <div id="section-operator-select" style="width: 100%;">
-        <div class="auth-section-title">Acceso Rápido por Operador (Campo)</div>
         <div class="operator-grid">
           ${users.map((u) => `
-            <div class="operator-card" data-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.nombre)}" data-user-role="${escapeHtml(u.rol)}">
-              <div class="operator-avatar">${getAvatarForRole(u.rol)}</div>
+            <div class="operator-card" data-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.nombre)}">
+              <div class="operator-avatar">🧑‍🌾</div>
               <div class="operator-info">
                 <div class="operator-name">${escapeHtml(u.nombre)}</div>
-                <div class="operator-role-badge">Rol: ${escapeHtml(u.rol)}</div>
               </div>
               <div style="color: var(--text-dim); font-size: 1.2rem;">›</div>
             </div>
           `).join("")}
         </div>
       </div>
-
-      <!-- 2. ACCESO POR CONTRASEÑA MAESTRA (FALLBACK / PROPIETARIO) -->
-      <div id="section-master-pass" style="width: 100%; margin-top: 6px;">
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);">
-          <div class="auth-section-title" style="margin-top: 0; margin-bottom: 8px;">O con Contraseña de Explotación</div>
-          <form id="form-auth-login" style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
-            <input 
-              type="password" 
-              id="input-auth-pass" 
-              placeholder="Contraseña de la explotación..." 
-              autocomplete="current-password"
-              style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); outline: none; box-sizing: border-box;"
-              required
-            />
-            <button 
-              type="submit" 
-              id="btn-submit-auth"
-              style="width: 100%; padding: 12px; background: var(--brand-primary); color: #fff; font-size: 0.95rem; font-weight: 700; border: none; border-radius: var(--radius-md); cursor: pointer; transition: opacity 0.2s;"
-            >
-              Desbloquear Censo
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <!-- 3. TECLADO PIN PARA OPERADOR SELECCIONADO -->
-      <div id="section-pin-entry" style="display: none; width: 100%;">
-        <div class="pin-entry-container">
-          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span id="pin-op-avatar" style="font-size: 1.4rem;">👨‍🌾</span>
-              <div>
-                <strong id="pin-op-name" style="font-size: 0.95rem; color: var(--text-main);">Operador</strong>
-                <div id="pin-op-role" style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Vaquero</div>
-              </div>
-            </div>
-            <button id="btn-back-to-operators" style="background: none; border: none; color: var(--brand-primary); font-size: 0.8rem; font-weight: 700; cursor: pointer;">
-              Cambiar
-            </button>
-          </div>
-
-          <div class="pin-display-wrapper">
-            <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Introduce tu PIN de 4 dígitos:</span>
-            <div class="pin-dots-display">
-              <div class="pin-dot" id="pindot-0"></div>
-              <div class="pin-dot" id="pindot-1"></div>
-              <div class="pin-dot" id="pindot-2"></div>
-              <div class="pin-dot" id="pindot-3"></div>
-            </div>
-            <div id="pin-error-msg" style="color: #dc2626; font-size: 0.8rem; min-height: 1.2em; text-align: center; font-weight: 600;"></div>
-          </div>
-
-          <!-- Teclado Numérico Táctil de Campo (Apto Guantes / Lluvia) -->
-          <div class="pin-keypad-grid">
-            <button type="button" class="pin-keypad-btn" data-digit="1">1</button>
-            <button type="button" class="pin-keypad-btn" data-digit="2">2</button>
-            <button type="button" class="pin-keypad-btn" data-digit="3">3</button>
-            <button type="button" class="pin-keypad-btn" data-digit="4">4</button>
-            <button type="button" class="pin-keypad-btn" data-digit="5">5</button>
-            <button type="button" class="pin-keypad-btn" data-digit="6">6</button>
-            <button type="button" class="pin-keypad-btn" data-digit="7">7</button>
-            <button type="button" class="pin-keypad-btn" data-digit="8">8</button>
-            <button type="button" class="pin-keypad-btn" data-digit="9">9</button>
-            <button type="button" class="pin-keypad-btn action" id="btn-pin-clear" title="Borrar">⌫</button>
-            <button type="button" class="pin-keypad-btn" data-digit="0">0</button>
-            <button type="button" class="pin-keypad-btn action enter" id="btn-pin-submit" title="Entrar">✓</button>
-          </div>
-      </div>
-
+      <!-- PARTE 2B -->
     </div>
   `;
 
-  let currentSelectedUser = null;
-  let pinBuffer = "";
+  await montarFormularioLogin(container, () => operadorSeleccionado, (v) => { operadorSeleccionado = v; });
+}
 
-  const secOpSelect = document.getElementById("section-operator-select");
-  const secPinEntry = document.getElementById("section-pin-entry");
-  const secMasterPass = document.getElementById("section-master-pass");
+// === PARTE 2B ===
 
-  function actualizarDots() {
-    for (let i = 0; i < 4; i++) {
-      const dot = document.getElementById(`pindot-${i}`);
-      if (dot) {
-        if (i < pinBuffer.length) {
-          dot.classList.add("filled");
-        } else {
-          dot.classList.remove("filled");
-        }
-      }
-    }
+async function montarFormularioLogin(container, getOperador, setOperador) {
+  let operadorSeleccionado = getOperador();
+
+  // 2. CONTRASEÑA COMPARTIDA DE LA EXPLOTACIÓN (único paso de acceso)
+  const secMaster = document.createElement("div");
+  secMaster.id = "section-master-pass";
+  secMaster.style.cssText = "width: 100%; margin-top: 6px;";
+  secMaster.innerHTML = `
+    <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);">
+      <div class="auth-section-title" style="margin-top: 0; margin-bottom: 8px;">Contraseña de la explotación</div>
+      <p id="login-operador-activo" style="margin: 0 0 10px 0; font-size: 0.82rem; color: var(--text-muted);"></p>
+      <form id="form-auth-login" style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+        <input
+          type="password"
+          id="input-auth-pass"
+          placeholder="Contraseña de la explotación..."
+          autocomplete="current-password"
+          style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); outline: none; box-sizing: border-box;"
+          required
+        />
+        <button
+          type="submit"
+          id="btn-submit-auth"
+          style="width: 100%; padding: 12px; background: var(--brand-primary); color: #fff; font-size: 0.95rem; font-weight: 700; border: none; border-radius: var(--radius-md); cursor: pointer; transition: opacity 0.2s;"
+        >
+          Entrar
+        </button>
+      </form>
+    </div>
+  `;
+  const marcador = container.querySelector("#section-operator-select");
+  marcador.insertAdjacentElement("afterend", secMaster);
+
+  function refrescarOperadorActivo() {
+    const el = document.getElementById("login-operador-activo");
+    if (!el) return;
+    el.textContent = operadorSeleccionado
+      ? `Entrarás como: ${operadorSeleccionado.nombre}`
+      : "Sin operador elegido: entrarás como Álvaro (propietario).";
   }
+  refrescarOperadorActivo();
 
-  async function ejecutarLoginPin() {
-    if (!currentSelectedUser || pinBuffer.length < 4) return;
-    const pinErr = document.getElementById("pin-error-msg");
-    if (pinErr) pinErr.textContent = "Verificando PIN...";
-
-    try {
-      const resp = await fetch("./api/auth/login-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: currentSelectedUser.id,
-          pin: pinBuffer
-        })
-      });
-      const data = await resp.json();
-      if (resp.ok && data.ok && data.token) {
-        guardarSesion(data.token, data.user || currentSelectedUser);
-        location.reload();
-      } else {
-        if (pinErr) pinErr.textContent = data.detail || "PIN incorrecto. Reinténtalo.";
-        pinBuffer = "";
-        actualizarDots();
-      }
-    } catch (err) {
-      if (pinErr) pinErr.textContent = "Error de conexión: " + err.message;
-      pinBuffer = "";
-      actualizarDots();
-    }
-  }
-
-  // Listener selección de operario
+  // Selección de operador: solo marca la tarjeta; el formulario permanece visible
   container.querySelectorAll(".operator-card").forEach((card) => {
     card.addEventListener("click", () => {
       const uid = card.dataset.userId;
       const uname = card.dataset.userName;
-      const urole = card.dataset.userRole;
-      currentSelectedUser = { id: uid, nombre: uname, rol: urole };
-      pinBuffer = "";
 
-      const pinOpName = document.getElementById("pin-op-name");
-      const pinOpRole = document.getElementById("pin-op-role");
-      const pinOpAvatar = document.getElementById("pin-op-avatar");
-      if (pinOpName) pinOpName.textContent = uname;
-      if (pinOpRole) pinOpRole.textContent = urole;
-      if (pinOpAvatar) pinOpAvatar.textContent = getAvatarForRole(urole);
-
-      secOpSelect.style.display = "none";
-      secMasterPass.style.display = "none";
-      secPinEntry.style.display = "block";
-      actualizarDots();
+      if (operadorSeleccionado && operadorSeleccionado.id === uid) {
+        // Segundo clic: deseleccionar (vuelta al operador por defecto)
+        operadorSeleccionado = null;
+        card.classList.remove("selected");
+        card.style.borderColor = "";
+      } else {
+        container.querySelectorAll(".operator-card").forEach((c) => {
+          c.classList.remove("selected");
+          c.style.borderColor = "";
+        });
+        operadorSeleccionado = { id: uid, nombre: uname };
+        card.classList.add("selected");
+        card.style.borderColor = "var(--brand-primary)";
+      }
+      setOperador(operadorSeleccionado);
+      refrescarOperadorActivo();
     });
   });
 
-  // Teclado PIN
-  container.querySelectorAll(".pin-keypad-btn[data-digit]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (pinBuffer.length < 4) {
-        pinBuffer += btn.dataset.digit;
-        actualizarDots();
-        const pinErr = document.getElementById("pin-error-msg");
-        if (pinErr) pinErr.textContent = "";
-        if (pinBuffer.length === 4) {
-          ejecutarLoginPin();
-        }
-      }
-    });
-  });
-
-  document.getElementById("btn-pin-clear")?.addEventListener("click", () => {
-    if (pinBuffer.length > 0) {
-      pinBuffer = pinBuffer.slice(0, -1);
-      actualizarDots();
-    }
-  });
-
-  document.getElementById("btn-pin-submit")?.addEventListener("click", () => {
-    if (pinBuffer.length === 4) {
-      ejecutarLoginPin();
-    }
-  });
-
-  // Teclado físico numérico (PC / laptop)
-  window.addEventListener("keydown", (e) => {
-    if (secPinEntry.style.display !== "none" && currentSelectedUser) {
-      if (/^[0-9]$/.test(e.key) && pinBuffer.length < 4) {
-        pinBuffer += e.key;
-        actualizarDots();
-        if (pinBuffer.length === 4) ejecutarLoginPin();
-      } else if (e.key === "Backspace") {
-        pinBuffer = pinBuffer.slice(0, -1);
-        actualizarDots();
-      } else if (e.key === "Enter" && pinBuffer.length === 4) {
-        ejecutarLoginPin();
-      }
-    }
-  });
-
-  // Navegación entre vistas
-  document.getElementById("btn-back-to-operators")?.addEventListener("click", () => {
-    secPinEntry.style.display = "none";
-    secOpSelect.style.display = "block";
-    secMasterPass.style.display = "block";
-    currentSelectedUser = null;
-    pinBuffer = "";
-  });
-
-  // Formulario Contraseña Maestra
+  // Formulario único de acceso con la contraseña compartida
   const form = document.getElementById("form-auth-login");
   const input = document.getElementById("input-auth-pass");
   if (form) {
@@ -388,15 +262,18 @@ export async function mostrarPantallaLogin(mensajeError = "") {
         const resp = await fetch("./api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password: pass })
+          body: JSON.stringify({
+            password: pass,
+            user_id: operadorSeleccionado ? operadorSeleccionado.id : null
+          })
         });
         const data = await resp.json();
 
         if (resp.ok && data.ok && data.token) {
-          guardarSesion(data.token, data.user || { id: "usr_admin", nombre: "Álvaro (Administrador)", rol: "admin" });
+          guardarSesion(data.token, data.user || null);
           location.reload();
         } else {
-          mostrarPantallaLogin(data.error || "Contraseña incorrecta.");
+          mostrarPantallaLogin(data.detail || "Contraseña incorrecta.");
         }
       } catch (err) {
         mostrarPantallaLogin("Error conectando con el servidor: " + err.message);

@@ -147,11 +147,11 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
 });
 
 test.describe('Autenticación y Control de Acceso', () => {
-  test('06. Pantalla de Acceso Protegido y Desbloqueo con Contraseña', async ({ page }) => {
+  test('06. Acceso con contraseña de explotación (operador por defecto)', async ({ page }) => {
     // Abrir la app sin token pre-configurado
     await page.goto('./');
 
-    // Debe mostrar la pantalla de Acceso Protegido
+    // Debe mostrar la pantalla de acceso con el formulario de contraseña
     const authInput = page.locator('#input-auth-pass');
     await expect(authInput).toBeVisible({ timeout: 15000 });
 
@@ -160,15 +160,18 @@ test.describe('Autenticación y Control de Acceso', () => {
     await page.locator('#btn-submit-auth').click();
     await expect(page.locator('#app-container')).toContainText(/incorrecta|error/i, { timeout: 8000 });
 
-    // Introducir contraseña correcta
+    // Contraseña correcta con el operador preseleccionado (Álvaro)
     await authInput.fill('mvp-testing');
     await page.locator('#btn-submit-auth').click();
 
-    // Debe autenticar y desbloquear el censo
+    // Debe autenticar, desbloquear el censo y mostrar a Álvaro en la cabecera
     await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
+    const headerUser = page.locator('#header-user-name');
+    await expect(headerUser).toBeVisible({ timeout: 5000 });
+    await expect(headerUser).toHaveText(/Álvaro/i);
   });
 
-  test('07. Pantalla de Acceso con PIN de Operador y Selector de Sesión', async ({ page }) => {
+  test('07. Selección de operador sin PIN ni roles y atribución de sesión', async ({ page }) => {
     // Abrir app limpia
     await page.goto('./');
     await page.evaluate(() => {
@@ -176,24 +179,19 @@ test.describe('Autenticación y Control de Acceso', () => {
     });
     await page.goto('./');
 
-    // Debe mostrar tarjetas de operadores de campo
+    // Tarjetas de operador visibles, sin badges de rol ni teclado PIN
     const opCardPaco = page.locator('.operator-card[data-user-id="usr_paco"]');
     await expect(opCardPaco).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('.operator-card').first()).not.toContainText(/rol:/i);
+    await expect(page.locator('.pin-keypad-btn')).toHaveCount(0);
 
-    // Clic en Paco
+    // Elegir a Paco e introducir la contraseña compartida de la explotación
     await opCardPaco.click();
+    const authInput = page.locator('#input-auth-pass');
+    await authInput.fill('mvp-testing');
+    await page.locator('#btn-submit-auth').click();
 
-    // Debe mostrar teclado PIN táctil
-    const keypadZero = page.locator('.pin-keypad-btn[data-digit="0"]');
-    await expect(keypadZero).toBeVisible({ timeout: 5000 });
-
-    // Introducir PIN de Paco '0000'
-    await keypadZero.click();
-    await keypadZero.click();
-    await keypadZero.click();
-    await keypadZero.click();
-
-    // Debe autenticar, mostrar el censo y badge de Paco en la cabecera
+    // Entra al censo identificado como Paco (atribución para futuro merge de BDs)
     await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
     const headerUser = page.locator('#header-user-name');
     await expect(headerUser).toBeVisible({ timeout: 5000 });
