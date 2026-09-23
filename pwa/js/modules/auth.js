@@ -156,7 +156,7 @@ export async function mostrarPantallaLogin(mensajeError = "") {
 
       <!-- 1. SELECCIÓN DE OPERADOR -->
       <div id="section-operator-select" style="width: 100%;">
-        <div class="auth-section-title">Selecciona tu perfil de campo</div>
+        <div class="auth-section-title">Acceso Rápido por Operador (Campo)</div>
         <div class="operator-grid">
           ${users.map((u) => `
             <div class="operator-card" data-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.nombre)}" data-user-role="${escapeHtml(u.rol)}">
@@ -169,15 +169,33 @@ export async function mostrarPantallaLogin(mensajeError = "") {
             </div>
           `).join("")}
         </div>
+      </div>
 
-        <div style="text-align: center; margin-top: 14px;">
-          <button id="btn-toggle-master-pass" class="auth-accordion-toggle" type="button">
-            O entrar con Contraseña Maestra de Explotación
-          </button>
+      <!-- 2. ACCESO POR CONTRASEÑA MAESTRA (FALLBACK / PROPIETARIO) -->
+      <div id="section-master-pass" style="width: 100%; margin-top: 6px;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);">
+          <div class="auth-section-title" style="margin-top: 0; margin-bottom: 8px;">O con Contraseña de Explotación</div>
+          <form id="form-auth-login" style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
+            <input 
+              type="password" 
+              id="input-auth-pass" 
+              placeholder="Contraseña de la explotación..." 
+              autocomplete="current-password"
+              style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); outline: none; box-sizing: border-box;"
+              required
+            />
+            <button 
+              type="submit" 
+              id="btn-submit-auth"
+              style="width: 100%; padding: 12px; background: var(--brand-primary); color: #fff; font-size: 0.95rem; font-weight: 700; border: none; border-radius: var(--radius-md); cursor: pointer; transition: opacity 0.2s;"
+            >
+              Desbloquear Censo
+            </button>
+          </form>
         </div>
       </div>
 
-      <!-- 2. TECLADO PIN PARA OPERADOR SELECCIONADO -->
+      <!-- 3. TECLADO PIN PARA OPERADOR SELECCIONADO -->
       <div id="section-pin-entry" style="display: none; width: 100%;">
         <div class="pin-entry-container">
           <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
@@ -219,36 +237,6 @@ export async function mostrarPantallaLogin(mensajeError = "") {
             <button type="button" class="pin-keypad-btn" data-digit="0">0</button>
             <button type="button" class="pin-keypad-btn action enter" id="btn-pin-submit" title="Entrar">✓</button>
           </div>
-        </div>
-      </div>
-
-      <!-- 3. ACCESO POR CONTRASEÑA MAESTRA (FALLBACK / PROPIETARIO) -->
-      <div id="section-master-pass" style="display: none; width: 100%; margin-top: 14px;">
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <strong style="font-size: 0.9rem; color: var(--text-main);">Contraseña Maestra</strong>
-            <button id="btn-back-to-operators-from-pass" style="background: none; border: none; color: var(--brand-primary); font-size: 0.8rem; font-weight: 700; cursor: pointer;">
-              Volver a Operadores
-            </button>
-          </div>
-          <form id="form-auth-login" style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
-            <input 
-              type="password" 
-              id="input-auth-pass" 
-              placeholder="Contraseña de la explotación..." 
-              autocomplete="current-password"
-              style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); outline: none; box-sizing: border-box;"
-              required
-            />
-            <button 
-              type="submit" 
-              id="btn-submit-auth"
-              style="width: 100%; padding: 12px; background: var(--brand-primary); color: #fff; font-size: 0.95rem; font-weight: 700; border: none; border-radius: var(--radius-md); cursor: pointer; transition: opacity 0.2s;"
-            >
-              Desbloquear Censo
-            </button>
-          </form>
-        </div>
       </div>
 
     </div>
@@ -376,20 +364,9 @@ export async function mostrarPantallaLogin(mensajeError = "") {
   document.getElementById("btn-back-to-operators")?.addEventListener("click", () => {
     secPinEntry.style.display = "none";
     secOpSelect.style.display = "block";
+    secMasterPass.style.display = "block";
     currentSelectedUser = null;
     pinBuffer = "";
-  });
-
-  document.getElementById("btn-toggle-master-pass")?.addEventListener("click", () => {
-    secOpSelect.style.display = "none";
-    secMasterPass.style.display = "block";
-    const passInput = document.getElementById("input-auth-pass");
-    if (passInput && esPantallaEscritorio()) setTimeout(() => passInput.focus(), 100);
-  });
-
-  document.getElementById("btn-back-to-operators-from-pass")?.addEventListener("click", () => {
-    secMasterPass.style.display = "none";
-    secOpSelect.style.display = "block";
   });
 
   // Formulario Contraseña Maestra
