@@ -1,4 +1,3 @@
-import hashlib
 import sqlite3
 from datetime import date, datetime
 from typing import List, Optional
@@ -158,12 +157,12 @@ class SQLiteUsuarioRepository(UsuarioRepository):
         if count == 0:
             now_str = datetime.now().isoformat()
 
-            def _hash_pin(uid: str, pin: str) -> str:
-                return hashlib.sha256(f"{uid}:{pin}".encode()).hexdigest()
-
             usuarios_defecto = [
-                ("usr_admin", "Álvaro", "admin", _hash_pin("usr_admin", "1234"), None, 1, now_str),
-                ("usr_paco", "Paco", "vaquero", _hash_pin("usr_paco", "0000"), None, 1, now_str),
+                ("usr_admin", "Álvaro", "admin", "sin-pin", None, 1, now_str),
+                ("usr_jose", "Jose", "operador", "sin-pin", None, 1, now_str),
+                ("usr_amelia", "Amelia", "operador", "sin-pin", None, 1, now_str),
+                ("usr_alex", "Alex", "operador", "sin-pin", None, 1, now_str),
+                ("usr_otro", "Otro", "operador", "sin-pin", None, 1, now_str),
             ]
             cur.executemany("""
             INSERT INTO usuarios (id, nombre, rol, pin_hash, password_hash, activo, creado_en)
