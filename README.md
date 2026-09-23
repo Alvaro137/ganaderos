@@ -4,33 +4,33 @@ Aplicación web progresiva (PWA) de alto rendimiento construida con principios d
 
 ```mermaid
 flowchart TD
-    subgraph SUB_CLIENTE["Dispositivo Móvil (Offline-First en Campo - ES Modules)"]
+    subgraph SUB_CLIENTE["Dispositivo Móvil - Offline-First en Campo"]
         UI["Interfaz PWA Modular<br>Censo, Fichas, Lotes, Supresiones, Movimientos"]
-        GRACEFUL["Degradación Grácil Reactiva (ADR 0008)<br>Detección Offline + Navegación Táctil Asistida"]
-        WASM["Motor SQLite WebAssembly<br>SQL.js en Navegador (100% Offline)"]
-        IDB[("IndexedDB (censo_storage)<br>Almacenamiento Persistente Local")]
+        GRACEFUL["Degradación Grácil Reactiva - ADR 0008<br>Detección Offline + Navegación Táctil Asistida"]
+        WASM["Motor SQLite WebAssembly<br>SQL.js en Navegador - 100% Offline"]
+        IDB[("IndexedDB - censo_storage<br>Almacenamiento Persistente Local")]
 
-        UI <-->|Consultas relacionales preparadas ?| WASM
+        UI <-->|Consultas relacionales preparadas| WASM
         UI -.->|Sin cobertura 4G / Sin servidor| GRACEFUL
         GRACEFUL -->|Acceso rápido a búsqueda y corrales| UI
         IDB <-->|Carga en frío y persistencia binaria| WASM
     end
 
-    subgraph SUB_SERVER["Servidor / API Gateway (FastAPI + Clean Architecture)"]
+    subgraph SUB_SERVER["Servidor / API Gateway - FastAPI + Clean Architecture"]
         API["FastAPI ASGI Router<br>src/server/app.py"]
         SCHEMAS["Esquemas Pydantic v2<br>src/server/schemas.py"]
         APP["Capa de Aplicación<br>CensoService, SanidadService, QueryBuilder"]
-        DOM["Capa de Dominio Puro<br>Animal, Parto, Receta, Crotal (VO)"]
+        DOM["Capa de Dominio Puro<br>Animal, Parto, Receta, Crotal"]
         INFRA["Capa de Infraestructura<br>SQLiteRepositories, LLMGateway"]
 
-        UI -.->|Conectividad online (Bearer HMAC-SHA256)| API
+        UI -.->|"Conectividad online (Bearer HMAC-SHA256)"| API
         API --> SCHEMAS
         API --> APP
         APP --> DOM
         APP <--> INFRA
     end
 
-    subgraph SUB_AI["Servicios de Inteligencia Artificial (Online)"]
+    subgraph SUB_AI["Servicios de Inteligencia Artificial"]
         GROQ["Groq Cloud<br>Whisper v3 Turbo + Llama 3.3 70B"]
         API <-->|Streaming de audio y síntesis explicativa| GROQ
     end
