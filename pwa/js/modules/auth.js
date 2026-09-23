@@ -108,7 +108,10 @@ function mostrarModalSesionUsuario(user) {
 
 const DEFAULT_USERS = [
   { id: "usr_admin", nombre: "Álvaro", rol: "admin" },
-  { id: "usr_paco", nombre: "Paco", rol: "vaquero" }
+  { id: "usr_jose", nombre: "Jose", rol: "operador" },
+  { id: "usr_amelia", nombre: "Amelia", rol: "operador" },
+  { id: "usr_alex", nombre: "Alex", rol: "operador" },
+  { id: "usr_otro", nombre: "Otro", rol: "operador" }
 ];
 
 export async function mostrarPantallaLogin(mensajeError = "") {
