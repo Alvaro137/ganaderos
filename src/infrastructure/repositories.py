@@ -1,13 +1,15 @@
+import hashlib
 import sqlite3
 from datetime import date, datetime
 from typing import List, Optional
 
-from src.domain.models import Animal, Parto, RecetaSanitaria
+from src.domain.models import Animal, Parto, RecetaSanitaria, Usuario
 from src.domain.repositories import (
     AnimalRepository,
     ExplotacionRepository,
     PartoRepository,
     RecetaRepository,
+    UsuarioRepository,
 )
 from src.domain.value_objects import Crotal, ExplotacionCEA, PeriodoSupresion
 
@@ -128,3 +130,85 @@ class SQLiteExplotacionRepository(ExplotacionRepository):
         cur = self.conn.cursor()
         cur.execute("SELECT * FROM explotaciones")
         return [dict(row) for row in cur.fetchall()]
+
+
+class SQLiteUsuarioRepository(UsuarioRepository):
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self.conn.row_factory = sqlite3.Row
+
+    def ensure_table_and_defaults(self) -> None:
+        """Crea la tabla usuarios si no existe y siembra operarios por defecto."""
+        cur = self.conn.cursor()
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            rol TEXT NOT NULL,
+            pin_hash TEXT NOT NULL,
+            password_hash TEXT,
+            activo INTEGER DEFAULT 1,
+            creado_en TEXT NOT NULL
+        )
+        """)
+        self.conn.commit()
+
+        cur.execute("SELECT COUNT(*) FROM usuarios")
+        count = cur.fetchone()[0]
+        if count == 0:
+            now_str = datetime.now().isoformat()
+
+            def _hash_pin(uid: str, pin: str) -> str:
+                return hashlib.sha256(f"{uid}:{pin}".encode()).hexdigest()
+
+            usuarios_defecto = [
+                ("usr_admin", "Álvaro (Administrador)", "admin", _hash_pin("usr_admin", "1234"), None, 1, now_str),
+                ("usr_paco", "Paco (Vaquero)", "vaquero", _hash_pin("usr_paco", "0000"), None, 1, now_str),
+                ("usr_vet", "Veterinario (Sanidad)", "veterinario", _hash_pin("usr_vet", "9999"), None, 1, now_str),
+            ]
+            cur.executemany("""
+            INSERT INTO usuarios (id, nombre, rol, pin_hash, password_hash, activo, creado_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, usuarios_defecto)
+            self.conn.commit()
+
+    def get_by_id(self, user_id: str) -> Optional[Usuario]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM usuarios WHERE id = ?", (user_id,))
+        row = cur.fetchone()
+        if row:
+            return self._map_to_domain(row)
+        return None
+
+    def list_active(self) -> List[Usuario]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM usuarios WHERE activo = 1 ORDER BY rol ASC, nombre ASC")
+        return [self._map_to_domain(row) for row in cur.fetchall()]
+
+    def create(self, usuario: Usuario) -> None:
+        cur = self.conn.cursor()
+        cur.execute("""
+        INSERT INTO usuarios (id, nombre, rol, pin_hash, password_hash, activo, creado_en)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            usuario.id,
+            usuario.nombre,
+            usuario.rol,
+            usuario.pin_hash,
+            usuario.password_hash,
+            1 if usuario.activo else 0,
+            usuario.creado_en or datetime.now().isoformat()
+        ))
+        self.conn.commit()
+
+    def _map_to_domain(self, row: sqlite3.Row) -> Usuario:
+        return Usuario(
+            id=row['id'],
+            nombre=row['nombre'],
+            rol=row['rol'],
+            pin_hash=row['pin_hash'],
+            password_hash=row['password_hash'],
+            activo=bool(row['activo']),
+            creado_en=row['creado_en']
+        )
+

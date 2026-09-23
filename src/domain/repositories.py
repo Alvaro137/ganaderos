@@ -1,6 +1,6 @@
 from typing import List, Optional, Protocol
 
-from src.domain.models import Animal, Parto, RecetaSanitaria
+from src.domain.models import Animal, Parto, RecetaSanitaria, Usuario
 
 
 class AnimalRepository(Protocol):
@@ -24,3 +24,14 @@ class RecetaRepository(Protocol):
 class ExplotacionRepository(Protocol):
     def list_all(self) -> List[dict]:
         ...
+
+class UsuarioRepository(Protocol):
+    def get_by_id(self, user_id: str) -> Optional[Usuario]:
+        ...
+
+    def list_active(self) -> List[Usuario]:
+        ...
+
+    def create(self, usuario: Usuario) -> None:
+        ...
+

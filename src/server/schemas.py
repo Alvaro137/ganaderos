@@ -8,12 +8,26 @@ class HealthResponse(BaseModel):
     service: str
     version: str
 
+class UserSummary(BaseModel):
+    id: str
+    nombre: str
+    rol: str
+
+class UsersListResponse(BaseModel):
+    ok: bool = True
+    users: List[UserSummary]
+
 class LoginRequest(BaseModel):
     password: str
+
+class PinLoginRequest(BaseModel):
+    user_id: str
+    pin: str
 
 class AuthTokenResponse(BaseModel):
     ok: bool
     token: Optional[str] = None
+    user: Optional[UserSummary] = None
     message: Optional[str] = None
     error: Optional[str] = None
 

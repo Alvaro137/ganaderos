@@ -53,22 +53,22 @@ def verificar_password(pwd: str) -> bool:
     return hmac.compare_digest(pwd, expected)
 
 
-def generar_auth_token(duracion_dias: int = 30) -> str:
-    """Emite un token Bearer firmado criptográficamente con HMAC-SHA256 y fecha de expiración."""
+def generar_auth_token(duracion_dias: int = 30, user_id: str = "usr_admin", rol: str = "admin") -> str:
+    """Emite un token Bearer firmado criptográficamente con HMAC-SHA256, rol y fecha de expiración."""
     expira_en = int(time.time()) + (duracion_dias * 86400)
     nonce = secrets.token_hex(16)
-    payload = f"{expira_en}:{nonce}"
+    payload = f"{expira_en}:{user_id}:{rol}:{nonce}"
     firma = hmac.new(_get_secret_key().encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{firma}"
 
 
-def validar_auth_token(token: Optional[str]) -> bool:
-    """Valida la firma HMAC y la vigencia temporal del token de sesión."""
+def extraer_datos_token(token: Optional[str]) -> Optional[dict]:
+    """Valida la firma HMAC y extrae expira_en, user_id y rol del token."""
     if not token:
-        return False
+        return None
     # Permitir token determinista reservado para suites E2E (Playwright)
     if token == "e2e-valid-auth-token":
-        return True
+        return {"user_id": "usr_admin", "rol": "admin", "expira_en": 9999999999}
     if "." in token:
         partes = token.split(".")
         if len(partes) == 2:
@@ -76,12 +76,26 @@ def validar_auth_token(token: Optional[str]) -> bool:
             firma_esperada = hmac.new(_get_secret_key().encode(), payload.encode(), hashlib.sha256).hexdigest()
             if hmac.compare_digest(firma, firma_esperada):
                 try:
-                    expira_en_str, _ = payload.split(":")
-                    expira_en = int(expira_en_str)
-                    return expira_en > int(time.time())
+                    subpartes = payload.split(":")
+                    if len(subpartes) == 4:
+                        expira_en_str, user_id, rol, _ = subpartes
+                        expira_en = int(expira_en_str)
+                        if expira_en > int(time.time()):
+                            return {"user_id": user_id, "rol": rol, "expira_en": expira_en}
+                    elif len(subpartes) == 2:
+                        # Retrocompatibilidad con tokens antiguos de 2 campos
+                        expira_en_str, _ = subpartes
+                        expira_en = int(expira_en_str)
+                        if expira_en > int(time.time()):
+                            return {"user_id": "usr_admin", "rol": "admin", "expira_en": expira_en}
                 except (ValueError, TypeError):
-                    return False
-    return False
+                    return None
+    return None
+
+
+def validar_auth_token(token: Optional[str]) -> bool:
+    """Valida la firma HMAC y la vigencia temporal del token de sesión."""
+    return extraer_datos_token(token) is not None
 
 # Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
 if importlib.util.find_spec("fastapi") is None:
@@ -118,6 +132,7 @@ from src.application.services import (
     CensoService,
     GenealogiaService,
     SanidadService,
+    UsuarioService,
 )
 from src.domain.exceptions import DomainError
 from src.domain.value_objects import Crotal
@@ -130,6 +145,7 @@ from src.infrastructure.repositories import (
     SQLiteAnimalRepository,
     SQLitePartoRepository,
     SQLiteRecetaRepository,
+    SQLiteUsuarioRepository,
 )
 from src.server.schemas import (
     AIModelResponse,
@@ -139,8 +155,11 @@ from src.server.schemas import (
     IntentRequest,
     IntentResponse,
     LoginRequest,
+    PinLoginRequest,
     SynthesizeRequest,
     SynthesizeResponse,
+    UsersListResponse,
+    UserSummary,
 )
 
 PWA_DIR = Path(__file__).resolve().parents[2] / "pwa"
@@ -156,32 +175,55 @@ def _buscar_archivo_sqlite() -> Optional[Path]:
     return None
 
 
+def _asegurar_esquema_usuarios(db_path: Path) -> None:
+    try:
+        w_conn = sqlite3.connect(str(db_path))
+        repo = SQLiteUsuarioRepository(w_conn)
+        repo.ensure_table_and_defaults()
+        w_conn.close()
+    except Exception as e:
+        logger.warning(f"No se pudo inicializar tabla usuarios en {db_path}: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicializa la conexión SQLite de lectura y repositorios de dominio."""
     db_file = _buscar_archivo_sqlite()
     conn = None
     if db_file:
+        _asegurar_esquema_usuarios(db_file)
         try:
             conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
             animal_repo = SQLiteAnimalRepository(conn)
             parto_repo = SQLitePartoRepository(conn)
             receta_repo = SQLiteRecetaRepository(conn)
+            usuario_repo = SQLiteUsuarioRepository(conn)
 
             app.state.db_conn = conn
             app.state.censo_service = CensoService(animal_repo)
             app.state.sanidad_service = SanidadService(receta_repo)
             app.state.genealogia_service = GenealogiaService(animal_repo, parto_repo)
+            app.state.usuario_service = UsuarioService(usuario_repo)
         except Exception as e:
             print(f"[Lifespan] Advertencia al abrir base de datos: {e}")
             app.state.db_conn = None
             app.state.censo_service = None
             app.state.sanidad_service = None
             app.state.genealogia_service = None
+            mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+            mem_repo = SQLiteUsuarioRepository(mem_conn)
+            mem_repo.ensure_table_and_defaults()
+            app.state.usuario_service = UsuarioService(mem_repo)
     else:
         app.state.db_conn = None
         app.state.censo_service = None
         app.state.sanidad_service = None
+        app.state.genealogia_service = None
+        mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+        mem_repo = SQLiteUsuarioRepository(mem_conn)
+        mem_repo.ensure_table_and_defaults()
+        app.state.usuario_service = UsuarioService(mem_repo)
+
     # Asistente IA está disponible tanto con BD local como en modo edge
     app.state.asistente_service = AsistenteService(
         intent_resolver=lambda p, h=None: resolver_intencion_usuario(p, h),
@@ -270,6 +312,30 @@ def get_asistente_service() -> AsistenteService:
     return service
 
 
+def get_usuario_service() -> UsuarioService:
+    service = getattr(app.state, "usuario_service", None)
+    if service is None:
+        db_file = _buscar_archivo_sqlite()
+        if db_file:
+            _asegurar_esquema_usuarios(db_file)
+            try:
+                conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
+                repo = SQLiteUsuarioRepository(conn)
+                service = UsuarioService(repo)
+            except Exception:
+                mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+                repo = SQLiteUsuarioRepository(mem_conn)
+                repo.ensure_table_and_defaults()
+                service = UsuarioService(repo)
+        else:
+            mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+            repo = SQLiteUsuarioRepository(mem_conn)
+            repo.ensure_table_and_defaults()
+            service = UsuarioService(repo)
+        app.state.usuario_service = service
+    return service
+
+
 # ============================================================
 # ENDPOINTS REST: ESTADO Y AUTENTICACIÓN
 # ============================================================
@@ -290,18 +356,57 @@ async def auth_verify(
     token = credentials.credentials if credentials and credentials.credentials else (
         request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth")
     )
-    is_valid = bool(token and validar_auth_token(token))
-    return {"ok": is_valid, "authenticated": is_valid}
+    datos = extraer_datos_token(token)
+    is_valid = bool(token and datos is not None)
+    user_info = None
+    if is_valid and datos:
+        user_service = get_usuario_service()
+        u = user_service.get_by_id(datos["user_id"])
+        if u:
+            user_info = UserSummary(id=u.id, nombre=u.nombre, rol=u.rol).model_dump()
+        else:
+            user_info = {"id": datos["user_id"], "nombre": datos["user_id"], "rol": datos["rol"]}
+    return {"ok": is_valid, "authenticated": is_valid, "user": user_info}
+
+
+@app.get("/api/auth/users", tags=["Autenticación"], response_model=UsersListResponse)
+async def list_auth_users():
+    """Devuelve la lista de usuarios activos para selección rápida de operador en campo."""
+    user_service = get_usuario_service()
+    users = user_service.list_active()
+    return UsersListResponse(
+        ok=True,
+        users=[UserSummary(id=u.id, nombre=u.nombre, rol=u.rol) for u in users],
+    )
 
 
 @app.post("/api/auth/login", tags=["Autenticación"], response_model=AuthTokenResponse)
 async def auth_login(req: LoginRequest, response: Response):
     """Autentica a un ganadero y emite un token Bearer seguro."""
     if verificar_password(req.password):
-        token = generar_auth_token(30)
+        token = generar_auth_token(30, user_id="usr_admin", rol="admin")
         response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
-        return {"ok": True, "token": token, "message": "Autenticación exitosa."}
+        admin_user = UserSummary(id="usr_admin", nombre="Álvaro (Administrador)", rol="admin")
+        return {"ok": True, "token": token, "user": admin_user, "message": "Autenticación exitosa."}
     raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+
+
+@app.post("/api/auth/login-pin", tags=["Autenticación"], response_model=AuthTokenResponse)
+async def auth_login_pin(req: PinLoginRequest, response: Response):
+    """Autentica a un operador de campo mediante PIN rápido."""
+    user_service = get_usuario_service()
+    usuario = user_service.autenticar_pin(req.user_id, req.pin)
+
+    if usuario:
+        token = generar_auth_token(30, user_id=usuario.id, rol=usuario.rol)
+        response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
+        return {
+            "ok": True,
+            "token": token,
+            "user": UserSummary(id=usuario.id, nombre=usuario.nombre, rol=usuario.rol),
+            "message": f"Sesión iniciada como {usuario.nombre}.",
+        }
+    raise HTTPException(status_code=401, detail="PIN incorrecto o usuario no encontrado.")
 
 
 # ============================================================
