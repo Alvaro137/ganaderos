@@ -100,8 +100,10 @@ Detalles técnicos:
 - Token: HMAC-SHA256 (`expira:user_id:rol:nonce.firma`), clave = `PWA_SECRET_KEY`
   (en `.env` de la OPi, valor aleatorio). **⚠️ El `PWA_AUTH_SECRET` del compose.yaml es un
   nombre muerto**: el código usa `PWA_SECRET_KEY`. Pendiente de arreglar en el repo.
-- Usuarios sembrados (solo si la tabla `usuarios` está vacía): `usr_admin` (Álvaro) y
-  `usr_paco` (Paco). `usr_vet` fue eliminado del seed.
+- Usuarios sembrados (solo si la tabla `usuarios` está vacía): `usr_admin` (Álvaro, admin)
+  + `usr_jose`, `usr_amelia`, `usr_alex`, `usr_otro` (rol `operador`, todos iguales).
+  Con `pin_hash='sin-pin'` → el endpoint legado de PIN queda inoperante para estos usuarios.
+  `usr_paco` y `usr_vet` fueron eliminados del seed.
 - Frontend: `pwa/js/modules/auth.js` — pantalla única: tarjetas de operador + formulario
   de contraseña siempre visible; 2º clic en tarjeta = deseleccionar. Respaldo offline con
   caché de usuarios (`campo_pwa_users_cache`).
@@ -136,12 +138,17 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
 5. Tras pytest, restaurar `pwa/ganaderos_demo.sqlite` (ver §4).
 6. El `.env` del repo local NO se lee por IA por petición del dueño (contiene claves).
    `cargar_env()` / `_cargar_env_file()` es el mecanismo del código.
+7. **El CWD de la shell se resetea entre comandos**: si se envían varios comandos separados,
+   cada uno debe empezar con `Set-Location` a la ruta absoluta del repo.
 
 ## 8. Estado y pendientes (2026-09-23)
 
 - [x] Login KISS implementado (rama `feature/operator-only-login`, merges en develop/master).
 - [x] `PWA_SECRET_KEY` aleatoria en el `.env` de la OPi.
 - [ ] **Reiniciar `ganaderos.service` en la OPi** para activar el código nuevo (pendiente del dueño).
+- [ ] **Resincronizar la tabla `usuarios` en la BD de la OPi** (la histórica tiene los usuarios
+  RBAC antiguos: Álvaro (Administrador), Paco (Vaquero), Veterinario). Ver snippet en la
+  conversación del 2026-09-23 o regenerar con los 5 del seed (§5).
 - [ ] Limpiar `usr_vet` de la BD de la OPi (ver §5) si aparecen 3 tarjetas.
 - [ ] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` (hoy pasa `PWA_AUTH_SECRET`, muerto).
 - [ ] Gatear el backdoor `e2e-valid-auth-token` por entorno.

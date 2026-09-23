@@ -180,21 +180,21 @@ test.describe('Autenticación y Control de Acceso', () => {
     await page.goto('./');
 
     // Tarjetas de operador visibles, sin badges de rol ni teclado PIN
-    const opCardPaco = page.locator('.operator-card[data-user-id="usr_paco"]');
-    await expect(opCardPaco).toBeVisible({ timeout: 15000 });
+    const opCardJose = page.locator('.operator-card[data-user-id="usr_jose"]');
+    await expect(opCardJose).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.operator-card').first()).not.toContainText(/rol:/i);
     await expect(page.locator('.pin-keypad-btn')).toHaveCount(0);
 
-    // Elegir a Paco e introducir la contraseña compartida de la explotación
-    await opCardPaco.click();
+    // Elegir a Jose e introducir la contraseña compartida de la explotación
+    await opCardJose.click();
     const authInput = page.locator('#input-auth-pass');
     await authInput.fill('mvp-testing');
     await page.locator('#btn-submit-auth').click();
 
-    // Entra al censo identificado como Paco (atribución para futuro merge de BDs)
+    // Entra al censo identificado como Jose (atribución para futuro merge de BDs)
     await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
     const headerUser = page.locator('#header-user-name');
     await expect(headerUser).toBeVisible({ timeout: 5000 });
-    await expect(headerUser).toHaveText(/Paco/i);
+    await expect(headerUser).toHaveText(/Jose/i);
   });
 });
