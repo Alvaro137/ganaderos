@@ -101,3 +101,16 @@ class CompraAlimento:
     proveedor: str
     pagado: bool = True
     id: Optional[int] = None
+
+
+@dataclass
+class Usuario:
+    """Entidad que representa un usuario u operario del sistema ganadero."""
+    id: str
+    nombre: str
+    rol: str  # 'admin', 'vaquero', 'veterinario'
+    pin_hash: str
+    password_hash: Optional[str] = None
+    activo: bool = True
+    creado_en: Optional[str] = None
+
