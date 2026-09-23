@@ -1,13 +1,16 @@
+import hashlib
+import hmac
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, List, Optional
 
 from src.application.query_builder import QueryResult
-from src.domain.models import Animal, Parto, RecetaSanitaria
+from src.domain.models import Animal, Parto, RecetaSanitaria, Usuario
 from src.domain.repositories import (
     AnimalRepository,
     PartoRepository,
     RecetaRepository,
+    UsuarioRepository,
 )
 
 
@@ -106,3 +109,26 @@ class AsistenteService:
             query_result=query_result,
             offline_mode=offline_mode,
         )
+
+
+class UsuarioService:
+    """Servicio de aplicación para gestión y autenticación rápida de operarios."""
+
+    def __init__(self, usuario_repo: UsuarioRepository):
+        self.usuario_repo = usuario_repo
+
+    def list_active(self) -> List[Usuario]:
+        return self.usuario_repo.list_active()
+
+    def get_by_id(self, user_id: str) -> Optional[Usuario]:
+        return self.usuario_repo.get_by_id(user_id)
+
+    def autenticar_pin(self, user_id: str, pin: str) -> Optional[Usuario]:
+        usuario = self.usuario_repo.get_by_id(user_id)
+        if not usuario or not usuario.activo:
+            return None
+        pin_hash = hashlib.sha256(f"{user_id}:{pin}".encode()).hexdigest()
+        if hmac.compare_digest(usuario.pin_hash, pin_hash):
+            return usuario
+        return None
+

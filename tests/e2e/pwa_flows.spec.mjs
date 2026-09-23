@@ -167,4 +167,36 @@ test.describe('Autenticación y Control de Acceso', () => {
     // Debe autenticar y desbloquear el censo
     await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
   });
+
+  test('07. Pantalla de Acceso con PIN de Operador y Selector de Sesión', async ({ page }) => {
+    // Abrir app limpia
+    await page.goto('./');
+    await page.evaluate(() => {
+      localStorage.clear();
+    });
+    await page.goto('./');
+
+    // Debe mostrar tarjetas de operadores de campo
+    const opCardPaco = page.locator('.operator-card[data-user-id="usr_paco"]');
+    await expect(opCardPaco).toBeVisible({ timeout: 15000 });
+
+    // Clic en Paco
+    await opCardPaco.click();
+
+    // Debe mostrar teclado PIN táctil
+    const keypadZero = page.locator('.pin-keypad-btn[data-digit="0"]');
+    await expect(keypadZero).toBeVisible({ timeout: 5000 });
+
+    // Introducir PIN de Paco '0000'
+    await keypadZero.click();
+    await keypadZero.click();
+    await keypadZero.click();
+    await keypadZero.click();
+
+    // Debe autenticar, mostrar el censo y badge de Paco en la cabecera
+    await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
+    const headerUser = page.locator('#header-user-name');
+    await expect(headerUser).toBeVisible({ timeout: 5000 });
+    await expect(headerUser).toHaveText(/Paco/i);
+  });
 });
