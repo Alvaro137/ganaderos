@@ -140,19 +140,26 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
    `cargar_env()` / `_cargar_env_file()` es el mecanismo del código.
 7. **El CWD de la shell se resetea entre comandos**: si se envían varios comandos separados,
    cada uno debe empezar con `Set-Location` a la ruta absoluta del repo.
+8. **BD de PRODUCCIÓN en la OPi**: `pwa/ganaderos_campo.sqlite` (export real, ~1.6 MB, NO
+   trackeada por git). La `ganaderos_demo.sqlite` trackeada es solo para tests/demos.
+   No confundir al ejecutar SQL directo sobre producción. En paralelo con 5: si pytest
+   ensucia el demo, restaurar con `git checkout --`, pero NUNCA tocar así la BD real de la OPi.
+9. **Comandos git secuenciales**: si se lanzan varios git (checkout/merge/push) en el mismo
+   lote, ejecutarlos como comandos INDEPENDIENTES y secuenciales; en paralelo compiten
+   (locks "another git process", pushes perdidos, merges a rama equivocada).
 
-## 8. Estado y pendientes (2026-09-23)
+## 8. Estado y pendientes (2026-09-24)
 
-- [x] Login KISS implementado (rama `feature/operator-only-login`, merges en develop/master).
+- [x] Login KISS desplegado y ACTIVO en producción (verificado: `POST /api/auth/login`
+  con `user_id` devuelve al operador elegido).
 - [x] `PWA_SECRET_KEY` aleatoria en el `.env` de la OPi.
-- [ ] **Reiniciar `ganaderos.service` en la OPi** para activar el código nuevo (pendiente del dueño).
-- [ ] **Resincronizar la tabla `usuarios` en la BD de la OPi** (la histórica tiene los usuarios
-  RBAC antiguos: Álvaro (Administrador), Paco (Vaquero), Veterinario). Ver snippet en la
-  conversación del 2026-09-23 o regenerar con los 5 del seed (§5).
-- [ ] Limpiar `usr_vet` de la BD de la OPi (ver §5) si aparecen 3 tarjetas.
+- [x] Roster de operadores: Álvaro (admin) + Jose, Amelia, Alex, Otro (rol único `operador`).
+  Desplegado y **resincronizado en la BD real** de la OPi (`ganaderos_campo.sqlite`; backup
+  en `/tmp/ganaderos_campo_backup_*.sqlite`). `usr_paco` y `usr_vet` eliminados de producción.
 - [ ] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` (hoy pasa `PWA_AUTH_SECRET`, muerto).
 - [ ] Gatear el backdoor `e2e-valid-auth-token` por entorno.
-- [ ] (Opcional) Eliminar endpoint legado `/api/auth/login-pin` y su schema.
+- [ ] (Opcional) Eliminar endpoint legado `/api/auth/login-pin` y su schema (ya inoperante
+  con `pin_hash='sin-pin'`).
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] (Idea del dueño) UI/UX "field-first": design system propio de alto contraste para sol
   directo, touch targets ≥48px, CrotalBadge con 4 dígitos grandes. Evaluar v0/Stitch con
