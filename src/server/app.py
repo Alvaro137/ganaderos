@@ -134,6 +134,7 @@ from src.application.services import (
     SanidadService,
     UsuarioService,
 )
+from src.application.sync_service import SyncError, SyncService
 from src.domain.exceptions import DomainError
 from src.domain.value_objects import Crotal
 from src.infrastructure.llm_gateway import (
@@ -156,6 +157,8 @@ from src.server.schemas import (
     IntentResponse,
     LoginRequest,
     PinLoginRequest,
+    SyncPushRequest,
+    SyncStatusResponse,
     SynthesizeRequest,
     SynthesizeResponse,
     UsersListResponse,
@@ -334,6 +337,35 @@ def get_usuario_service() -> UsuarioService:
             service = UsuarioService(repo)
         app.state.usuario_service = service
     return service
+
+
+def get_sync_service() -> Optional[SyncService]:
+    """Resuelve la BD maestra de sincronización (la misma que se sirve a los móviles)."""
+    service = getattr(app.state, "sync_service", None)
+    if service is None:
+        db_file = _buscar_archivo_sqlite()
+        if db_file is None:
+            return None
+        service = SyncService(db_file)
+        app.state.sync_service = service
+    return service
+
+
+def _autenticacion_op(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials],
+) -> dict:
+    """Extrae y valida el token del operador (Bearer, X-Auth-Token o cookie)."""
+    token = credentials.credentials if credentials and credentials.credentials else (
+        request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth")
+    )
+    datos = extraer_datos_token(token)
+    if not datos:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión no válida. Identifícate para sincronizar.",
+        )
+    return datos
 
 
 # ============================================================
@@ -608,6 +640,134 @@ async def ai_transcribe(file: UploadFile = File(...)):
         except httpx.HTTPError as e:
             logger.error(f"[AI Transcribe] Error HTTP de transporte: {e}")
             raise HTTPException(status_code=502, detail="Error de comunicación con el servicio de voz.")
+
+
+# ============================================================
+# ENDPOINTS REST: SINCRONIZACIÓN OFFLINE-FIRST (hub en la OPi)
+# ============================================================
+
+
+@app.get("/api/sync/status", tags=["Sincronización"], response_model=SyncStatusResponse)
+async def sync_status(
+    request: Request,
+    desde: Optional[int] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Devuelve el epoch de la BD maestra consolidada.
+
+    El móvil compara `desde` (su último epoch conocido) con el actual: si
+    hay_novedades=True, debe descargar la BD con url_pull para actualizar su copia.
+    """
+    _autenticacion_op(request, credentials)
+    service = get_sync_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
+    estado = service.estado()
+    if desde is not None:
+        estado["hay_novedades"] = estado["epoch"] > desde
+    return estado
+
+
+@app.post("/api/sync/push", tags=["Sincronización"])
+async def sync_push(
+    request: Request,
+    req: SyncPushRequest,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Sube los registros de campo pendientes de un dispositivo (append-only).
+
+    Idempotente por UUID: si el dispositivo reintenta tras un timeout, los cambios
+    ya integrados se marcan como duplicados y no se duplican en la BD.
+    """
+    datos = _autenticacion_op(request, credentials)
+    service = get_sync_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
+    try:
+        resultado = service.aplicar_cambios(
+            device_id=req.device_id,
+            operador=datos["user_id"],
+            changes=[c.model_dump() for c in req.changes],
+        )
+    except SyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "ok": True,
+        **resultado,
+        "message": (
+            f"{len(resultado['aceptados']) - len(resultado['duplicados'])} cambio(s) "
+            f"integrado(s). Epoch del hub: {resultado['epoch']}."
+        ),
+    }
+
+
+@app.get("/api/sync/historial", tags=["Sincronización"])
+async def sync_historial(
+    request: Request,
+    limite: int = 50,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Últimos registros de campo integrados (auditoría: quién añadió qué y cuándo)."""
+    _autenticacion_op(request, credentials)
+    service = get_sync_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
+    return {"ok": True, "registros": service.historial(limite=limite)}
+
+
+@app.post("/api/sync/import", tags=["Sincronización"])
+async def sync_import(
+    request: Request,
+    file: UploadFile = File(...),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Importa la BD de censo recién exportada por el PC y la consolida.
+
+    Solo el propietario (usr_admin) puede importar. El histórico de registros de
+    campo de los móviles se reintegra SIEMPRE sobre el censo nuevo (nunca se pierde).
+    """
+    datos = _autenticacion_op(request, credentials)
+    if datos["user_id"] != "usr_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el propietario puede importar el censo actualizado.",
+        )
+    service = get_sync_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
+
+    MAX_IMPORT_BYTES = 25 * 1024 * 1024  # 25 MB (la maestra real ronda 2-5 MB)
+    destino_tmp = service.db_path.with_suffix(".upload_tmp")
+    try:
+        recibido = 0
+        with destino_tmp.open("wb") as f:
+            while chunk := await file.read(1024 * 1024):
+                recibido += len(chunk)
+                if recibido > MAX_IMPORT_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="La BD importada supera el límite de 25 MB.",
+                    )
+                f.write(chunk)
+        if recibido == 0:
+            raise HTTPException(status_code=400, detail="Fichero vacío.")
+        try:
+            resumen = service.importar_bd_actualizada(destino_tmp)
+        finally:
+            if destino_tmp.exists():
+                destino_tmp.unlink()
+    except SyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.info(
+        f"[Sync Import] Censo consolidado por {datos['user_id']}: epoch {resumen['epoch']}, "
+        f"{resumen.get('importado', {}).get('registros_campo_reintegrados', 0)} registros de campo reintegrados."
+    )
+    return {
+        "ok": True,
+        "message": "Censo actualizado consolidado. Los registros de campo se han conservado.",
+        **resumen,
+    }
 
 
 # ============================================================
