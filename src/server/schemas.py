@@ -77,3 +77,24 @@ class AnimalResponse(BaseModel):
     estado: str
     corral: Optional[str]
     edad_anios: float
+
+class SyncChange(BaseModel):
+    uuid: str = Field(min_length=8, max_length=64)
+    tipo: str
+    crotal: Optional[str] = None
+    ts_dispositivo: Optional[str] = None
+    payload: Optional[Dict[str, Any]] = None
+
+class SyncPushRequest(BaseModel):
+    device_id: str = Field(min_length=4, max_length=64)
+    changes: List[SyncChange] = Field(default_factory=list)
+
+class SyncStatusResponse(BaseModel):
+    ok: bool = True
+    epoch: int
+    actualizado_en: Optional[str] = None
+    registros_campo: int = 0
+    fecha_exportacion: Optional[str] = None
+    existe_bd: bool = True
+    hay_novedades: Optional[bool] = None
+    url_pull: str = "/api/database"
