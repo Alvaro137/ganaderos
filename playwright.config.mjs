@@ -43,6 +43,9 @@ export default defineConfig({
     command: 'python -m uvicorn src.server.app:app --host 127.0.0.1 --port 8089',
     port: 8089,
     timeout: 15 * 1000,
-    reuseExistingServer: !process.env.CI
+    reuseExistingServer: !process.env.CI,
+    env: {
+      APP_ENV: 'e2e'
+    }
   }
 });
