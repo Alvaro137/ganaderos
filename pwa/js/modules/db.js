@@ -88,3 +88,11 @@ export function getMetadata() {
   return db ? db.meta : {};
 }
 
+export async function registrarPartoOptimista(datos) {
+  const db = getDB();
+  if (!db) {
+    throw new Error("Base de datos no inicializada.");
+  }
+  return await db.registrarPartoOptimista(datos);
+}
+
