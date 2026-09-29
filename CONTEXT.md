@@ -178,24 +178,32 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - Timeout defensivo de 1.5s en transacciones de IndexedDB.
   - Renderizado instantáneo de la pantalla de login desde caché/defaults sin bloquearse esperando a la red.
   - Service Worker v25.
-- [ ] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` (hoy pasa `PWA_AUTH_SECRET`, muerto).
+- [x] **PR #17 — Épica Campo (Fase 1 y 2.1) + Reglas de Oro:**
+  - **Fase 1 completada (Motor Outbox Local-First):**
+    - Módulo `pwa/js/modules/outbox.js`: store `GanaderosMutacionesOffline` en IndexedDB con soporte para tipos de eventos auditados (`parto`, `movimiento`, `tratamiento`, `pesaje`, `nota`), generación de UUID, status `pending`/`synced` y modal de inspección táctil de la cola.
+    - Badge visual en header (`🟢 Al día` / `🟡 N pendientes de sincronizar`) y botón de sincronización manual.
+    - Sincronización transparente con el endpoint `/api/sync/push` de la Orange Pi.
+  - **Fase 2.1 completada (Registro de Parto y Nacimiento Offline):**
+    - Modal táctil `pwa/js/modules/views/birth_modal.js` con touch-targets de ≥48px.
+    - Búsqueda táctil de madres reconociendo `Vaca`, `Hembra`, `Hembras` y `H`.
+    - Botón de acceso directo en cabecera del buscador y en la ficha técnica de vacas activas.
+    - Persistencia optimista instantánea en SQLite WASM (`db_client.js`) que inserta el parto y la cría en el censo en 0 ms.
+    - Service Worker v26.
+  - **Fase 3 completada (Endpoint de Ingesta y Auditoría en Orange Pi):**
+    - `POST /api/sync/push` y `GET /api/sync/estado`: tabla append-only `eventos_campo` en SQLite del hub con epoch incremental, idempotencia estricta por UUID y validación de tipos.
+  - **Tests y Reglas de Oro:**
+    - Test 08 E2E en Playwright validando flujo completo de parto y outbox.
+    - En `AGENTS.md`: Prohibición estricta de push directo a `master` (siempre `develop` -> PR -> merge) y regla de `sudo` sin adivinar claves ni ejecución autónoma.
+- [x] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` y `PWA_PASSWORD=${PWA_PASSWORD:-ganaderos}` (eliminada variable obsoleta `PWA_AUTH_SECRET`).
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
-- [ ] **Siguiente Gran Épica: Introducción de datos en campo (Local-First Offline Writes & Conciliación con Access)**
-  - **Fase 1: Motor Outbox Local-First en el móvil**:
-    - Tabla/store `mutaciones_pendientes` en IndexedDB (`uuid`, `tipo_evento`, `payload_json`, `user_id`, `created_at`, `status`).
-    - Mutaciones optimistas en SQLite WASM local (`this.db`) para que la UI refleje el nuevo dato de inmediato sin conexión.
-    - Badge visual en header (`🟢 Al día` / `🟡 N pendientes de sincronizar`).
-  - **Fase 2: Formularios de Campo "Touch-Friendly"**:
-    - 2.1: Registro de Parto/Nacimiento (búsqueda de madre por 4 dígitos, sexo M/H, raza, fecha, crotal cría provisional u oficial).
-    - 2.2: Cambio de Lote/Ubicación (origen -> destino, ej. Dueña -> Cebadero).
-    - 2.3: Registro de Tratamiento Sanitario (crotal, fármaco de la lista oficial, dosis, cálculo automático de fecha fin de supresión de carne).
-  - **Fase 3: Endpoint de Ingesta y Auditoría en Orange Pi**:
-    - `POST /api/sync/mutations`: recibe lote de mutaciones pendientes firmado con el Bearer token del operador.
-    - Tabla en SQLite OPi: `eventos_campo` (trazabilidad inmutable con id, timestamp_servidor, operador_id, tipo, datos_json, estado_conciliacion).
-    - Inserción/actualización en las tablas canónicas de SQLite en la OPi (`partos`, `animales`, `tratamientos`).
-    - Respuesta con IDs confirmados para que el cliente purgue el Outbox.
+- [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
+  - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
+    - Modal táctil para mover animales o grupos entre cercados (ej. de *DUEÑA* a *CEBADERO* o *RIVERA*).
+    - Actualización inmediata del campo `corral` en SQLite local + mutación de tipo `movimiento` en Outbox.
+  - **Fase 2.3: Registro de Tratamiento Sanitario en Campo**:
+    - Ficha de aplicación de fármaco de la lista oficial, cálculo de fecha fin de supresión de carne y alerta visual sanitaria.
   - **Fase 4: Pipeline de Conciliación con Access (`bdlibro.mdb`)**:
-    - Script bidireccional en PC (`scripts/sync_access_merge.py`): extrae eventos no conciliados de la OPi, los inserta en `bdlibro.mdb` (respetando autonuméricos de Access) y marca `conciliado_en_access=1`.
+    - Script bidireccional en PC (`scripts/sync_access_merge.py`): extrae eventos no conciliados de la OPi vía API (`/api/sync/eventos`), los inserta en `C:\GANADEROS 10\bdlibro.mdb` (respetando autonuméricos de Access) y marca `conciliado_en_access=1`.
     - Regeneración y despliegue del censo consolidado.
 
 ## 9. Glosario rápido
