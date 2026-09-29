@@ -144,6 +144,72 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
     await context.setOffline(false);
   });
 
+  test('08. Registro de Parto en Campo y Outbox Local', async ({ page }) => {
+    // 1. Abrir modal desde el botón de la cabecera del buscador
+    const btnPartoHeader = page.locator('#btn-nuevo-parto-header');
+    await expect(btnPartoHeader).toBeVisible();
+    await btnPartoHeader.click();
+
+    // 2. Verificar que el modal de parto está visible en pantalla
+    const modalParto = page.locator('#modal-registro-parto');
+    await expect(modalParto).toBeVisible();
+    await expect(modalParto).toContainText('Registrar Parto');
+
+    // 3. Buscar una vaca madre (ej: "7252")
+    const inputMadre = page.locator('#input-buscar-madre');
+    await inputMadre.fill('7252');
+
+    // Debe desplegar sugerencias
+    const sugerenciaMadre = page.locator('.opcion-madre').first();
+    await expect(sugerenciaMadre).toBeVisible({ timeout: 8000 });
+    await sugerenciaMadre.click();
+
+    // Comprobar que la madre quedó seleccionada
+    const madreLabel = page.locator('#label-madre-4');
+    await expect(madreLabel).toHaveText('7252');
+
+    // 4. Seleccionar sexo Macho (M)
+    const btnSexoM = page.locator('#btn-sexo-m');
+    await btnSexoM.click();
+
+    // Rellenar crotal cría opcional y notas
+    await page.locator('#input-cria-crotal').fill('C-7252-E2E');
+    await page.locator('#input-incidencias').fill('Parto de prueba E2E automatizada');
+
+    // 5. Guardar parto
+    const btnGuardar = page.locator('#btn-guardar-parto');
+    await btnGuardar.click();
+
+    // 6. El modal debe cerrarse y mostrar toast de éxito
+    await expect(modalParto).toBeHidden({ timeout: 8000 });
+    const toast = page.locator('#pwa-toast');
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(/parto registrado/i);
+
+    // 7. El badge de sincronización debe ser visible
+    const badgeSync = page.locator('#btn-sync-badge');
+    await expect(badgeSync).toBeVisible();
+
+    // 8. Abrir ficha de la madre y verificar que el parto y la cría aparecen en el historial
+    await page.locator('#txt-busqueda').fill('7252');
+    const cowCard = page.locator('.animal-card[data-crotal*="7252"]').first();
+    await cowCard.click();
+
+    const detailCard = page.locator('.detail-card');
+    await expect(detailCard).toBeVisible();
+    await expect(detailCard).toContainText('Historial de Partos y Crías');
+
+    // 9. Comprobar que desde la ficha de la vaca, el botón Registrar Parto abre el modal con la vaca preseleccionada
+    const btnPartoFicha = page.locator('[data-action="registrar-parto"]');
+    await expect(btnPartoFicha).toBeVisible();
+    await btnPartoFicha.click();
+    await expect(modalParto).toBeVisible();
+    await expect(page.locator('#label-madre-4')).toHaveText('7252');
+    // Cerrar con cancelar
+    await page.locator('#btn-cancelar-parto').click();
+    await expect(modalParto).toBeHidden();
+  });
+
 });
 
 test.describe('Autenticación y Control de Acceso', () => {
@@ -198,3 +264,4 @@ test.describe('Autenticación y Control de Acceso', () => {
     await expect(headerUser).toHaveText(/Jose/i);
   });
 });
+
