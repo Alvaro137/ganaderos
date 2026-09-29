@@ -285,23 +285,22 @@ export async function mostrarPantallaLogin(mensajeError = "") {
   const btnUser = document.getElementById("btn-header-user");
   if (btnUser) btnUser.style.display = "none";
 
-  // Cargar operadores activos desde la API (con caché local de respaldo)
+  // Cargar operadores activos desde caché o valores por defecto para renderizar inmediatamente sin esperas
   let users = DEFAULT_USERS;
-  try {
-    const resp = await fetch("./api/auth/users");
+  const cached = localStorage.getItem("campo_pwa_users_cache");
+  if (cached) {
+    try { users = JSON.parse(cached); } catch (_) {}
+  }
+
+  // Refrescar en segundo plano para próximas aperturas
+  fetch("./api/auth/users").then(async (resp) => {
     if (resp.ok) {
       const data = await resp.json();
       if (data.ok && Array.isArray(data.users) && data.users.length > 0) {
-        users = data.users;
-        localStorage.setItem("campo_pwa_users_cache", JSON.stringify(users));
+        localStorage.setItem("campo_pwa_users_cache", JSON.stringify(data.users));
       }
     }
-  } catch (e) {
-    const cached = localStorage.getItem("campo_pwa_users_cache");
-    if (cached) {
-      try { users = JSON.parse(cached); } catch (_) {}
-    }
-  }
+  }).catch(() => {});
 
   let operadorSeleccionado = null; // null => el backend usa el operador por defecto
 
