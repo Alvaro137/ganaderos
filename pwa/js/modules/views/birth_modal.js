@@ -216,6 +216,9 @@ function setupEventListeners(modal) {
   const btnCancelar = modal.querySelector("#btn-cancelar-parto");
   if (btnCerrar) btnCerrar.addEventListener("click", cerrar);
   if (btnCancelar) btnCancelar.addEventListener("click", cerrar);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) cerrar();
+  });
 
   // Toggle Sexo
   const btnSexoH = modal.querySelector("#btn-sexo-h");
@@ -276,8 +279,12 @@ function setupEventListeners(modal) {
       }
 
       debounceTimer = setTimeout(() => {
-        // Buscar solo hembras activas
-        const candidatos = buscarAnimales(query, true, 8).filter((a) => a.sexo === "H" || !a.sexo);
+        // Buscar solo hembras activas (Vaca, Hembras, H)
+        const candidatos = buscarAnimales(query, true, 8).filter((a) => {
+          if (!a.sexo) return true;
+          const s = String(a.sexo).trim().toUpperCase();
+          return s === "H" || s.startsWith("HEMB") || s.startsWith("VAC");
+        });
         if (candidatos.length === 0) {
           dropdown.innerHTML = '<div style="padding: 12px; color: #888; font-size: 0.88rem;">No se encontraron vacas activas</div>';
           dropdown.style.display = "block";
