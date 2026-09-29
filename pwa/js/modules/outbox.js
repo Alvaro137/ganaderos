@@ -485,6 +485,9 @@ export async function mostrarModalOutbox() {
 
   const btnCerrar = modal.querySelector("#btn-cerrar-modal-outbox");
   if (btnCerrar) btnCerrar.addEventListener("click", cerrar);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) cerrar();
+  });
 
   const btnSync = modal.querySelector("#btn-sincronizar-outbox-ahora");
   const feedback = modal.querySelector("#outbox-sync-feedback");

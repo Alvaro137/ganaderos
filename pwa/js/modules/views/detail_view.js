@@ -18,6 +18,7 @@ import {
 } from '../config.js';
 import { obtenerDetalleAnimal, obtenerAnimalesDeLote } from '../db.js';
 import { renderVistaAnimales } from './cattle_view.js';
+import { abrirModalRegistroParto } from './birth_modal.js';
 
 function adjuntarEventosDetalle(contenedor) {
   if (!contenedor) return;
@@ -39,12 +40,11 @@ function adjuntarEventosDetalle(contenedor) {
   contenedor.querySelectorAll('[data-action="registrar-parto"]').forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const crotal = btn.dataset.madreCrotal;
-      const c4 = btn.dataset.madre4;
-      const raza = btn.dataset.madreRaza;
-      import('./birth_modal.js').then((m) => {
-        m.abrirModalRegistroParto({ madreCrotal: crotal, madre4: c4, madreRaza: raza });
-      });
+      e.preventDefault();
+      const crotal = btn.getAttribute("data-madre-crotal") || btn.dataset.madreCrotal;
+      const c4 = btn.getAttribute("data-madre-4") || btn.dataset.madre4;
+      const raza = btn.getAttribute("data-madre-raza") || btn.dataset.madreRaza;
+      abrirModalRegistroParto({ madreCrotal: crotal, madre4: c4, madreRaza: raza });
     });
   });
 }
@@ -332,6 +332,9 @@ export function generarHtmlDetalleAnimal(animal) {
     `;
   }
 
+  const esHembra = !animal.sexo || ['H', 'V'].includes(animal.sexo.trim().toUpperCase()[0]);
+  const descSexo = (animal.sexo === 'M' || animal.sexo === 'Machos') ? 'Macho' : esHembra ? 'Hembra' : escapeHtml(animal.sexo || 'N/D');
+
   return `
     <div class="detail-card">
       <button class="btn-back-link" data-action="back">
@@ -358,7 +361,7 @@ export function generarHtmlDetalleAnimal(animal) {
 
         <div>
           <div class="spec-label">Raza y Sexo</div>
-          <div class="spec-val">${escapeHtml(animal.raza || "")} (${animal.sexo === 'M' ? 'Macho' : animal.sexo === 'H' ? 'Hembra' : escapeHtml(animal.sexo || 'N/D')})</div>
+          <div class="spec-val">${escapeHtml(animal.raza || "")} (${descSexo})</div>
         </div>
 
         <div>
@@ -401,7 +404,7 @@ export function generarHtmlDetalleAnimal(animal) {
 
       <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center;">
         <span>Historial de Partos y Crías (${animal.partos ? animal.partos.length : 0})</span>
-        ${animal.sexo === 'H' && esActivo ? `
+        ${esHembra && esActivo ? `
           <button data-action="registrar-parto" data-madre-crotal="${escapeHtml(animal.crotal)}" data-madre-4="${escapeHtml(animal.crotal_4)}" data-madre-raza="${escapeHtml(animal.raza || '')}" style="background: #10b981; color: #ffffff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">
             <span>➕ Registrar Parto</span>
           </button>
