@@ -95,6 +95,11 @@ class TestFastAPI(unittest.TestCase):
         self.assertEqual(default_resp.status_code, 200)
         self.assertEqual(default_resp.json()["user"]["id"], "usr_admin")
 
+        # 2b. Login con 'ganaderos'
+        ganaderos_resp = self.client.post("/api/auth/login", json={"password": "ganaderos"})
+        self.assertEqual(ganaderos_resp.status_code, 200)
+        self.assertEqual(ganaderos_resp.json()["user"]["id"], "usr_admin")
+
         # 3. Verificación de token legítimo
         headers = {"Authorization": f"Bearer {token}"}
         verify_resp = self.client.get("/api/auth/verify", headers=headers)

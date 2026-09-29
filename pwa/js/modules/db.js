@@ -27,10 +27,24 @@ export function ejecutarConsulta(sql, params = []) {
   return db.ejecutarQuery(sql, params);
 }
 
-export function buscarAnimales(termino = "", soloActivos = true) {
+export function contarAnimales(termino = "", soloActivos = true) {
+  const db = getDB();
+  if (!db) return 0;
+  return db.contarAnimales(termino, soloActivos);
+}
+
+export function buscarAnimales(termino = "", soloActivos = true, limite = 50) {
   const db = getDB();
   if (!db) return [];
-  return db.buscar(termino, soloActivos);
+  return db.buscar(termino, soloActivos, limite);
+}
+
+export async function sincronizarBaseDatosAhora(authToken = null) {
+  const db = getDB();
+  if (!db) {
+    throw new Error("Base de datos no inicializada.");
+  }
+  return await db.sincronizarAhora(authToken);
 }
 
 export function obtenerDetalleAnimal(crotal) {

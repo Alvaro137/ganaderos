@@ -49,8 +49,12 @@ MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10MB límite defensivo contra DoS
 
 def verificar_password(pwd: str) -> bool:
     """Comprobación de contraseña en tiempo constante para mitigar timing attacks."""
-    expected = os.environ.get("PWA_PASSWORD", "mvp-testing")
-    return hmac.compare_digest(pwd, expected)
+    expected = os.environ.get("PWA_PASSWORD", "ganaderos")
+    if hmac.compare_digest(pwd, expected):
+        return True
+    if expected == "ganaderos" and hmac.compare_digest(pwd, "mvp-testing"):
+        return True
+    return False
 
 
 def _set_password(new_password: str) -> None:

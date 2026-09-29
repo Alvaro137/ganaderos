@@ -2,6 +2,7 @@
 // Sin PINs, sin teclado numérico y sin roles visibles. El operador elegido solo
 // aporta atribución de sesión (quién consulta) para una futura consolidación de BDs.
 import { escapeHtml } from './config.js';
+import { sincronizarBaseDatosAhora } from './db.js';
 
 export function obtenerAuthHeaders() {
   const token = localStorage.getItem("campo_pwa_token") || "";
@@ -120,6 +121,14 @@ function mostrarModalSesionUsuario(user) {
         </div>
       ` : ""}
 
+      <!-- Sincronización manual de base de datos -->
+      <div style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 4px;">
+        <button id="btn-sync-now" type="button" style="width: 100%; padding: 10px 14px; background: var(--md-primary-container); color: var(--md-on-primary-container); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.88rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span>🔄 Sincronizar censo ahora</span>
+        </button>
+        <div id="sync-now-feedback" style="display: none; font-size: 0.82rem; margin-top: 6px; padding: 6px 10px; border-radius: var(--radius-sm); text-align: center;"></div>
+      </div>
+
       <div style="display: flex; gap: 10px; margin-top: 6px;">
         <button id="btn-cancel-session-modal" style="flex: 1; padding: 10px; background: var(--md-surface-container); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; color: var(--text-main);">
           Cancelar
@@ -138,6 +147,46 @@ function mostrarModalSesionUsuario(user) {
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
   });
+
+  // Manejo de sincronización manual de base de datos
+  const btnSyncNow = document.getElementById("btn-sync-now");
+  const syncFeedback = document.getElementById("sync-now-feedback");
+  if (btnSyncNow) {
+    btnSyncNow.addEventListener("click", async () => {
+      btnSyncNow.disabled = true;
+      btnSyncNow.innerHTML = `<span>⏳ Descargando censo actualizado...</span>`;
+      if (syncFeedback) syncFeedback.style.display = "none";
+
+      try {
+        const res = await sincronizarBaseDatosAhora();
+        if (res.ok) {
+          btnSyncNow.innerHTML = `<span>✓ Censo actualizado con éxito</span>`;
+          btnSyncNow.style.background = "var(--badge-activo-bg)";
+          btnSyncNow.style.color = "var(--badge-activo-text)";
+          if (syncFeedback) {
+            syncFeedback.style.display = "block";
+            syncFeedback.style.background = "var(--badge-activo-bg)";
+            syncFeedback.style.color = "var(--badge-activo-text)";
+            syncFeedback.textContent = "Datos en memoria e IndexedDB sincronizados.";
+          }
+          setTimeout(() => {
+            overlay.remove();
+          }, 1200);
+        }
+      } catch (err) {
+        btnSyncNow.disabled = false;
+        btnSyncNow.innerHTML = `<span>🔄 Reintentar sincronización</span>`;
+        if (syncFeedback) {
+          syncFeedback.style.display = "block";
+          syncFeedback.style.background = "var(--md-error-container)";
+          syncFeedback.style.color = "var(--md-on-error-container)";
+          syncFeedback.textContent = err.message === "SIN_CONEXION" 
+            ? "Sin conexión con la explotación." 
+            : `Error: ${err.message}`;
+        }
+      }
+    });
+  }
 
   // Manejo de cambio de contraseña
   const btnTogglePwd = document.getElementById("btn-toggle-change-pwd");
