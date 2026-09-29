@@ -13,6 +13,7 @@ import { renderVistaRecetas } from './modules/views/sanitary_view.js';
 import { renderVistaAlimentos } from './modules/views/feeds_view.js';
 import { renderVistaMovimientos } from './modules/views/movements_view.js';
 import { setupAsistenteIA } from './modules/views/assistant_view.js';
+import { actualizarBadgeSync, mostrarModalOutbox, sincronizarOutboxConServidor } from './modules/outbox.js';
 
 function setupNavegacion() {
   const desktopLinks = document.querySelectorAll(".nav-link[data-tab]");
@@ -80,6 +81,12 @@ async function iniciarAplicacion() {
   }
 
   actualizarBadgeUsuario();
+  actualizarBadgeSync();
+
+  const btnSyncBadge = document.getElementById("btn-sync-badge");
+  if (btnSyncBadge) {
+    btnSyncBadge.addEventListener("click", () => mostrarModalOutbox());
+  }
 
   try {
     await inicializarDB((mensaje) => {
@@ -117,6 +124,17 @@ async function iniciarAplicacion() {
       }
 
       mostrarToast("Base de datos actualizada");
+    });
+
+    window.addEventListener("campo:outbox-updated", () => {
+      actualizarBadgeSync();
+    });
+
+    window.addEventListener("online", () => {
+      actualizarBadgeSync();
+      sincronizarOutboxConServidor().catch((e) => {
+        console.warn("[Outbox] Sincronización automática fallida:", e);
+      });
     });
 
     window.addEventListener(

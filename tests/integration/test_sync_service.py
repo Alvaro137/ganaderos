@@ -84,6 +84,27 @@ class TestPush(TestSyncServiceBase):
         self.assertEqual(len(res["rechazados"]), 1)
         self.assertEqual(self.svc.estado()["registros_campo"], 1)
 
+    def test_push_parto_mutation(self):
+        parto = {
+            "uuid": "test-uuid-parto-0001",
+            "tipo": "parto",
+            "crotal": "ES000810740273",
+            "ts_dispositivo": "2026-09-29T16:00:00",
+            "payload": {
+                "fecha_parto": "2026-09-29",
+                "cria_crotal": "C-0273",
+                "cria_sexo": "H",
+                "cria_raza": "Cruzado",
+                "incidencias": "Parto asistido"
+            },
+        }
+        res = self.svc.aplicar_cambios("dev-campo-01", "usr_jose", [parto])
+        self.assertIn(parto["uuid"], res["aceptados"])
+        hist = self.svc.historial()
+        self.assertEqual(hist[0]["tipo"], "parto")
+        self.assertEqual(hist[0]["operador"], "usr_jose")
+        self.assertIn("C-0273", hist[0]["payload"])
+
 # === PARTE 2 ===
 
 class TestImport(TestSyncServiceBase):

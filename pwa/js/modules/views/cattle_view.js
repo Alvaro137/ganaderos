@@ -52,6 +52,15 @@ export function renderVistaAnimales() {
               </svg>
               <span>Teclado táctil</span>
             </button>
+
+            <!-- Botón para registrar parto directamente en campo -->
+            <button class="btn-nuevo-parto-header" id="btn-nuevo-parto-header" title="Registrar nuevo parto en campo">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Parto</span>
+            </button>
           </div>
 
           <!-- Teclado Numérico Táctil -->
@@ -130,6 +139,13 @@ export function renderVistaAnimales() {
     btnToggleKeypad.addEventListener("click", () => {
       AppState.tecladoTactilVisible = !AppState.tecladoTactilVisible;
       keypad.classList.toggle("visible", AppState.tecladoTactilVisible);
+    });
+  }
+
+  const btnNuevoParto = document.getElementById("btn-nuevo-parto-header");
+  if (btnNuevoParto) {
+    btnNuevoParto.addEventListener("click", () => {
+      import('./birth_modal.js').then((m) => m.abrirModalRegistroParto());
     });
   }
 
