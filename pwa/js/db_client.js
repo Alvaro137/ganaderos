@@ -643,6 +643,71 @@ class CampoDB {
     `);
     return rows.map((r) => r.anio).filter(Boolean);
   }
+
+  ejecutarMutacion(sql, params = []) {
+    if (!this.db) throw new Error("Base de datos no inicializada");
+    this.db.run(sql, params);
+    this._persistirEstadoLocal();
+    return true;
+  }
+
+  async _persistirEstadoLocal() {
+    try {
+      if (this.db && typeof this.db.export === "function") {
+        const exported = this.db.export();
+        await guardarBaseDatosLocal(exported.buffer);
+      }
+    } catch (e) {
+      console.warn("[DB] Error persistiendo base de datos modificada en IndexedDB:", e);
+    }
+  }
+
+  async registrarPartoOptimista({ madre_crotal, fecha_parto, cria_crotal, cria_sexo, cria_raza, incidencias }) {
+    if (!this.db) throw new Error("Base de datos no inicializada");
+    const mCrotal = String(madre_crotal || "").trim();
+    if (!mCrotal) throw new Error("El crotal de la madre es obligatorio");
+
+    const fParto = String(fecha_parto || "").trim() || new Date().toISOString().split("T")[0];
+    const cSexo = String(cria_sexo || "H").trim().toUpperCase();
+    const cCrotal = cria_crotal ? String(cria_crotal).trim() : null;
+    const inc = incidencias ? String(incidencias).trim() : null;
+
+    // 1. Insertar el parto en la tabla de partos
+    this.db.run(
+      "INSERT INTO partos (madre_crotal, fecha_parto, cria_crotal, cria_sexo, incidencias) VALUES (?, ?, ?, ?, ?)",
+      [mCrotal, fParto, cCrotal, cSexo, inc]
+    );
+
+    // 2. Actualizar último parto y conteo en la madre
+    this.db.run(
+      "UPDATE animales SET fecha_ult_parto = ?, total_partos = coalesce(total_partos, 0) + 1 WHERE crotal = ?",
+      [fParto, mCrotal]
+    );
+
+    // 3. Si se definió crotal para la cría, registrar la cría en el censo
+    if (cCrotal) {
+      const resMadre = this.ejecutarQuery("SELECT corral, raza FROM animales WHERE crotal = ?", [mCrotal]);
+      const corral = resMadre[0] ? resMadre[0].corral : "DUEÑA";
+      const raza = cria_raza || (resMadre[0] ? resMadre[0].raza : "Cruzado");
+      const digitos = cCrotal.replace(/\D/g, "");
+      const c4 = digitos.length >= 4 ? digitos.slice(-4) : (digitos || cCrotal.slice(-4));
+
+      this.db.run(
+        "INSERT OR IGNORE INTO animales (crotal, crotal_4, sexo, raza, fecha_nacimiento, madre_crotal, estado, vida, corral, fecha_alta) VALUES (?, ?, ?, ?, ?, ?, 'A', 1, ?, ?)",
+        [cCrotal, c4, cSexo, raza, fParto, mCrotal, corral, fParto]
+      );
+    }
+
+    // 4. Persistir a IndexedDB en segundo plano
+    await this._persistirEstadoLocal();
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("campo:db-updated", {
+        detail: { tipo: "parto", madre_crotal: mCrotal, fecha_parto: fParto }
+      }));
+    }
+    return true;
+  }
 }
 
 window.campoDB = new CampoDB();
