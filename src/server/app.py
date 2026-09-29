@@ -53,6 +53,34 @@ def verificar_password(pwd: str) -> bool:
     return hmac.compare_digest(pwd, expected)
 
 
+def _set_password(new_password: str) -> None:
+    """Cambia la contraseña compartida de la explotación.
+
+    Efecto inmediato (runtime) + persistencia entre reinicios del servicio
+    (systemd ``EnvironmentFile`` lee el ``.env`` del repo). KISS: una sola password
+    global compartida por todos los operadores; el cliente debe forzar logout.
+    """
+    os.environ["PWA_PASSWORD"] = new_password  # efecto inmediato en el proceso actual
+
+    env_path = Path(_REPO_ROOT) / ".env"
+    if env_path.exists():
+        lineas = env_path.read_text(encoding="utf-8").splitlines()
+        nuevas: List[str] = []
+        seen = False
+        for ln in lineas:
+            if ln.strip().startswith("PWA_PASSWORD="):
+                nuevas.append(f'PWA_PASSWORD="{new_password}"')
+                seen = True
+            else:
+                nuevas.append(ln)
+        if not seen:
+            nuevas.append(f'PWA_PASSWORD="{new_password}"')
+    else:
+        nuevas = [f'PWA_PASSWORD="{new_password}"']
+    env_path.write_text("\n".join(nuevas) + "\n", encoding="utf-8")
+
+
+
 def generar_auth_token(duracion_dias: int = 30, user_id: str = "usr_admin", rol: str = "admin") -> str:
     """Emite un token Bearer firmado criptográficamente con HMAC-SHA256, rol y fecha de expiración."""
     expira_en = int(time.time()) + (duracion_dias * 86400)
@@ -66,9 +94,11 @@ def extraer_datos_token(token: Optional[str]) -> Optional[dict]:
     """Valida la firma HMAC y extrae expira_en, user_id y rol del token."""
     if not token:
         return None
-    # Permitir token determinista reservado para suites E2E (Playwright)
+    # Permitir token determinista reservado exclusivamente para suites E2E / testing
     if token == "e2e-valid-auth-token":
-        return {"user_id": "usr_admin", "rol": "admin", "expira_en": 9999999999}
+        if os.environ.get("APP_ENV") in ("e2e", "test"):
+            return {"user_id": "usr_admin", "rol": "admin", "expira_en": 9999999999}
+        return None
     if "." in token:
         partes = token.split(".")
         if len(partes) == 2:
@@ -152,11 +182,12 @@ from src.server.schemas import (
     AIModelResponse,
     AnimalResponse,
     AuthTokenResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     HealthResponse,
     IntentRequest,
     IntentResponse,
     LoginRequest,
-    PinLoginRequest,
     SyncPushRequest,
     SyncStatusResponse,
     SynthesizeRequest,
@@ -412,6 +443,43 @@ async def list_auth_users():
     )
 
 
+@app.post("/api/auth/change-password", tags=["Autenticación"], response_model=ChangePasswordResponse)
+async def change_password(
+    req: ChangePasswordRequest,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Cambia la contraseña compartida de la explotación (solo el propietario).
+
+    - ``current_password`` debe coincidir (timing-safe) con la activa.
+    - ``new_password`` >= 8 caracteres y distinta a la actual.
+    - Se persiste en ``.env`` (runtime + próximos reinicios de systemd) y en el
+    proceso actual (``os.environ``). El cliente debe forzar logout: borra su
+    token de localStorage y vuelve a entrar.
+    """
+    datos = _autenticacion_op(request, credentials)
+    if datos.get("user_id") != "usr_admin" and datos.get("rol") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el propietario puede cambiar la contraseña de la explotación.",
+        )
+    if not verificar_password(req.current_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="La contraseña actual no coincide.",
+        )
+    if req.new_password == req.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña no puede ser idéntica a la actual.",
+        )
+    _set_password(req.new_password)
+    return {
+        "ok": True,
+        "message": "Contraseña actualizada. Cierra sesión y vuelve a entrar para que surta efecto completo.",
+    }
+
+
 @app.post("/api/auth/login", tags=["Autenticación"], response_model=AuthTokenResponse)
 async def auth_login(req: LoginRequest, response: Response):
     """Autentica al operador seleccionado con la contraseña compartida de la explotación.
@@ -444,22 +512,6 @@ async def auth_login(req: LoginRequest, response: Response):
     raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
 
 
-@app.post("/api/auth/login-pin", tags=["Autenticación"], response_model=AuthTokenResponse)
-async def auth_login_pin(req: PinLoginRequest, response: Response):
-    """Autentica a un operador de campo mediante PIN rápido."""
-    user_service = get_usuario_service()
-    usuario = user_service.autenticar_pin(req.user_id, req.pin)
-
-    if usuario:
-        token = generar_auth_token(30, user_id=usuario.id, rol=usuario.rol)
-        response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
-        return {
-            "ok": True,
-            "token": token,
-            "user": UserSummary(id=usuario.id, nombre=usuario.nombre, rol=usuario.rol),
-            "message": f"Sesión iniciada como {usuario.nombre}.",
-        }
-    raise HTTPException(status_code=401, detail="PIN incorrecto o usuario no encontrado.")
 
 
 # ============================================================
