@@ -6,6 +6,7 @@
 import { AppState, esPantallaEscritorio, escapeHtml, calcularEdad, formatearFecha } from '../config.js';
 import { buscarAnimales, contarAnimales } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
+import { abrirModalRegistroParto } from './birth_modal.js';
 
 export function renderVistaAnimales() {
   const container = document.getElementById("app-container");
@@ -144,8 +145,10 @@ export function renderVistaAnimales() {
 
   const btnNuevoParto = document.getElementById("btn-nuevo-parto-header");
   if (btnNuevoParto) {
-    btnNuevoParto.addEventListener("click", () => {
-      import('./birth_modal.js').then((m) => m.abrirModalRegistroParto());
+    btnNuevoParto.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      abrirModalRegistroParto();
     });
   }
 
