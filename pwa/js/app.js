@@ -218,7 +218,7 @@ function inicializarPWAInstall() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+async function bootstrap() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch((err) => {
       console.warn("Service Worker no registrado:", err);
@@ -226,4 +226,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   inicializarPWAInstall();
   await iniciarAplicacion();
-});
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootstrap);
+} else {
+  bootstrap();
+}
