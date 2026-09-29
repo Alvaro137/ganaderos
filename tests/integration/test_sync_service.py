@@ -158,7 +158,9 @@ class TestImport(TestSyncServiceBase):
 class TestSyncAPI(unittest.TestCase):
     def setUp(self):
         import os
+
         from fastapi.testclient import TestClient
+
         from src.server.app import app
 
         os.environ["PWA_ALLOW_ANON_DB"] = "1"
