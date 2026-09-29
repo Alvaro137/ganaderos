@@ -148,7 +148,7 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
    lote, ejecutarlos como comandos INDEPENDIENTES y secuenciales; en paralelo compiten
    (locks "another git process", pushes perdidos, merges a rama equivocada).
 
-## 8. Estado y pendientes (2026-09-24)
+## 8. Estado y pendientes (2026-09-29)
 
 - [x] Login KISS desplegado y ACTIVO en producción (verificado: `POST /api/auth/login`
   con `user_id` devuelve al operador elegido).
@@ -156,10 +156,10 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
 - [x] Roster de operadores: Álvaro (admin) + Jose, Amelia, Alex, Otro (rol único `operador`).
   Desplegado y **resincronizado en la BD real** de la OPi (`ganaderos_campo.sqlite`; backup
   en `/tmp/ganaderos_campo_backup_*.sqlite`). `usr_paco` y `usr_vet` eliminados de producción.
+- [x] Cambio de contraseña de la explotación (`POST /api/auth/change-password` + formulario en modal de usuario solo para admin) con persistencia en `.env` y memoria.
+- [x] Gatear el backdoor `e2e-valid-auth-token` por entorno (`APP_ENV` en `e2e` / `test`).
+- [x] Eliminar endpoint legado `/api/auth/login-pin` y su schema `PinLoginRequest`.
 - [ ] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` (hoy pasa `PWA_AUTH_SECRET`, muerto).
-- [ ] Gatear el backdoor `e2e-valid-auth-token` por entorno.
-- [ ] (Opcional) Eliminar endpoint legado `/api/auth/login-pin` y su schema (ya inoperante
-  con `pin_hash='sin-pin'`).
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] (Idea del dueño) UI/UX "field-first": design system propio de alto contraste para sol
   directo, touch targets ≥48px, CrotalBadge con 4 dígitos grandes. Evaluar v0/Stitch con

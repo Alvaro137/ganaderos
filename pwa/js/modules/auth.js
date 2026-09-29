@@ -84,6 +84,42 @@ function mostrarModalSesionUsuario(user) {
       <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4;">
         ¿Deseas cerrar la sesión activa para cambiar de operador de campo?
       </p>
+
+      ${(user.id === "usr_admin" || user.rol === "admin") ? `
+        <div style="border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 2px;">
+          <button id="btn-toggle-change-pwd" type="button" style="background: none; border: none; padding: 0; color: var(--brand-primary); font-size: 0.85rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+            <span>🔑 Cambiar contraseña de la explotación</span>
+          </button>
+          <form id="form-change-pwd" style="display: none; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <input
+              type="password"
+              id="input-current-pwd"
+              placeholder="Contraseña actual..."
+              autocomplete="current-password"
+              style="width: 100%; padding: 8px 10px; font-size: 0.88rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); box-sizing: border-box;"
+              required
+            />
+            <input
+              type="password"
+              id="input-new-pwd"
+              placeholder="Nueva contraseña (mín. 8 carácteres)..."
+              autocomplete="new-password"
+              minlength="8"
+              style="width: 100%; padding: 8px 10px; font-size: 0.88rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); box-sizing: border-box;"
+              required
+            />
+            <div id="change-pwd-feedback" style="display: none; font-size: 0.8rem; border-radius: var(--radius-sm); padding: 6px 10px;"></div>
+            <button
+              type="submit"
+              id="btn-submit-change-pwd"
+              style="padding: 8px 12px; background: var(--brand-primary); color: #fff; font-size: 0.88rem; font-weight: 700; border: none; border-radius: var(--radius-sm); cursor: pointer;"
+            >
+              Guardar y reautenticar
+            </button>
+          </form>
+        </div>
+      ` : ""}
+
       <div style="display: flex; gap: 10px; margin-top: 6px;">
         <button id="btn-cancel-session-modal" style="flex: 1; padding: 10px; background: var(--md-surface-container); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; color: var(--text-main);">
           Cancelar
@@ -102,6 +138,84 @@ function mostrarModalSesionUsuario(user) {
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.remove();
   });
+
+  // Manejo de cambio de contraseña
+  const btnTogglePwd = document.getElementById("btn-toggle-change-pwd");
+  const formChangePwd = document.getElementById("form-change-pwd");
+  if (btnTogglePwd && formChangePwd) {
+    btnTogglePwd.addEventListener("click", () => {
+      const visible = formChangePwd.style.display === "flex";
+      formChangePwd.style.display = visible ? "none" : "flex";
+      if (!visible) {
+        document.getElementById("input-current-pwd")?.focus();
+      }
+    });
+
+    formChangePwd.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const currentPwd = document.getElementById("input-current-pwd")?.value.trim() || "";
+      const newPwd = document.getElementById("input-new-pwd")?.value.trim() || "";
+      const feedback = document.getElementById("change-pwd-feedback");
+      const btnSubmit = document.getElementById("btn-submit-change-pwd");
+
+      if (!currentPwd || !newPwd) return;
+
+      if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = "Guardando...";
+      }
+      if (feedback) feedback.style.display = "none";
+
+      try {
+        const resp = await fetch("./api/auth/change-password", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...obtenerAuthHeaders()
+          },
+          body: JSON.stringify({ current_password: currentPwd, new_password: newPwd })
+        });
+        const data = await resp.json();
+
+        if (resp.ok && data.ok) {
+          if (feedback) {
+            feedback.style.display = "block";
+            feedback.style.background = "#dcfce7";
+            feedback.style.border = "1px solid #bbf7d0";
+            feedback.style.color = "#15803d";
+            feedback.textContent = data.message || "Contraseña actualizada. Vuelve a iniciar sesión.";
+          }
+          setTimeout(() => {
+            cerrarSesion();
+          }, 1200);
+        } else {
+          if (feedback) {
+            feedback.style.display = "block";
+            feedback.style.background = "#fef2f2";
+            feedback.style.border = "1px solid #fecaca";
+            feedback.style.color = "#991b1b";
+            feedback.textContent = data.detail || data.error || "No se pudo cambiar la contraseña.";
+          }
+          if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = "Guardar y reautenticar";
+          }
+        }
+      } catch (err) {
+        if (feedback) {
+          feedback.style.display = "block";
+          feedback.style.background = "#fef2f2";
+          feedback.style.border = "1px solid #fecaca";
+          feedback.style.color = "#991b1b";
+          feedback.textContent = "Error de conexión: " + err.message;
+        }
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = "Guardar y reautenticar";
+        }
+      }
+    });
+  }
 }
 
 // === LOGIN SCREEN (parte 2) ===
