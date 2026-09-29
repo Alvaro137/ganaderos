@@ -95,29 +95,21 @@ para una futura **consolidación/merge de bases de datos**. NO hay permisos ni r
 Detalles técnicos:
 - `POST /api/auth/login` acepta `{password, user_id?}`. Con `user_id` válido emite token
   firmado con ese usuario; sin `user_id` o inválido → `usr_admin` (Álvaro) por defecto.
-- `POST /api/auth/login-pin` **sigue existiendo como legado** (la UI ya no lo usa). Candidato
-  a eliminar en una limpieza futura.
 - Token: HMAC-SHA256 (`expira:user_id:rol:nonce.firma`), clave = `PWA_SECRET_KEY`
   (en `.env` de la OPi, valor aleatorio). **⚠️ El `PWA_AUTH_SECRET` del compose.yaml es un
   nombre muerto**: el código usa `PWA_SECRET_KEY`. Pendiente de arreglar en el repo.
 - Usuarios sembrados (solo si la tabla `usuarios` está vacía): `usr_admin` (Álvaro, admin)
   + `usr_jose`, `usr_amelia`, `usr_alex`, `usr_otro` (rol `operador`, todos iguales).
-  Con `pin_hash='sin-pin'` → el endpoint legado de PIN queda inoperante para estos usuarios.
-  `usr_paco` y `usr_vet` fueron eliminados del seed.
+  `usr_paco` y `usr_vet` fueron eliminados de la BD real de la OPi.
 - Frontend: `pwa/js/modules/auth.js` — pantalla única: tarjetas de operador + formulario
   de contraseña siempre visible; 2º clic en tarjeta = deseleccionar. Respaldo offline con
-  caché de usuarios (`campo_pwa_users_cache`).
-- **⚠️ Nuance de despliegue**: los seeds solo aplican a BDs nuevas. La OPi conserva su
-  `usuarios` histórica (con `usr_vet`): la pantalla puede mostrar 3 tarjetas. Limpieza
-  puntual: `DELETE FROM usuarios WHERE id='usr_vet';` sobre `pwa/ganaderos_demo.sqlite`
-  en la OPi (con copia previa o servicio parado).
-- Backdoor E2E pendiente de gatear: el token literal `e2e-valid-auth-token` se acepta siempre
-  en `extraer_datos_token()` (lo usa Playwright). Debería activarse solo con `APP_ENV=e2e`.
+  caché de usuarios (`campo_pwa_users_cache`). Renderizado inmediato sin esperar a la red.
+- Backdoor E2E: el token literal `e2e-valid-auth-token` solo se acepta si `APP_ENV=e2e` o `test`.
 
 ## 6. Cómo correr las pruebas (local, Windows)
 
 ```bat
-python -m pytest tests/ -q            :: 73 tests (unit + integration)
+python -m pytest tests/ -q            :: 94 tests (unit + integration)
 node tests/frontend/test_modules.mjs  :: 16 tests de módulos ES
 node --check pwa/js/modules/auth.js   :: sintaxis de un módulo suelto
 python -m ruff check src/ tests/      :: lint (CI exige 0 errores)
@@ -147,6 +139,19 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
 9. **Comandos git secuenciales**: si se lanzan varios git (checkout/merge/push) en el mismo
    lote, ejecutarlos como comandos INDEPENDIENTES y secuenciales; en paralelo compiten
    (locks "another git process", pushes perdidos, merges a rama equivocada).
+10. **Comandos con sudo**: NUNCA ejecutar `sudo` de forma autónoma ni intentar adivinar credenciales.
+    Pedir siempre explícitamente al dueño del repo los comandos que requieran `sudo` en la OPi.
+11. **`DOMContentLoaded` en ES Modules (`type="module"`)**: los módulos son diferidos por
+    diseño. En recargas rápidas o tras logout (`location.reload()`), el parser puede terminar
+    antes de registrar el listener (`document.readyState === 'interactive'` o `'complete'`),
+    dejando la app colgada en el loader inicial para siempre. Comprobar siempre:
+    `if (document.readyState === 'loading') { addEventListener(...) } else { bootstrap(); }`.
+12. **Recarga en caliente de SQLite WASM en cliente**: tras descargar una BD nueva en background,
+    `this.db` en memoria no se actualiza sola. Hay que sustituir la instancia (`_reemplazarBaseDatosEnCaliente`),
+    disparar evento custom (`campo:db-updated`) y re-renderizar las vistas al vuelo.
+13. **Timeouts defensivos en IndexedDB**: llamadas a `objectStore.get()` pueden encallarse si
+    otra pestaña o el Service Worker bloquea el storage. Envolver siempre en `Promise.race` con
+    un timeout razonable (ej. 1.5s) que degrade a `null` de forma segura.
 
 ## 8. Estado y pendientes (2026-09-29)
 
@@ -155,15 +160,43 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
 - [x] `PWA_SECRET_KEY` aleatoria en el `.env` de la OPi.
 - [x] Roster de operadores: Álvaro (admin) + Jose, Amelia, Alex, Otro (rol único `operador`).
   Desplegado y **resincronizado en la BD real** de la OPi (`ganaderos_campo.sqlite`; backup
-  en `/tmp/ganaderos_campo_backup_*.sqlite`). `usr_paco` y `usr_vet` eliminados de producción.
+  en `/home/varo/ganaderos_campo_backup_20260929_1706.sqlite`). `usr_paco` y `usr_vet` eliminados de producción.
 - [x] Cambio de contraseña de la explotación (`POST /api/auth/change-password` + formulario en modal de usuario solo para admin) con persistencia en `.env` y memoria.
 - [x] Gatear el backdoor `e2e-valid-auth-token` por entorno (`APP_ENV` en `e2e` / `test`).
 - [x] Eliminar endpoint legado `/api/auth/login-pin` y su schema `PinLoginRequest`.
+- [x] **Actualización de Base de Datos de Producción (Agosto 2026):** Extraído directamente de
+  `db-actualizada/bdlibro.mdb` (374 compras con importes y precio/kg corregidos, 2397 animales,
+  2228 partos, 5534 movimientos). Desplegado a `pwa/ganaderos_campo.sqlite` en la OPi.
+- [x] **PR #15 — Sincronización en caliente y usabilidad:**
+  - Recarga en memoria WASM (`this.db`) al recibir una BD nueva en background sin requerir recargar la página.
+  - Botón directo `🔄 Sincronizar censo ahora` en el modal de usuario con feedback visual.
+  - Paginación incremental (`Mostrar más animales (+50)`) con contador de coincidencias (`Mostrando X de Y`).
+  - Contraseña del backend por defecto fijada a `ganaderos` (compatible con `mvp-testing` en tests).
+  - Service Worker v24.
+- [x] **PR #16 — Estabilidad de arranque y login instantáneo:**
+  - Bootstrap seguro verificando `document.readyState !== 'loading'` para evitar que la app quede colgada en el spinner inicial tras un reload/logout.
+  - Timeout defensivo de 1.5s en transacciones de IndexedDB.
+  - Renderizado instantáneo de la pantalla de login desde caché/defaults sin bloquearse esperando a la red.
+  - Service Worker v25.
 - [ ] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` (hoy pasa `PWA_AUTH_SECRET`, muerto).
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
-- [ ] (Idea del dueño) UI/UX "field-first": design system propio de alto contraste para sol
-  directo, touch targets ≥48px, CrotalBadge con 4 dígitos grandes. Evaluar v0/Stitch con
-  prompt de diseño de dominio antes de aceptar su CSS por defecto.
+- [ ] **Siguiente Gran Épica: Introducción de datos en campo (Local-First Offline Writes & Conciliación con Access)**
+  - **Fase 1: Motor Outbox Local-First en el móvil**:
+    - Tabla/store `mutaciones_pendientes` en IndexedDB (`uuid`, `tipo_evento`, `payload_json`, `user_id`, `created_at`, `status`).
+    - Mutaciones optimistas en SQLite WASM local (`this.db`) para que la UI refleje el nuevo dato de inmediato sin conexión.
+    - Badge visual en header (`🟢 Al día` / `🟡 N pendientes de sincronizar`).
+  - **Fase 2: Formularios de Campo "Touch-Friendly"**:
+    - 2.1: Registro de Parto/Nacimiento (búsqueda de madre por 4 dígitos, sexo M/H, raza, fecha, crotal cría provisional u oficial).
+    - 2.2: Cambio de Lote/Ubicación (origen -> destino, ej. Dueña -> Cebadero).
+    - 2.3: Registro de Tratamiento Sanitario (crotal, fármaco de la lista oficial, dosis, cálculo automático de fecha fin de supresión de carne).
+  - **Fase 3: Endpoint de Ingesta y Auditoría en Orange Pi**:
+    - `POST /api/sync/mutations`: recibe lote de mutaciones pendientes firmado con el Bearer token del operador.
+    - Tabla en SQLite OPi: `eventos_campo` (trazabilidad inmutable con id, timestamp_servidor, operador_id, tipo, datos_json, estado_conciliacion).
+    - Inserción/actualización en las tablas canónicas de SQLite en la OPi (`partos`, `animales`, `tratamientos`).
+    - Respuesta con IDs confirmados para que el cliente purgue el Outbox.
+  - **Fase 4: Pipeline de Conciliación con Access (`bdlibro.mdb`)**:
+    - Script bidireccional en PC (`scripts/sync_access_merge.py`): extrae eventos no conciliados de la OPi, los inserta en `bdlibro.mdb` (respetando autonuméricos de Access) y marca `conciliado_en_access=1`.
+    - Regeneración y despliegue del censo consolidado.
 
 ## 9. Glosario rápido
 
