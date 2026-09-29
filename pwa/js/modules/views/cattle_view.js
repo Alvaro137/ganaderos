@@ -4,7 +4,7 @@
  */
 
 import { AppState, esPantallaEscritorio, escapeHtml, calcularEdad, formatearFecha } from '../config.js';
-import { buscarAnimales } from '../db.js';
+import { buscarAnimales, contarAnimales } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
 
 export function renderVistaAnimales() {
@@ -94,6 +94,7 @@ export function renderVistaAnimales() {
   if (inputSearch) {
     inputSearch.addEventListener("input", (e) => {
       AppState.terminoBusqueda = e.target.value;
+      AppState.limiteAnimales = 50;
       ejecutarBusquedaYListar();
     });
     if (esDesktop) {
@@ -105,6 +106,7 @@ export function renderVistaAnimales() {
   if (btnClear) {
     btnClear.addEventListener("click", () => {
       AppState.terminoBusqueda = "";
+      AppState.limiteAnimales = 50;
       if (inputSearch) {
         inputSearch.value = "";
         inputSearch.focus();
@@ -117,6 +119,7 @@ export function renderVistaAnimales() {
   if (chkActivos) {
     chkActivos.addEventListener("change", (e) => {
       AppState.soloActivos = e.target.checked;
+      AppState.limiteAnimales = 50;
       ejecutarBusquedaYListar();
     });
   }
@@ -133,6 +136,7 @@ export function renderVistaAnimales() {
   container.querySelectorAll(".t-key[data-digit]").forEach((btn) => {
     btn.addEventListener("click", () => {
       AppState.terminoBusqueda += btn.dataset.digit;
+      AppState.limiteAnimales = 50;
       if (inputSearch) inputSearch.value = AppState.terminoBusqueda;
       ejecutarBusquedaYListar();
     });
@@ -142,6 +146,7 @@ export function renderVistaAnimales() {
   if (btnKeypadBack) {
     btnKeypadBack.addEventListener("click", () => {
       AppState.terminoBusqueda = AppState.terminoBusqueda.slice(0, -1);
+      AppState.limiteAnimales = 50;
       if (inputSearch) inputSearch.value = AppState.terminoBusqueda;
       ejecutarBusquedaYListar();
     });
@@ -151,6 +156,7 @@ export function renderVistaAnimales() {
   if (btnKeypadClear) {
     btnKeypadClear.addEventListener("click", () => {
       AppState.terminoBusqueda = "";
+      AppState.limiteAnimales = 50;
       if (inputSearch) inputSearch.value = "";
       ejecutarBusquedaYListar();
     });
@@ -174,10 +180,18 @@ export function ejecutarBusquedaYListar() {
   const resultsCount = document.getElementById("results-count");
   if (!resultsList) return;
 
-  const resultados = buscarAnimales(AppState.terminoBusqueda, AppState.soloActivos);
+  const total = contarAnimales(AppState.terminoBusqueda, AppState.soloActivos);
+  const limite = AppState.limiteAnimales || 50;
+  const resultados = buscarAnimales(AppState.terminoBusqueda, AppState.soloActivos, limite);
 
   if (resultsCount) {
-    resultsCount.textContent = `${resultados.length} encontrados`;
+    if (total === 0) {
+      resultsCount.textContent = "0 encontrados";
+    } else if (resultados.length < total) {
+      resultsCount.textContent = `Mostrando ${resultados.length} de ${total}`;
+    } else {
+      resultsCount.textContent = `${total} encontrados`;
+    }
   }
 
   if (resultados.length === 0) {
@@ -189,6 +203,15 @@ export function ejecutarBusquedaYListar() {
     `;
     return;
   }
+
+  const masDisponibles = resultados.length < total;
+  const botonMasHtml = masDisponibles ? `
+    <div class="load-more-container" style="padding: 16px 4px 24px; text-align: center;">
+      <button id="btn-mostrar-mas-animales" class="btn-load-more" style="width: 100%; max-width: 320px; padding: 12px 20px; background: var(--md-surface-container-high); color: var(--brand-primary); font-size: 0.92rem; font-weight: 700; border: 1px solid var(--border-color); border-radius: var(--radius-md); cursor: pointer; transition: all 0.2s ease;">
+        Mostrar más animales (+50)
+      </button>
+    </div>
+  ` : "";
 
   resultsList.innerHTML = resultados
     .map((a) => {
@@ -229,7 +252,17 @@ export function ejecutarBusquedaYListar() {
         </article>
       `;
     })
-    .join("");
+    .join("") + botonMasHtml;
+
+  if (masDisponibles) {
+    const btnMas = document.getElementById("btn-mostrar-mas-animales");
+    if (btnMas) {
+      btnMas.addEventListener("click", () => {
+        AppState.limiteAnimales = (AppState.limiteAnimales || 50) + 50;
+        ejecutarBusquedaYListar();
+      });
+    }
+  }
 
   // En PC seleccionar automáticamente el primero si aún no hay ninguno seleccionado
   if (esPantallaEscritorio() && resultados.length > 0 && !AppState.crotalSeleccionado && !AppState.corralSeleccionado) {

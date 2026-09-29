@@ -16,6 +16,7 @@ export const AppState = {
   anioMovimiento: "TODOS",
   destinoMovimiento: "TODOS",
   limiteMovimientos: 100,
+  limiteAnimales: 50,
   tecladoTactilVisible: false,
   // Historial conversacional para preguntas de seguimiento (multi-turno) con IA
   conversacionIA: [],
