@@ -114,6 +114,7 @@ class CampoDB {
     this.db = null;
     this.ready = false;
     this.meta = {};
+    this.SQL = null;
   }
 
   _cargarMetadatos() {
@@ -124,6 +125,40 @@ class CampoDB {
       }
     } catch (e) {
       console.warn("[DB] No se pudieron cargar metadatos:", e);
+    }
+  }
+
+  _reemplazarBaseDatosEnCaliente(newBuf) {
+    if (!this.SQL) return false;
+    try {
+      const nuevaInstancia = new this.SQL.Database(new Uint8Array(newBuf));
+      const stmt = nuevaInstancia.prepare("SELECT clave, valor FROM meta");
+      const nuevosMetas = {};
+      while (stmt.step()) {
+        const obj = stmt.getAsObject();
+        nuevosMetas[obj.clave] = obj.valor;
+      }
+      stmt.free();
+
+      try {
+        if (this.db) this.db.close();
+      } catch (e) {
+        console.warn("[DB] Error cerrando instancia anterior:", e);
+      }
+
+      this.db = nuevaInstancia;
+      this.meta = nuevosMetas;
+      console.log("[DB] Base de datos actualizada en caliente con éxito. Metadatos:", nuevosMetas);
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("campo:db-updated", {
+          detail: { meta: nuevosMetas }
+        }));
+      }
+      return true;
+    } catch (err) {
+      console.error("[DB] Error reemplazando base de datos en caliente:", err);
+      return false;
     }
   }
 
@@ -142,10 +177,36 @@ class CampoDB {
         const newBuf = await resp.arrayBuffer();
         await guardarBaseDatosLocal(newBuf);
         console.log("[DB] Censo local actualizado en segundo plano en IndexedDB.");
+        this._reemplazarBaseDatosEnCaliente(newBuf);
       }
     } catch {
       // Silencioso: las operaciones offline tienen prioridad
     }
+  }
+
+  async sincronizarAhora(authToken = null) {
+    if (!navigator.onLine) {
+      throw new Error("SIN_CONEXION");
+    }
+    const token = authToken || localStorage.getItem("campo_pwa_token") || "";
+    if (!token) {
+      throw new Error("AUTH_REQUIRED");
+    }
+
+    const headers = {
+      "Authorization": `Bearer ${token}`,
+      "X-Auth-Token": token
+    };
+    const resp = await fetch("./api/database", { headers });
+    if (!resp.ok) {
+      if (resp.status === 401) throw new Error("AUTH_REQUIRED");
+      throw new Error(`Error en el servidor (${resp.status})`);
+    }
+
+    const newBuf = await resp.arrayBuffer();
+    await guardarBaseDatosLocal(newBuf);
+    const hotOk = this._reemplazarBaseDatosEnCaliente(newBuf);
+    return { ok: true, hotReloaded: hotOk, meta: this.meta };
   }
 
   async inicializar(onProgress, authToken = null) {
@@ -155,6 +216,7 @@ class CampoDB {
     const SQL = await initSqlJs({
       locateFile: (file) => `./js/${file}`
     });
+    this.SQL = SQL;
 
     // 1. OFFLINE-FIRST: Comprobar si ya existe el censo en almacenamiento persistente local
     if (onProgress) onProgress("Comprobando censo local...");
@@ -217,7 +279,36 @@ class CampoDB {
     return resultados;
   }
 
-  buscar(termino, soloActivos = true) {
+  contarAnimales(termino = "", soloActivos = true) {
+    if (!this.db) return 0;
+    try {
+      if (!termino || termino.trim() === "") {
+        const cond = soloActivos ? "WHERE estado = 'A'" : "";
+        const res = this.ejecutarQuery(`SELECT COUNT(*) as total FROM animales ${cond}`);
+        return res[0] ? res[0].total : 0;
+      }
+      const t = termino.trim();
+      const soloDigitos = t.replace(/\D/g, "");
+      let sql, params;
+      if (soloDigitos.length >= 1 && soloDigitos.length <= 4) {
+        const condActivo = soloActivos ? "AND estado = 'A'" : "";
+        sql = `SELECT COUNT(*) as total FROM animales WHERE crotal_4 LIKE ? ${condActivo}`;
+        params = [`${soloDigitos}%`];
+      } else {
+        const condActivo = soloActivos ? "AND estado = 'A'" : "";
+        sql = `SELECT COUNT(*) as total FROM animales WHERE (crotal LIKE ? OR corral LIKE ? OR nombre LIKE ?) ${condActivo}`;
+        params = [`%${t}%`, `%${t}%`, `%${t}%`];
+      }
+      const res = this.ejecutarQuery(sql, params);
+      return res[0] ? res[0].total : 0;
+    } catch (e) {
+      console.warn("[DB] Error contando animales:", e);
+      return 0;
+    }
+  }
+
+  buscar(termino, soloActivos = true, limite = 50) {
+    const lim = Number.isInteger(limite) && limite > 0 ? limite : 50;
     if (!termino || termino.trim() === "") {
       const cond = soloActivos ? "WHERE estado = 'A'" : "";
       return this.ejecutarQuery(`
@@ -225,7 +316,7 @@ class CampoDB {
         FROM animales
         ${cond}
         ORDER BY crotal_4 ASC
-        LIMIT 50
+        LIMIT ${lim}
       `);
     }
 
@@ -243,7 +334,7 @@ class CampoDB {
         FROM animales
         WHERE crotal_4 LIKE ? ${condActivo}
         ORDER BY (estado = 'A') DESC, crotal_4 ASC
-        LIMIT 30
+        LIMIT ${lim}
       `;
       params = [`${soloDigitos}%`];
     } else {
@@ -254,7 +345,7 @@ class CampoDB {
         FROM animales
         WHERE (crotal LIKE ? OR corral LIKE ? OR nombre LIKE ?) ${condActivo}
         ORDER BY (estado = 'A') DESC, crotal_4 ASC
-        LIMIT 30
+        LIMIT ${lim}
       `;
       params = [`%${t}%`, `%${t}%`, `%${t}%`];
     }
