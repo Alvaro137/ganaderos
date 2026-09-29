@@ -40,6 +40,36 @@ function setupNavegacion() {
   mobileButtons.forEach((b) => b.addEventListener("click", () => cambiarTab(b.dataset.tab)));
 }
 
+function mostrarToast(mensaje) {
+  let toast = document.getElementById("pwa-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "pwa-toast";
+    toast.style.position = "fixed";
+    toast.style.bottom = "80px";
+    toast.style.left = "50%";
+    toast.style.transform = "translateX(-50%)";
+    toast.style.backgroundColor = "var(--md-on-surface)";
+    toast.style.color = "var(--md-surface)";
+    toast.style.padding = "10px 18px";
+    toast.style.borderRadius = "var(--radius-md)";
+    toast.style.fontSize = "0.88rem";
+    toast.style.fontWeight = "600";
+    toast.style.boxShadow = "var(--shadow-md)";
+    toast.style.zIndex = "9999";
+    toast.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+    toast.style.pointerEvents = "none";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = mensaje;
+  toast.style.opacity = "1";
+  toast.style.transform = "translateX(-50%) translateY(0)";
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(-50%) translateY(10px)";
+  }, 2500);
+}
+
 async function iniciarAplicacion() {
   const container = document.getElementById("app-container");
 
@@ -67,6 +97,27 @@ async function iniciarAplicacion() {
     setupNavegacion();
     setupAsistenteIA();
     renderVistaAnimales();
+
+    window.addEventListener("campo:db-updated", (e) => {
+      const meta = e.detail && e.detail.meta ? e.detail.meta : getMetadata();
+      const fechaExp = meta ? (meta["fecha_exportacion"] || meta["fecha_export"]) : null;
+      const elFecha = document.getElementById("meta-fecha");
+      if (elFecha && fechaExp) {
+        elFecha.textContent = `Censo: ${formatearFecha(fechaExp)}`;
+      }
+
+      if (AppState.tabActual === "animales") {
+        renderVistaAnimales();
+      } else if (AppState.tabActual === "alimentos") {
+        renderVistaAlimentos();
+      } else if (AppState.tabActual === "recetas") {
+        renderVistaRecetas();
+      } else if (AppState.tabActual === "movimientos") {
+        renderVistaMovimientos();
+      }
+
+      mostrarToast("Base de datos actualizada");
+    });
 
     window.addEventListener(
       "resize",
