@@ -21,10 +21,6 @@ class LoginRequest(BaseModel):
     password: str
     user_id: Optional[str] = None  # Operador seleccionado (solo atribución, sin roles)
 
-class PinLoginRequest(BaseModel):
-    user_id: str
-    pin: str
-
 class AuthTokenResponse(BaseModel):
     ok: bool
     token: Optional[str] = None
@@ -98,3 +94,12 @@ class SyncStatusResponse(BaseModel):
     existe_bd: bool = True
     hay_novedades: Optional[bool] = None
     url_pull: str = "/api/database"
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+class ChangePasswordResponse(BaseModel):
+    ok: bool = True
+    message: Optional[str] = None
+    cookie_invalidated: Optional[bool] = None
