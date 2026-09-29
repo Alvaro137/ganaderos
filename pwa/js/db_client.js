@@ -86,20 +86,29 @@ async function obtenerBaseDatosLocal() {
     const db = await openIndexedDB(1500);
     if (!db) return null;
     return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        console.warn("[IDB] Timeout leyendo base de datos local.");
+        try { db.close(); } catch (_) {}
+        resolve(null);
+      }, 1500);
+
       try {
         const tx = db.transaction(IDB_CONFIG.store, "readonly");
         const req = tx.objectStore(IDB_CONFIG.store).get(IDB_CONFIG.key);
         req.onsuccess = () => {
-          db.close();
+          clearTimeout(timer);
+          try { db.close(); } catch (_) {}
           resolve(req.result || null);
         };
         req.onerror = () => {
+          clearTimeout(timer);
           console.warn("[IDB] Error leyendo base de datos local:", req.error);
-          db.close();
+          try { db.close(); } catch (_) {}
           resolve(null);
         };
       } catch (e) {
-        db.close();
+        clearTimeout(timer);
+        try { db.close(); } catch (_) {}
         resolve(null);
       }
     });
