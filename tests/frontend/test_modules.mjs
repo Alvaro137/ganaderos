@@ -109,9 +109,10 @@ async function runAllTests() {
     assert.strictEqual(typeof modDb.inicializarDB, "function");
     assert.strictEqual(typeof modDb.ejecutarConsulta, "function");
     assert.strictEqual(typeof modDb.buscarAnimales, "function");
+    assert.strictEqual(typeof modDb.registrarPartoOptimista, "function");
   });
 
-  await test("Integridad ES Modules: Exportaciones de views de dominio (recetas, piensos, movimientos)", async () => {
+  await test("Integridad ES Modules: Exportaciones de views de dominio (recetas, piensos, movimientos, partos)", async () => {
     const modSanitary = await import('../../pwa/js/modules/views/sanitary_view.js');
     assert.strictEqual(typeof modSanitary.renderVistaRecetas, "function");
 
@@ -120,6 +121,9 @@ async function runAllTests() {
 
     const modMovements = await import('../../pwa/js/modules/views/movements_view.js');
     assert.strictEqual(typeof modMovements.renderVistaMovimientos, "function");
+
+    const modBirth = await import('../../pwa/js/modules/views/birth_modal.js');
+    assert.strictEqual(typeof modBirth.abrirModalRegistroParto, "function");
   });
 
   await test("Integridad ES Modules: Exportaciones de auth, voice y api", async () => {
@@ -288,6 +292,66 @@ async function runAllTests() {
     assert.strictEqual(html.includes('class="btn-ver-ficha-animal"'), true);
     assert.strictEqual(html.includes('Ver ficha'), true);
   });
+
+  // 17. Tests de Motor Local-First Outbox
+  await test("Motor Outbox: Creación, validación de tipos y almacenamiento de mutaciones", async () => {
+    const {
+      guardarMutacionLocal,
+      obtenerMutacionesPendientes,
+      contarMutacionesPendientes,
+      marcarMutacionesComoSincronizadas,
+      obtenerHistorialMutaciones,
+      _resetMemoriaStoreParaTests
+    } = await import('../../pwa/js/modules/outbox.js');
+
+    _resetMemoriaStoreParaTests();
+
+    // Rechaza tipo inválido
+    await assert.rejects(
+      async () => {
+        await guardarMutacionLocal({ tipo: "tipo_invalido", crotal: "ES123" });
+      },
+      /Tipo de mutación no permitido/
+    );
+
+    // Registra mutación de parto
+    const mutacion = await guardarMutacionLocal({
+      tipo: "parto",
+      crotal: "ES083710101045",
+      operador: "usr_jose",
+      payload: {
+        fecha_parto: "2026-09-29",
+        cria_sexo: "H",
+        cria_crotal: "C-1045",
+        incidencias: "Parto normal"
+      }
+    });
+
+    assert.ok(mutacion.uuid && mutacion.uuid.length >= 8, "Debe generar UUID");
+    assert.strictEqual(mutacion.tipo, "parto");
+    assert.strictEqual(mutacion.status, "pending");
+    assert.strictEqual(mutacion.operador, "usr_jose");
+    assert.strictEqual(mutacion.payload.cria_sexo, "H");
+
+    // Comprueba pendientes
+    const pendientes = await obtenerMutacionesPendientes();
+    assert.strictEqual(pendientes.length, 1);
+    assert.strictEqual(pendientes[0].uuid, mutacion.uuid);
+
+    const totalPendientes = await contarMutacionesPendientes();
+    assert.strictEqual(totalPendientes, 1);
+
+    // Sincronizar mutación
+    await marcarMutacionesComoSincronizadas([mutacion.uuid]);
+    const pendientesDespues = await obtenerMutacionesPendientes();
+    assert.strictEqual(pendientesDespues.length, 0, "No debe haber pendientes tras sincronizar");
+
+    // Historial
+    const hist = await obtenerHistorialMutaciones();
+    assert.strictEqual(hist.length, 1);
+    assert.strictEqual(hist[0].status, "synced");
+  });
+
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);
   console.log("==================================================");
 
