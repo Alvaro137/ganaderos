@@ -201,6 +201,12 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **Fail-fast y observabilidad:** Structured logging (`logger.error(..., exc_info=True)`) en lectores de Access y arranque de BD en lugar de excepciones silenciosas.
   - **Resiliencia IndexedDB:** Eliminados timeouts arbitrarios de 1.5s en `db_client.js` y `outbox.js`.
   - **Optimización en repositorios:** Nuevos métodos SQL `list_activos()`, `list_reproductoras()`, `count_activos()` evitando filtrado masivo en memoria RAM de Python.
+- [x] **PR #21 — Erradicación de Deuda Técnica y Vulnerabilidades de Red Teaming:**
+  - **Blindaje de contratos de dominio:** Eliminado `hasattr` y fallback a `list_all` en `CensoService` y `GenealogiaService`. Formalizado protocolo `IntentResolver`.
+  - **Seguridad en `.env`:** Reescritura atómica segura mediante `tempfile.mkstemp` + `os.fsync` + `os.replace` con `threading.Lock` y sanitización contra inyección de variables en `_set_password`.
+  - **DRY y limpieza de paths:** Eliminado path absoluto `/home/varo` en `llm_gateway.py` y extraídas funciones helper compartidas para peticiones y parsing de tools.
+  - **Frontend M3:** Sustituidos 15 estilos inline dinámicos en `mostrarToast` por clases CSS declarativas (`.pwa-toast`, `.pwa-toast--visible`) y gestión robusta de temporizadores.
+  - **Tests de contratos:** `test_application_services.py` actualizado para verificar aserciones estrictas sobre las interfaces del repositorio.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
   - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
