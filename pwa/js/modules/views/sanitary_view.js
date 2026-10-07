@@ -30,7 +30,7 @@ export function renderVistaRecetas() {
             autocomplete="off"
             spellcheck="false"
           />
-          ${AppState.filtroRecetas ? '<button class="btn-input-clear" id="btn-clear-recetas">✕</button>' : ''}
+          <button class="btn-input-clear" id="btn-clear-recetas" style="display: ${AppState.filtroRecetas ? 'flex' : 'none'};">✕</button>
         </div>
       </div>
 
@@ -43,10 +43,14 @@ export function renderVistaRecetas() {
     </div>
   `;
 
+  const btnClear = document.getElementById("btn-clear-recetas");
   const inputRecetas = document.getElementById("txt-busqueda-recetas");
   if (inputRecetas) {
     inputRecetas.addEventListener("input", (e) => {
       AppState.filtroRecetas = e.target.value;
+      if (btnClear) {
+        btnClear.style.display = e.target.value ? "flex" : "none";
+      }
       ejecutarBusquedaRecetas();
     });
     if (esPantallaEscritorio()) {
@@ -54,10 +58,10 @@ export function renderVistaRecetas() {
     }
   }
 
-  const btnClear = document.getElementById("btn-clear-recetas");
   if (btnClear) {
     btnClear.addEventListener("click", () => {
       AppState.filtroRecetas = "";
+      btnClear.style.display = "none";
       if (inputRecetas) {
         inputRecetas.value = "";
         inputRecetas.focus();

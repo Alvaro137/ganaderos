@@ -30,6 +30,14 @@ class TestSyncServiceBase(unittest.TestCase):
         # "BD del móvil/hub" inicial: copia del demo
         self.maestra = self.tmp / "maestra.sqlite"
         shutil.copyfile(DEMO, self.maestra)
+        conn = sqlite3.connect(self.maestra)
+        conn.execute("CREATE TABLE IF NOT EXISTS campo_registros (uuid TEXT PRIMARY KEY, tipo TEXT NOT NULL, crotal TEXT, operador TEXT NOT NULL, device_id TEXT, ts_dispositivo TEXT, ts_servidor TEXT NOT NULL DEFAULT (datetime('now')), payload TEXT)")
+        conn.execute("DELETE FROM campo_registros")
+        conn.execute("CREATE TABLE IF NOT EXISTS _sync_estado (id INTEGER PRIMARY KEY CHECK (id = 1), epoch INTEGER NOT NULL DEFAULT 0, actualizado_en TEXT)")
+        conn.execute("INSERT OR IGNORE INTO _sync_estado (id, epoch, actualizado_en) VALUES (1, 0, datetime('now'))")
+        conn.execute("UPDATE _sync_estado SET epoch = 0 WHERE id = 1")
+        conn.commit()
+        conn.close()
         self.svc = SyncService(self.maestra)
 
     def tearDown(self):
@@ -113,6 +121,11 @@ class TestImport(TestSyncServiceBase):
         actualizada = self.tmp / "pc_actualizado.sqlite"
         shutil.copyfile(DEMO, actualizada)
         conn = sqlite3.connect(actualizada)
+        conn.execute("CREATE TABLE IF NOT EXISTS campo_registros (uuid TEXT PRIMARY KEY, tipo TEXT NOT NULL, crotal TEXT, operador TEXT NOT NULL, device_id TEXT, ts_dispositivo TEXT, ts_servidor TEXT NOT NULL DEFAULT (datetime('now')), payload TEXT)")
+        conn.execute("DELETE FROM campo_registros")
+        conn.execute("CREATE TABLE IF NOT EXISTS _sync_estado (id INTEGER PRIMARY KEY CHECK (id = 1), epoch INTEGER NOT NULL DEFAULT 0, actualizado_en TEXT)")
+        conn.execute("INSERT OR IGNORE INTO _sync_estado (id, epoch, actualizado_en) VALUES (1, 0, datetime('now'))")
+        conn.execute("UPDATE _sync_estado SET epoch = 0 WHERE id = 1")
         conn.execute(
             "INSERT INTO animales (crotal, crotal_4, estado, vida, total_partos) "
             "VALUES ('ES000899999901', '9901', 'A', 1, 0), "
@@ -188,6 +201,14 @@ class TestSyncAPI(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="sync_api_test_"))
         self.maestra = self.tmp / "maestra.sqlite"
         shutil.copyfile(DEMO, self.maestra)
+        conn = sqlite3.connect(self.maestra)
+        conn.execute("CREATE TABLE IF NOT EXISTS campo_registros (uuid TEXT PRIMARY KEY, tipo TEXT NOT NULL, crotal TEXT, operador TEXT NOT NULL, device_id TEXT, ts_dispositivo TEXT, ts_servidor TEXT NOT NULL DEFAULT (datetime('now')), payload TEXT)")
+        conn.execute("DELETE FROM campo_registros")
+        conn.execute("CREATE TABLE IF NOT EXISTS _sync_estado (id INTEGER PRIMARY KEY CHECK (id = 1), epoch INTEGER NOT NULL DEFAULT 0, actualizado_en TEXT)")
+        conn.execute("INSERT OR IGNORE INTO _sync_estado (id, epoch, actualizado_en) VALUES (1, 0, datetime('now'))")
+        conn.execute("UPDATE _sync_estado SET epoch = 0 WHERE id = 1")
+        conn.commit()
+        conn.close()
         # Inyectamos el servicio de sync apuntando a la sandbox (no a la BD real)
         app.state.sync_service = SyncService(self.maestra)
         self.client = TestClient(app)
