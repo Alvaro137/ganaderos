@@ -7,12 +7,13 @@ Sin heurísticas offline de campo libre en producción.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
-import urllib.error
-import urllib.request
 from typing import Any, Optional, Tuple
+
+import httpx
 
 from src.application.intents import CATALOGO_HERRAMIENTAS_LLM, IntentType
 
@@ -191,7 +192,7 @@ def _obtener_claves_api() -> dict[str, str]:
     return claves
 
 
-def _ejecutar_tool_calling(
+async def _ejecutar_tool_calling(
     url: str,
     key: str,
     model: str,
@@ -200,7 +201,7 @@ def _ejecutar_tool_calling(
     timeout: float = 10.0,
     extra_headers: Optional[dict[str, str]] = None,
 ) -> Optional[Tuple[str, dict[str, Any]]]:
-    """Ejecuta una petición estándar OpenAI-compatible con tools a un proveedor LLM."""
+    """Ejecuta una petición estándar OpenAI-compatible con tools a un proveedor LLM de forma asíncrona."""
     messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
     if historial:
         for msg in historial[-4:]:
@@ -223,16 +224,16 @@ def _ejecutar_tool_calling(
     if extra_headers:
         headers.update(extra_headers)
 
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                logger.warning(
+                    f"[LLM Router] {model} en {url} respondió HTTP {resp.status_code}: {resp.text[:200]}"
+                )
+                return None
+
+            data = resp.json()
             choice = data["choices"][0]["message"]
 
             if "tool_calls" in choice and choice["tool_calls"]:
@@ -240,7 +241,7 @@ def _ejecutar_tool_calling(
                 nombre = tool["name"]
                 try:
                     args = json.loads(tool["arguments"])
-                except Exception as json_err:
+                except (json.JSONDecodeError, TypeError) as json_err:
                     logger.warning(f"[LLM Router] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
                     args = {}
                 return nombre, args
@@ -249,13 +250,70 @@ def _ejecutar_tool_calling(
             if content:
                 return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
 
-    except urllib.error.HTTPError as http_err:
-        logger.warning(f"[LLM Router] {model} respondió HTTP {http_err.code}: {http_err.reason}")
-    except urllib.error.URLError as url_err:
-        logger.warning(f"[LLM Router] Error de conexión URL con {model}: {url_err.reason}")
+    except httpx.TimeoutException:
+        logger.warning(f"[LLM Router] Timeout agotado ({timeout}s) al contactar con {model}")
+    except httpx.HTTPError as http_err:
+        logger.warning(f"[LLM Router] Error de transporte HTTP con {model}: {http_err}")
     except Exception as e:
-        logger.warning(f"[LLM Router] Error inesperado en llamada a {model}: {e}")
+        logger.warning(f"[LLM Router] Error inesperado en llamada a {model}: {e}", exc_info=True)
 
+    return None
+
+
+def _ejecutar_tool_calling_sync(
+    url: str,
+    key: str,
+    model: str,
+    prompt: str,
+    historial: Optional[list[dict[str, str]]] = None,
+    timeout: float = 10.0,
+    extra_headers: Optional[dict[str, str]] = None,
+) -> Optional[Tuple[str, dict[str, Any]]]:
+    """Versión síncrona con httpx.Client para scripts CLI que no corren en event loop."""
+    messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
+    if historial:
+        for msg in historial[-4:]:
+            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "tools": CATALOGO_HERRAMIENTAS_LLM,
+        "tool_choice": "auto",
+        "temperature": 0.1,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+        "User-Agent": "GanaderosCampo/2.0",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                logger.warning(f"[LLM Router Sync] {model} respondió HTTP {resp.status_code}: {resp.text[:200]}")
+                return None
+            data = resp.json()
+            choice = data["choices"][0]["message"]
+            if "tool_calls" in choice and choice["tool_calls"]:
+                tool = choice["tool_calls"][0]["function"]
+                nombre = tool["name"]
+                try:
+                    args = json.loads(tool["arguments"])
+                except Exception as json_err:
+                    logger.warning(f"[LLM Router Sync] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
+                    args = {}
+                return nombre, args
+            content = choice.get("content", "").strip() if choice.get("content") else ""
+            if content:
+                return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
+    except Exception as e:
+        logger.warning(f"[LLM Router Sync] Error con {model}: {e}")
     return None
 
 
@@ -265,12 +323,12 @@ def clasificar_intencion_groq(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
 ) -> Optional[Tuple[str, dict[str, Any]]]:
-    """Llama a Groq Cloud con Tool Calling nativo."""
+    """Llama a Groq Cloud con Tool Calling nativo (síncrono, para scripts CLI)."""
     key = api_key or _obtener_claves_api()["groq"]
     if not key:
         return None
     model_name = model or os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
-    return _ejecutar_tool_calling(
+    return _ejecutar_tool_calling_sync(
         url="https://api.groq.com/openai/v1/chat/completions",
         key=key,
         model=model_name,
@@ -285,7 +343,7 @@ def clasificar_intencion_openrouter(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
 ) -> Optional[Tuple[str, dict[str, Any]]]:
-    """Llama a OpenRouter con Tool Calling nativo."""
+    """Llama a OpenRouter con Tool Calling nativo (síncrono, para scripts CLI)."""
     key = api_key or _obtener_claves_api()["openrouter"]
     if not key:
         return None
@@ -294,7 +352,7 @@ def clasificar_intencion_openrouter(
         "HTTP-Referer": "https://ganaderos.local",
         "X-Title": "Ganaderos Campo",
     }
-    return _ejecutar_tool_calling(
+    return _ejecutar_tool_calling_sync(
         url="https://openrouter.ai/api/v1/chat/completions",
         key=key,
         model=model_name,
@@ -304,18 +362,12 @@ def clasificar_intencion_openrouter(
     )
 
 
-def resolver_intencion_usuario(
+async def resolver_intencion_usuario(
     prompt: str,
     historial: Optional[list[dict[str, str]]] = None,
     modelo_solicitado: Optional[str] = None,
 ) -> Tuple[Optional[str], dict[str, Any], bool]:
-    """Resuelve la intención del usuario delegando en la lista priorizada de modelos de IA.
-
-    Prioriza los modelos más inteligentes (Frontier 120B/70B) y desciende en cascada
-    si se agota la cuota o falla el proveedor.
-    Si todos los modelos fallan o no hay conexión, retorna (None, {}, False) sin intentar
-    parsear heurísticamente campos libres.
-    """
+    """Resuelve la intención del usuario delegando en la lista priorizada de modelos de IA de forma asíncrona."""
     claves = _obtener_claves_api()
     modelos = obtener_modelos_priorizados()
 
@@ -326,7 +378,7 @@ def resolver_intencion_usuario(
                 prov = candidato["provider"]
                 key = claves.get(prov)
                 if key:
-                    res = _ejecutar_tool_calling(
+                    res = await _ejecutar_tool_calling(
                         url=candidato["url"],
                         key=key,
                         model=candidato["model"],
@@ -346,7 +398,7 @@ def resolver_intencion_usuario(
             continue
 
         extra_hdrs = {"HTTP-Referer": "https://ganaderos.local", "X-Title": "Ganaderos Campo"} if prov == "openrouter" else None
-        res = _ejecutar_tool_calling(
+        res = await _ejecutar_tool_calling(
             url=candidato["url"],
             key=key,
             model=candidato["model"],
@@ -361,12 +413,12 @@ def resolver_intencion_usuario(
     return None, {}, False
 
 
-def sintetizar_respuesta_llm(
+async def sintetizar_respuesta_llm(
     prompt: str,
     data: list[dict[str, Any]],
     modelo_solicitado: Optional[str] = None,
 ) -> Optional[str]:
-    """Genera la síntesis en lenguaje ganadero utilizando la lista priorizada de modelos."""
+    """Genera la síntesis en lenguaje ganadero utilizando la lista priorizada de modelos de forma asíncrona."""
     claves = _obtener_claves_api()
     modelos = obtener_modelos_priorizados()
     prompt_text = (
@@ -408,13 +460,20 @@ def sintetizar_respuesta_llm(
         }
 
         try:
-            req = urllib.request.Request(candidato["url"], data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
-                res_data = json.loads(resp.read().decode("utf-8"))
-                content = res_data["choices"][0]["message"]["content"].strip()
-                if content:
-                    return content
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(candidato["url"], json=payload, headers=headers)
+                if resp.status_code == 200:
+                    res_data = resp.json()
+                    content = res_data["choices"][0]["message"]["content"].strip()
+                    if content:
+                        return content
+                else:
+                    logger.warning(f"[Synthesize Router] {candidato['name']} respondió HTTP {resp.status_code}")
+        except httpx.TimeoutException:
+            logger.warning(f"[Synthesize Router] Timeout con {candidato['name']}")
+        except httpx.HTTPError as e:
+            logger.warning(f"[Synthesize Router] Error de transporte con {candidato['name']}: {e}")
         except Exception as e:
-            logger.warning(f"[Synthesize Router] Fallo con {candidato['name']}: {e}")
+            logger.warning(f"[Synthesize Router] Fallo inesperado con {candidato['name']}: {e}", exc_info=True)
 
     return None
