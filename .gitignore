@@ -51,3 +51,12 @@ test-results/
 playwright-report/
 .playwright/
 reports/
+
+# Carpetas y archivos de trabajo excluidos de control de versiones (Regla de Oro 4)
+.opencode/
+scratch/
+decompiled/
+original/
+hola.txt
+python/
+
