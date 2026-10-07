@@ -65,16 +65,19 @@ class TestApplicationServices(unittest.IsolatedAsyncioTestCase):
             fecha_alta=date(2018, 3, 1)
         )
 
-        self.animal_repo.list_all.return_value = [vaca_activa, toro_activo, vaca_baja]
+        self.animal_repo.list_activos.return_value = [vaca_activa, toro_activo]
+        self.animal_repo.list_reproductoras.return_value = [vaca_activa]
 
         activos = self.censo_service.list_activos()
         self.assertEqual(len(activos), 2)
         self.assertIn(vaca_activa, activos)
         self.assertIn(toro_activo, activos)
+        self.animal_repo.list_activos.assert_called_once()
 
         reproductoras = self.censo_service.list_reproductoras()
         self.assertEqual(len(reproductoras), 1)
         self.assertEqual(reproductoras[0], vaca_activa)
+        self.animal_repo.list_reproductoras.assert_called_once()
 
     def test_sanidad_service_recetas_activas_en_supresion(self):
         hoy = date(2026, 9, 20)
@@ -144,11 +147,12 @@ class TestApplicationServices(unittest.IsolatedAsyncioTestCase):
             total_partos=1
         )
 
-        self.animal_repo.list_all.return_value = [vaca_retrasada, vaca_al_dia]
+        self.animal_repo.list_reproductoras.return_value = [vaca_retrasada, vaca_al_dia]
 
         problematicas = self.genealogia_service.check_vacas_sin_parir(dias_max=400)
         self.assertEqual(len(problematicas), 1)
         self.assertEqual(problematicas[0], vaca_retrasada)
+        self.animal_repo.list_reproductoras.assert_called_once()
 
     async def test_asistente_service_procesar_intencion_valida(self):
         mock_resolver = MagicMock(return_value=("consultar_ficha_animal", {"crotal_4": "1045"}, False))
@@ -168,7 +172,7 @@ class TestApplicationServices(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res.args, {"crotal_4": "1045"})
         self.assertEqual(res.query_result, mock_query_res)
         self.assertFalse(res.offline_mode)
-        mock_resolver.assert_called_once_with("dame la 1045", None)
+        mock_resolver.assert_called_once_with("dame la 1045", None, modelo_solicitado=None)
         mock_builder.assert_called_once_with("consultar_ficha_animal", {"crotal_4": "1045"})
 
     async def test_asistente_service_intent_no_resuelto(self):

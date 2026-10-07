@@ -23,18 +23,10 @@ class CensoService:
         return self.animal_repo.get_by_crotal(crotal)
 
     def list_activos(self) -> List[Animal]:
-        if hasattr(self.animal_repo, "list_activos"):
-            res = self.animal_repo.list_activos()
-            if isinstance(res, list):
-                return res
-        return [a for a in self.animal_repo.list_all() if a.es_activo]
+        return self.animal_repo.list_activos()
 
     def list_reproductoras(self) -> List[Animal]:
-        if hasattr(self.animal_repo, "list_reproductoras"):
-            res = self.animal_repo.list_reproductoras()
-            if isinstance(res, list):
-                return res
-        return [a for a in self.animal_repo.list_all() if a.es_reproductora]
+        return self.animal_repo.list_reproductoras()
 
 
 class SanidadService:
@@ -56,11 +48,7 @@ class GenealogiaService:
         return self.parto_repo.list_by_madre(madre_crotal)
 
     def check_vacas_sin_parir(self, dias_max: int = 400) -> List[Animal]:
-        if hasattr(self.animal_repo, "list_reproductoras"):
-            res = self.animal_repo.list_reproductoras()
-            vacas = res if isinstance(res, list) else [a for a in self.animal_repo.list_all() if a.es_reproductora]
-        else:
-            vacas = [a for a in self.animal_repo.list_all() if a.es_reproductora]
+        vacas = self.animal_repo.list_reproductoras()
         problematicas = []
         hoy = date.today()
         for vaca in vacas:
@@ -102,15 +90,7 @@ class AsistenteService:
         if not self.intent_resolver or not self.query_builder:
             raise RuntimeError("AsistenteService no tiene configurados los resolvers necesarios.")
 
-        try:
-            if modelo_solicitado is not None:
-                res = self.intent_resolver(
-                    prompt, historial, modelo_solicitado=modelo_solicitado
-                )
-            else:
-                res = self.intent_resolver(prompt, historial)
-        except TypeError:
-            res = self.intent_resolver(prompt, historial)
+        res = self.intent_resolver(prompt, historial, modelo_solicitado=modelo_solicitado)
 
         if inspect.isawaitable(res):
             res = await res
