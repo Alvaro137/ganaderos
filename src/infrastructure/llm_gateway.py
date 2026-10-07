@@ -166,7 +166,6 @@ def _obtener_claves_api() -> dict[str, str]:
         posibles_env = [
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
             os.path.join(os.getcwd(), ".env"),
-            "/home/varo/ganaderos_pwa/.env",
         ]
         for env_path in posibles_env:
             if os.path.isfile(env_path):
@@ -192,6 +191,66 @@ def _obtener_claves_api() -> dict[str, str]:
     return claves
 
 
+def _construir_payload_tool_calling(
+    model: str,
+    prompt: str,
+    historial: Optional[list[dict[str, str]]] = None,
+) -> dict[str, Any]:
+    messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
+    if historial:
+        for msg in historial[-4:]:
+            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+    messages.append({"role": "user", "content": prompt})
+
+    return {
+        "model": model,
+        "messages": messages,
+        "tools": CATALOGO_HERRAMIENTAS_LLM,
+        "tool_choice": "auto",
+        "temperature": 0.1,
+    }
+
+
+def _obtener_headers_tool_calling(
+    key: str,
+    extra_headers: Optional[dict[str, str]] = None,
+) -> dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+        "User-Agent": "GanaderosCampo/2.0",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    return headers
+
+
+def _procesar_respuesta_tool_calling(
+    data: dict[str, Any],
+    model: str,
+) -> Optional[Tuple[str, dict[str, Any]]]:
+    try:
+        choice = data["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError) as err:
+        logger.warning(f"[LLM Router] Formato inesperado de respuesta de {model}: {err}")
+        return None
+
+    if "tool_calls" in choice and choice["tool_calls"]:
+        tool = choice["tool_calls"][0]["function"]
+        nombre = tool["name"]
+        try:
+            args = json.loads(tool["arguments"])
+        except (json.JSONDecodeError, TypeError) as json_err:
+            logger.warning(f"[LLM Router] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
+            args = {}
+        return nombre, args
+
+    content = choice.get("content", "").strip() if choice.get("content") else ""
+    if content:
+        return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
+    return None
+
+
 async def _ejecutar_tool_calling(
     url: str,
     key: str,
@@ -202,27 +261,8 @@ async def _ejecutar_tool_calling(
     extra_headers: Optional[dict[str, str]] = None,
 ) -> Optional[Tuple[str, dict[str, Any]]]:
     """Ejecuta una petición estándar OpenAI-compatible con tools a un proveedor LLM de forma asíncrona."""
-    messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
-    if historial:
-        for msg in historial[-4:]:
-            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = {
-        "model": model,
-        "messages": messages,
-        "tools": CATALOGO_HERRAMIENTAS_LLM,
-        "tool_choice": "auto",
-        "temperature": 0.1,
-    }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {key}",
-        "User-Agent": "GanaderosCampo/2.0",
-    }
-    if extra_headers:
-        headers.update(extra_headers)
+    payload = _construir_payload_tool_calling(model, prompt, historial)
+    headers = _obtener_headers_tool_calling(key, extra_headers)
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -232,24 +272,7 @@ async def _ejecutar_tool_calling(
                     f"[LLM Router] {model} en {url} respondió HTTP {resp.status_code}: {resp.text[:200]}"
                 )
                 return None
-
-            data = resp.json()
-            choice = data["choices"][0]["message"]
-
-            if "tool_calls" in choice and choice["tool_calls"]:
-                tool = choice["tool_calls"][0]["function"]
-                nombre = tool["name"]
-                try:
-                    args = json.loads(tool["arguments"])
-                except (json.JSONDecodeError, TypeError) as json_err:
-                    logger.warning(f"[LLM Router] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
-                    args = {}
-                return nombre, args
-
-            content = choice.get("content", "").strip() if choice.get("content") else ""
-            if content:
-                return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
-
+            return _procesar_respuesta_tool_calling(resp.json(), model)
     except httpx.TimeoutException:
         logger.warning(f"[LLM Router] Timeout agotado ({timeout}s) al contactar con {model}")
     except httpx.HTTPError as http_err:
@@ -270,27 +293,8 @@ def _ejecutar_tool_calling_sync(
     extra_headers: Optional[dict[str, str]] = None,
 ) -> Optional[Tuple[str, dict[str, Any]]]:
     """Versión síncrona con httpx.Client para scripts CLI que no corren en event loop."""
-    messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
-    if historial:
-        for msg in historial[-4:]:
-            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = {
-        "model": model,
-        "messages": messages,
-        "tools": CATALOGO_HERRAMIENTAS_LLM,
-        "tool_choice": "auto",
-        "temperature": 0.1,
-    }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {key}",
-        "User-Agent": "GanaderosCampo/2.0",
-    }
-    if extra_headers:
-        headers.update(extra_headers)
+    payload = _construir_payload_tool_calling(model, prompt, historial)
+    headers = _obtener_headers_tool_calling(key, extra_headers)
 
     try:
         with httpx.Client(timeout=timeout) as client:
@@ -298,20 +302,7 @@ def _ejecutar_tool_calling_sync(
             if resp.status_code != 200:
                 logger.warning(f"[LLM Router Sync] {model} respondió HTTP {resp.status_code}: {resp.text[:200]}")
                 return None
-            data = resp.json()
-            choice = data["choices"][0]["message"]
-            if "tool_calls" in choice and choice["tool_calls"]:
-                tool = choice["tool_calls"][0]["function"]
-                nombre = tool["name"]
-                try:
-                    args = json.loads(tool["arguments"])
-                except Exception as json_err:
-                    logger.warning(f"[LLM Router Sync] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
-                    args = {}
-                return nombre, args
-            content = choice.get("content", "").strip() if choice.get("content") else ""
-            if content:
-                return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
+            return _procesar_respuesta_tool_calling(resp.json(), model)
     except Exception as e:
         logger.warning(f"[LLM Router Sync] Error con {model}: {e}")
     return None
