@@ -195,6 +195,12 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
     - Test 08 E2E en Playwright validando flujo completo de parto y outbox.
     - En `AGENTS.md`: Prohibición estricta de push directo a `master` (siempre `develop` -> PR -> merge) y regla de `sudo` sin adivinar claves ni ejecución autónoma.
 - [x] Arreglar `compose.yaml`: pasar `PWA_SECRET_KEY` y `PWA_PASSWORD=${PWA_PASSWORD:-ganaderos}` (eliminada variable obsoleta `PWA_AUTH_SECRET`).
+- [x] **PR #19 — Refactorización integral de arquitectura limpia y resiliencia:**
+  - **Asincronía real en IA:** `llm_gateway.py` migrado a `httpx.AsyncClient` liberando el event loop de Uvicorn/FastAPI.
+  - **Erradicación de bootstrap hacks:** Eliminado `os.execve` con `_VENV_CANDIDATES` en `app.py`.
+  - **Fail-fast y observabilidad:** Structured logging (`logger.error(..., exc_info=True)`) en lectores de Access y arranque de BD en lugar de excepciones silenciosas.
+  - **Resiliencia IndexedDB:** Eliminados timeouts arbitrarios de 1.5s en `db_client.js` y `outbox.js`.
+  - **Optimización en repositorios:** Nuevos métodos SQL `list_activos()`, `list_reproductoras()`, `count_activos()` evitando filtrado masivo en memoria RAM de Python.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
   - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
