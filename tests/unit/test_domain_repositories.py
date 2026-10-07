@@ -173,6 +173,20 @@ class TestSQLiteRepositories(unittest.TestCase):
         # Total partos nulo se mapea a 0 por defecto
         self.assertEqual(animal.total_partos, 0)
 
+    def test_animal_repository_list_activos_and_reproductoras(self):
+        activos = self.animal_repo.list_activos()
+        crotales_activos = [str(a.crotal) for a in activos]
+        self.assertIn("ES083710104599", crotales_activos)
+        self.assertNotIn("ES083710104600", crotales_activos)  # BajaDemo is estado 'B', vida 0
+
+        reproductoras = self.animal_repo.list_reproductoras()
+        crotales_reprod = [str(r.crotal) for r in reproductoras]
+        self.assertIn("ES083710104599", crotales_reprod)
+        self.assertNotIn("ES083710104600", crotales_reprod)
+
+        count = self.animal_repo.count_activos()
+        self.assertEqual(count, len(activos))
+
 
 if __name__ == "__main__":
     unittest.main()
