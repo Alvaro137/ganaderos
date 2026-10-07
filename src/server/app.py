@@ -6,6 +6,8 @@ import os
 import secrets
 import sqlite3
 import sys
+import tempfile
+import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -57,31 +59,63 @@ def verificar_password(pwd: str) -> bool:
     return False
 
 
+_password_lock = threading.Lock()
+
+
 def _set_password(new_password: str) -> None:
-    """Cambia la contraseña compartida de la explotación.
+    """Cambia la contraseña compartida de la explotación de forma atómica y segura.
 
-    Efecto inmediato (runtime) + persistencia entre reinicios del servicio
-    (systemd ``EnvironmentFile`` lee el ``.env`` del repo). KISS: una sola password
-    global compartida por todos los operadores; el cliente debe forzar logout.
+    Efecto inmediato en runtime (os.environ) + persistencia atómica en el archivo .env
+    con bloqueo de concurrencia y reemplazo seguro contra caídas y corrupción.
     """
-    os.environ["PWA_PASSWORD"] = new_password  # efecto inmediato en el proceso actual
+    if "\n" in new_password or "\r" in new_password:
+        raise ValueError("La contraseña no puede contener saltos de línea.")
 
-    env_path = Path(_REPO_ROOT) / ".env"
-    if env_path.exists():
-        lineas = env_path.read_text(encoding="utf-8").splitlines()
+    escaped_password = new_password.replace('\\', '\\\\').replace('"', '\\"')
+
+    with _password_lock:
+        os.environ["PWA_PASSWORD"] = new_password
+
+        env_path = Path(_REPO_ROOT) / ".env"
+        lineas = []
+        if env_path.exists():
+            try:
+                lineas = env_path.read_text(encoding="utf-8").splitlines()
+            except (OSError, UnicodeDecodeError) as e:
+                logger.warning(f"Error al leer .env previo: {e}")
+
         nuevas: List[str] = []
         seen = False
         for ln in lineas:
             if ln.strip().startswith("PWA_PASSWORD="):
-                nuevas.append(f'PWA_PASSWORD="{new_password}"')
+                nuevas.append(f'PWA_PASSWORD="{escaped_password}"')
                 seen = True
             else:
                 nuevas.append(ln)
         if not seen:
-            nuevas.append(f'PWA_PASSWORD="{new_password}"')
-    else:
-        nuevas = [f'PWA_PASSWORD="{new_password}"']
-    env_path.write_text("\n".join(nuevas) + "\n", encoding="utf-8")
+            nuevas.append(f'PWA_PASSWORD="{escaped_password}"')
+
+        content = "\n".join(nuevas) + "\n"
+        env_dir = env_path.parent
+        env_dir.mkdir(parents=True, exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=".env_tmp_", dir=str(env_dir), text=True)
+        try:
+            with open(tmp_fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            try:
+                os.chmod(tmp_path, 0o600)
+            except OSError:
+                pass
+            os.replace(tmp_path, str(env_path))
+        except Exception:
+            try:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
 
 
