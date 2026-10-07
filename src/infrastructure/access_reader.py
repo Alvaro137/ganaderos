@@ -8,12 +8,15 @@ NO es utilizado por el runtime del servidor web FastAPI en producción sobre Lin
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Generator, Optional
+
+logger = logging.getLogger("ganaderos.access_reader")
 
 try:
     import pyodbc
@@ -73,7 +76,8 @@ def tiene_controlador_access() -> bool:
     try:
         drivers = pyodbc.drivers()
         return any("Access" in d for d in drivers)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[Access] Error al enumerar drivers ODBC del sistema: {e}")
         return False
 
 
@@ -170,15 +174,15 @@ def leer_animales(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute("SELECT id, descripcion FROM Raza")
         razas = {str(r[0]): (r[1] or "").strip() for r in cur.fetchall()}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[Access] No se pudo leer la tabla auxiliar Raza: {e}")
 
     sexos: dict[str, str] = {}
     try:
         cur.execute("SELECT id, descripcion FROM Sexo")
         sexos = {str(s[0]): (s[1] or "").strip() for s in cur.fetchall()}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[Access] No se pudo leer la tabla auxiliar Sexo: {e}")
 
     query = """
     SELECT crotal, fnac, raza, sexo, madre, padre, estado, vida, corral,
@@ -190,7 +194,8 @@ def leer_animales(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute(query)
         filas = cur.fetchall()
-    except Exception:
+    except Exception as e:
+        logger.error(f"[Access] Error ejecutando SELECT de Animal: {e}", exc_info=True)
         return []
 
     animales = []
@@ -235,7 +240,8 @@ def leer_partos(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute(query)
         filas = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        logger.error("Error al leer partos de Access: %s", exc, exc_info=True)
         return []
 
     partos = []
@@ -262,8 +268,8 @@ def leer_movimientos(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute("SELECT cod_movi, descripcion FROM TipoMovimiento")
         tipos = {str(t[0]): (t[1] or "").strip() for t in cur.fetchall()}
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("No se pudo cargar tabla TipoMovimiento: %s", exc)
 
     query = """
     SELECT cod_movi, crotal, fecha, tipo, origen, destino, corral
@@ -273,7 +279,8 @@ def leer_movimientos(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute(query)
         filas = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        logger.error("Error al leer movimientos de Access: %s", exc, exc_info=True)
         return []
 
     movimientos = []
@@ -309,7 +316,8 @@ def leer_explotaciones(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
             for f in cur.fetchall()
             if _limpiar_str(f[0])
         ]
-    except Exception:
+    except Exception as exc:
+        logger.error("Error al leer explotaciones de Access: %s", exc, exc_info=True)
         return []
 
 
@@ -325,7 +333,8 @@ def leer_recetas_y_tratamientos(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute(query)
         filas = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        logger.error("Error al leer tratamientos/recetas de Access: %s", exc, exc_info=True)
         return []
 
     recetas = []
@@ -367,7 +376,8 @@ def leer_compras_alimento(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     try:
         cur.execute(query)
         filas = cur.fetchall()
-    except Exception:
+    except Exception as exc:
+        logger.error("Error al leer compras de alimento de Access: %s", exc, exc_info=True)
         return []
 
     compras = []
