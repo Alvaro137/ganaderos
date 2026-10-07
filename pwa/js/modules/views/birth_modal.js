@@ -190,7 +190,7 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
           <button 
             type="submit" 
             id="btn-guardar-parto" 
-            style="flex: 2; height: 50px; border-radius: 8px; border: none; background: #10b981; color: #ffffff; font-size: 1.05rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 6px rgba(16,185,129,0.3);">
+            class="btn-guardar-parto">
             <span>💾 Guardar Parto</span>
           </button>
         </div>

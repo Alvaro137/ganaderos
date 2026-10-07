@@ -410,7 +410,7 @@ export async function mostrarModalOutbox() {
             </span>
           </div>
 
-          <button id="btn-sincronizar-outbox-ahora" style="width: 100%; height: 46px; border-radius: 8px; border: none; background: #10b981; color: #ffffff; font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 4px rgba(16,185,129,0.3);">
+          <button id="btn-sincronizar-outbox-ahora" style="width: 100%; height: 46px; border-radius: var(--md-shape-sm, 8px); border: none; background: var(--md-primary, #1e5e3a); color: var(--md-on-primary, #ffffff); font-size: 0.95rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 4px rgba(30, 94, 58, 0.3); transition: all 0.15s ease;">
             <span>🔄 Sincronizar Cambios Ahora</span>
           </button>
           <div id="outbox-sync-feedback" style="display: none; font-size: 0.82rem; text-align: center;"></div>
