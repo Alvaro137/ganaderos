@@ -1,4 +1,4 @@
-from typing import List, Optional, Protocol
+from typing import Any, List, Optional, Protocol
 
 from src.domain.models import Animal, Parto, RecetaSanitaria, Usuario
 
@@ -42,5 +42,15 @@ class UsuarioRepository(Protocol):
         ...
 
     def create(self, usuario: Usuario) -> None:
+        ...
+
+
+class IntentResolver(Protocol):
+    def __call__(
+        self,
+        prompt: str,
+        historial: Optional[List[dict]] = None,
+        modelo_solicitado: Optional[str] = None,
+    ) -> Any:
         ...
 
