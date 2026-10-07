@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import inspect
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, List, Optional
@@ -22,9 +23,17 @@ class CensoService:
         return self.animal_repo.get_by_crotal(crotal)
 
     def list_activos(self) -> List[Animal]:
+        if hasattr(self.animal_repo, "list_activos"):
+            res = self.animal_repo.list_activos()
+            if isinstance(res, list):
+                return res
         return [a for a in self.animal_repo.list_all() if a.es_activo]
 
     def list_reproductoras(self) -> List[Animal]:
+        if hasattr(self.animal_repo, "list_reproductoras"):
+            res = self.animal_repo.list_reproductoras()
+            if isinstance(res, list):
+                return res
         return [a for a in self.animal_repo.list_all() if a.es_reproductora]
 
 
@@ -47,7 +56,11 @@ class GenealogiaService:
         return self.parto_repo.list_by_madre(madre_crotal)
 
     def check_vacas_sin_parir(self, dias_max: int = 400) -> List[Animal]:
-        vacas = [a for a in self.animal_repo.list_all() if a.es_reproductora]
+        if hasattr(self.animal_repo, "list_reproductoras"):
+            res = self.animal_repo.list_reproductoras()
+            vacas = res if isinstance(res, list) else [a for a in self.animal_repo.list_all() if a.es_reproductora]
+        else:
+            vacas = [a for a in self.animal_repo.list_all() if a.es_reproductora]
         problematicas = []
         hoy = date.today()
         for vaca in vacas:
@@ -75,13 +88,13 @@ class AsistenteService:
         self.intent_resolver = intent_resolver
         self.query_builder = query_builder
 
-    def procesar_intencion(
+    async def procesar_intencion(
         self,
         prompt: str,
         historial: Optional[List[dict]] = None,
         modelo_solicitado: Optional[str] = None,
     ) -> Optional[AsistenteResultado]:
-        """Coordina la resolución de intenciones y la generación de consultas SQL/respuestas.
+        """Coordina la resolución de intenciones y la generación de consultas SQL/respuestas de forma asíncrona.
 
         Retorna un AsistenteResultado con el intent, argumentos y QueryResult,
         o None si no se pudo resolver la intención.
@@ -91,13 +104,21 @@ class AsistenteService:
 
         try:
             if modelo_solicitado is not None:
-                nombre_intent, args, offline_mode = self.intent_resolver(
+                res = self.intent_resolver(
                     prompt, historial, modelo_solicitado=modelo_solicitado
                 )
             else:
-                nombre_intent, args, offline_mode = self.intent_resolver(prompt, historial)
+                res = self.intent_resolver(prompt, historial)
         except TypeError:
-            nombre_intent, args, offline_mode = self.intent_resolver(prompt, historial)
+            res = self.intent_resolver(prompt, historial)
+
+        if inspect.isawaitable(res):
+            res = await res
+
+        if not res or not isinstance(res, (tuple, list)) or len(res) < 3:
+            return None
+
+        nombre_intent, args, offline_mode = res
 
         if not nombre_intent:
             return None
