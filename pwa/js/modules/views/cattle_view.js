@@ -29,7 +29,7 @@ export function renderVistaAnimales() {
               autocomplete="off"
               spellcheck="false"
             />
-            ${AppState.terminoBusqueda ? '<button class="btn-input-clear" id="btn-clear-search">✕</button>' : ''}
+            <button class="btn-input-clear" id="btn-clear-search" style="display: ${AppState.terminoBusqueda ? 'flex' : 'none'};">✕</button>
           </div>
 
           <div class="search-actions">
@@ -100,11 +100,15 @@ export function renderVistaAnimales() {
     </div>
   `;
 
+  const btnClear = document.getElementById("btn-clear-search");
   const inputSearch = document.getElementById("txt-busqueda");
   if (inputSearch) {
     inputSearch.addEventListener("input", (e) => {
       AppState.terminoBusqueda = e.target.value;
       AppState.limiteAnimales = 50;
+      if (btnClear) {
+        btnClear.style.display = e.target.value ? "flex" : "none";
+      }
       ejecutarBusquedaYListar();
     });
     if (esDesktop) {
@@ -112,11 +116,11 @@ export function renderVistaAnimales() {
     }
   }
 
-  const btnClear = document.getElementById("btn-clear-search");
   if (btnClear) {
     btnClear.addEventListener("click", () => {
       AppState.terminoBusqueda = "";
       AppState.limiteAnimales = 50;
+      btnClear.style.display = "none";
       if (inputSearch) {
         inputSearch.value = "";
         inputSearch.focus();
@@ -192,6 +196,10 @@ export function renderVistaAnimales() {
   }
 
   ejecutarBusquedaYListar();
+
+  if (AppState.crotalSeleccionado && esDesktop) {
+    seleccionarAnimal(AppState.crotalSeleccionado, false);
+  }
 }
 
 export function ejecutarBusquedaYListar() {
