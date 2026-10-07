@@ -1,6 +1,5 @@
 import hashlib
 import hmac
-import importlib.util
 import logging
 import os
 import secrets

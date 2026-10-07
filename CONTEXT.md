@@ -210,6 +210,11 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **9 flujos E2E completos en Playwright**: arranque/manifiesto, teclado numérico de campo 4 dígitos/vacíos, ficha técnica y genealogía descendente, recetas sanitarias y tiempos de retirada en carne (`DRAXXIN`), módulo de alimentación (piensos/costes), movimientos REGA y navegación cruzada a ficha activa, modo 100% offline con degradación grácil del asistente, ciclo completo de parto offline y sincronización outbox al reconectar, autenticación multi-operador con persistencia tras reload.
   - **Backend y concurrencia**: creado `test_sync_concurrency.py` con `ThreadPoolExecutor` para pruebas multi-operador en paralelo, monotonicidad de epoch, deduplicación e idempotencia estricta, y tests de seguridad en `/api/database`.
   - **Fixes de usabilidad**: botones dinámicos de limpiar filtro siempre interactuables, navegación segura a fichas en movimientos y conservación de selección de animal ante eventos de sincronización.
+- [x] **PR #27 — Modernización de CI/CD, blindaje de secretos y corrección de linter:**
+  - **Linter Ruff a cero errores**: resueltos imports no usados y desordenados en gateway, server y tests.
+  - **Pipeline en GitHub Actions optimizado**: pytest unificado como runner de CI, escaneo de secretos con Gitleaks, comprobación de versión de `CACHE_NAME` en `sw.js` y subida de trazas de Playwright en caso de fallo (`upload-artifact`).
+  - **Extracción de Docker**: retirada del build obligatorio en cada push; movido a workflow manual `.github/workflows/docker.yml` (`workflow_dispatch`).
+  - **Blindaje en `.gitignore`**: carpetas de scratch, decompiled y archivos de trabajo temporal permanentemente excluidos.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
   - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
