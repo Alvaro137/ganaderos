@@ -205,8 +205,11 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **Blindaje de contratos de dominio:** Eliminado `hasattr` y fallback a `list_all` en `CensoService` y `GenealogiaService`. Formalizado protocolo `IntentResolver`.
   - **Seguridad en `.env`:** Reescritura atómica segura mediante `tempfile.mkstemp` + `os.fsync` + `os.replace` con `threading.Lock` y sanitización contra inyección de variables en `_set_password`.
   - **DRY y limpieza de paths:** Eliminado path absoluto `/home/varo` en `llm_gateway.py` y extraídas funciones helper compartidas para peticiones y parsing de tools.
-  - **Frontend M3:** Sustituidos 15 estilos inline dinámicos en `mostrarToast` por clases CSS declarativas (`.pwa-toast`, `.pwa-toast--visible`) y gestión robusta de temporizadores.
-  - **Tests de contratos:** `test_application_services.py` actualizado para verificar aserciones estrictas sobre las interfaces del repositorio.
+- [x] **PR #25 — Refuerzo exhaustivo de suite de integración y Playwright E2E sin aserciones triviales:**
+  - **Eliminación de aserciones superficiales**: erradicadas comprobaciones de longitud (`length > 30`) y validaciones ciegas de DOM sin transición de estado.
+  - **9 flujos E2E completos en Playwright**: arranque/manifiesto, teclado numérico de campo 4 dígitos/vacíos, ficha técnica y genealogía descendente, recetas sanitarias y tiempos de retirada en carne (`DRAXXIN`), módulo de alimentación (piensos/costes), movimientos REGA y navegación cruzada a ficha activa, modo 100% offline con degradación grácil del asistente, ciclo completo de parto offline y sincronización outbox al reconectar, autenticación multi-operador con persistencia tras reload.
+  - **Backend y concurrencia**: creado `test_sync_concurrency.py` con `ThreadPoolExecutor` para pruebas multi-operador en paralelo, monotonicidad de epoch, deduplicación e idempotencia estricta, y tests de seguridad en `/api/database`.
+  - **Fixes de usabilidad**: botones dinámicos de limpiar filtro siempre interactuables, navegación segura a fichas en movimientos y conservación de selección de animal ante eventos de sincronización.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
   - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
