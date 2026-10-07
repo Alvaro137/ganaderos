@@ -405,7 +405,7 @@ export function generarHtmlDetalleAnimal(animal) {
       <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center;">
         <span>Historial de Partos y Crías (${animal.partos ? animal.partos.length : 0})</span>
         ${esHembra && esActivo ? `
-          <button data-action="registrar-parto" data-madre-crotal="${escapeHtml(animal.crotal)}" data-madre-4="${escapeHtml(animal.crotal_4)}" data-madre-raza="${escapeHtml(animal.raza || '')}" style="background: #10b981; color: #ffffff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">
+          <button class="btn-registrar-parto-detail" data-action="registrar-parto" data-madre-crotal="${escapeHtml(animal.crotal)}" data-madre-4="${escapeHtml(animal.crotal_4)}" data-madre-raza="${escapeHtml(animal.raza || '')}">
             <span>➕ Registrar Parto</span>
           </button>
         ` : ""}
