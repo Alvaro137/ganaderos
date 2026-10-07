@@ -51,19 +51,6 @@ class TestApplicationServices(unittest.IsolatedAsyncioTestCase):
             corral="DUEÑA",
             fecha_alta=date(2020, 5, 10)
         )
-        vaca_baja = Animal(
-            crotal=Crotal("ES083710103333"),
-            nombre="Antigua",
-            sexo="Vaca",
-            raza="MORUCHA",
-            fecha_nacimiento=date(2018, 3, 1),
-            madre_crotal=None,
-            padre_crotal=None,
-            estado="B",
-            vida=0,
-            corral="ESPADAÑA",
-            fecha_alta=date(2018, 3, 1)
-        )
 
         self.animal_repo.list_activos.return_value = [vaca_activa, toro_activo]
         self.animal_repo.list_reproductoras.return_value = [vaca_activa]
