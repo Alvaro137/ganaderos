@@ -7,7 +7,6 @@ Sin heurísticas offline de campo libre en producción.
 """
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 import os

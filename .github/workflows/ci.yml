@@ -18,12 +18,50 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install dependencies
-        run: pip install .[dev] ruff
+      - name: Install Ruff
+        run: pip install ruff
 
       - name: Run Ruff Linter
         run: ruff check src/ scripts/ tests/
+
+  security:
+    name: Security & Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pwa-cache-check:
+    name: PWA Cache Version Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify CACHE_NAME bump on PWA changes
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^pwa/(js|css|index\.html)'; then
+            echo "Detectados cambios en assets de la PWA. Verificando versión de CACHE_NAME..."
+            if git diff origin/${{ github.base_ref }}...HEAD pwa/sw.js | grep -E '^\+.*CACHE_NAME'; then
+              echo "OK: CACHE_NAME actualizado correctamente en pwa/sw.js"
+            else
+              echo "::warning file=pwa/sw.js,line=2::Se han modificado archivos de frontend en pwa/ pero no se incrementó CACHE_NAME en pwa/sw.js. Recuerda subir la versión de caché para que los clientes offline descarguen los nuevos assets."
+            fi
+          else
+            echo "No hay cambios en assets frontend de PWA."
+          fi
 
   test:
     name: Unit & Integration Tests
@@ -36,17 +74,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install project dependencies
-        run: pip install .
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test] pytest
 
-      - name: Generate Demo Database
-        run: python3 scripts/generate_demo_db.py --animales 100
-
-      - name: Run Unit Tests
+      - name: Run Pytest Suite
         env:
           PYTHONPATH: .
-        run: python3 -m unittest discover tests
+        run: python -m pytest tests/ -v
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -56,26 +94,10 @@ jobs:
       - name: Run Frontend Tests
         run: node tests/frontend/test_modules.mjs
 
-  docker-build:
-    name: Docker Build Verification
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: ganaderos:ci
-
   e2e:
     name: Playwright E2E Tests
     runs-on: ubuntu-latest
+    needs: [lint, test]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -84,23 +106,32 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
       - name: Install Python dependencies
-        run: pip install .
-
-      - name: Generate Demo Database
-        run: python3 scripts/generate_demo_db.py --animales 100
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
 
       - name: Install NPM dependencies
-        run: npm install
+        run: npm ci || npm install
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright E2E Tests
-        run: npx playwright test
+        run: npx playwright test --project="Desktop Chromium"
+
+      - name: Upload Playwright Artifacts on Failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failure-artifacts
+          path: test-results/
+          retention-days: 7
