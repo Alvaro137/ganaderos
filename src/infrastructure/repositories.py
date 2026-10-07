@@ -50,6 +50,26 @@ class SQLiteAnimalRepository(AnimalRepository):
         cur.execute("SELECT * FROM animales")
         return [self._map_to_domain(row) for row in cur.fetchall()]
 
+    def list_activos(self) -> List[Animal]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM animales WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A' AND vida = 1")
+        return [self._map_to_domain(row) for row in cur.fetchall()]
+
+    def list_reproductoras(self) -> List[Animal]:
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT * FROM animales "
+            "WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A' AND vida = 1 "
+            "AND (sexo = 'Vaca' OR sexo LIKE '%Hembra%')"
+        )
+        return [self._map_to_domain(row) for row in cur.fetchall()]
+
+    def count_activos(self) -> int:
+        cur = self.conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM animales WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A' AND vida = 1")
+        row = cur.fetchone()
+        return row[0] if row else 0
+
     def _map_to_domain(self, row: sqlite3.Row) -> Animal:
         return Animal(
             crotal=Crotal(row['crotal']),

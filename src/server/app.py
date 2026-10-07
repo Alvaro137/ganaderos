@@ -31,8 +31,8 @@ def _cargar_env_file():
                     val = val.strip().strip('"').strip("'")
                     if key and key not in os.environ:
                         os.environ[key] = val
-        except Exception:
-            pass
+        except (OSError, UnicodeDecodeError) as e:
+            logging.getLogger("ganaderos.server").warning(f"No se pudo leer .env en {env_path}: {e}")
 
 
 _cargar_env_file()
@@ -131,19 +131,6 @@ def validar_auth_token(token: Optional[str]) -> bool:
     """Valida la firma HMAC y la vigencia temporal del token de sesión."""
     return extraer_datos_token(token) is not None
 
-# Auto-bootstrap virtual environment if dependencies are missing (e.g. systemd running system python)
-if importlib.util.find_spec("fastapi") is None:
-    _VENV_CANDIDATES = [
-        os.path.join(_REPO_ROOT, "venv", "bin", "python"),
-        os.path.join(_REPO_ROOT, "venv", "bin", "python3"),
-        os.path.join(_REPO_ROOT, ".venv", "bin", "python"),
-        os.path.join(_REPO_ROOT, "venv", "Scripts", "python.exe"),
-    ]
-    _TARGET_PYTHON = next((p for p in _VENV_CANDIDATES if os.path.exists(p)), None)
-    if _TARGET_PYTHON and os.path.abspath(sys.executable) != os.path.abspath(_TARGET_PYTHON):
-        env = os.environ.copy()
-        env["PYTHONPATH"] = _REPO_ROOT + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
-        os.execve(_TARGET_PYTHON, [_TARGET_PYTHON] + sys.argv, env)
 
 import httpx
 from fastapi import (
@@ -243,7 +230,9 @@ async def lifespan(app: FastAPI):
             app.state.genealogia_service = GenealogiaService(animal_repo, parto_repo)
             app.state.usuario_service = UsuarioService(usuario_repo)
         except Exception as e:
-            print(f"[Lifespan] Advertencia al abrir base de datos: {e}")
+            logger.error(f"[Lifespan] Error al abrir base de datos en {db_file}: {e}", exc_info=True)
+            if os.environ.get("APP_ENV") not in ("test", "e2e"):
+                raise RuntimeError(f"Fallo crítico al abrir base de datos de producción: {e}") from e
             app.state.db_conn = None
             app.state.censo_service = None
             app.state.sanidad_service = None
@@ -253,6 +242,8 @@ async def lifespan(app: FastAPI):
             mem_repo.ensure_table_and_defaults()
             app.state.usuario_service = UsuarioService(mem_repo)
     else:
+        if os.environ.get("APP_ENV") not in ("test", "e2e"):
+            logger.error("[Lifespan] No se encontró ninguna base de datos SQLite (finca ni demo).")
         app.state.db_conn = None
         app.state.censo_service = None
         app.state.sanidad_service = None
@@ -264,7 +255,7 @@ async def lifespan(app: FastAPI):
 
     # Asistente IA está disponible tanto con BD local como en modo edge
     app.state.asistente_service = AsistenteService(
-        intent_resolver=lambda p, h=None: resolver_intencion_usuario(p, h),
+        intent_resolver=lambda p, h=None, **kw: resolver_intencion_usuario(p, h, **kw),
         query_builder=construir_consulta_intent,
     )
 
@@ -603,7 +594,7 @@ async def ai_intent(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Servicio de asistente no inicializado.",
         )
-    resultado = asistente.procesar_intencion(
+    resultado = await asistente.procesar_intencion(
         req.prompt, req.historial, modelo_solicitado=req.model_id
     )
     if not resultado:
@@ -639,9 +630,9 @@ async def ai_models(authorized: bool = Depends(verify_token)):
 
 @app.post("/api/ai/synthesize", tags=["Asistente IA"], response_model=SynthesizeResponse)
 async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verify_token)):
-    """Sintetiza en lenguaje ganadero directo los resultados obtenidos de la base de datos."""
+    """Sintetiza en lenguaje ganadero directo los resultados obtenidos de la base de datos de forma asíncrona."""
     if req.data:
-        sintesis_llm = sintetizar_respuesta_llm(req.prompt, req.data, modelo_solicitado=req.model_id)
+        sintesis_llm = await sintetizar_respuesta_llm(req.prompt, req.data, modelo_solicitado=req.model_id)
         if sintesis_llm:
             return {"ok": True, "sintesis": sintesis_llm}
 
