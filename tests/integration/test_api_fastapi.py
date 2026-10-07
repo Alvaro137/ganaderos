@@ -71,6 +71,27 @@ class TestFastAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.json(), list)
 
+    def test_censo_get_animal_por_crotal_success(self):
+        # 1. Obtener un crotal real del listado
+        list_resp = self.client.get("/api/censo/animales")
+        self.assertEqual(list_resp.status_code, 200)
+        animales = list_resp.json()
+        if animales:
+            crotal_real = animales[0]["crotal"]
+            resp = self.client.get(f"/api/censo/animales/{crotal_real}")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertEqual(data["crotal"], crotal_real)
+            self.assertIn("sexo", data)
+            self.assertIn("raza", data)
+            self.assertGreaterEqual(data["edad_anios"], 0)
+
+    def test_censo_get_animal_no_encontrado_404(self):
+        # Crotal sintácticamente válido (14 chars) pero inexistente en censo
+        resp = self.client.get("/api/censo/animales/ES089999999999")
+        self.assertEqual(resp.status_code, 404)
+        self.assertIn("no encontrado", resp.json()["detail"])
+
     def test_censo_crotal_invalido_domain_error(self):
         response = self.client.get("/api/censo/animales/CROTAL_INVALIDO")
         self.assertEqual(response.status_code, 422)
@@ -78,6 +99,30 @@ class TestFastAPI(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertEqual(data["error"], "CrotalInvalidoError")
         self.assertIn("formato oficial", data["detail"])
+
+    def test_database_download_authorized_and_security(self):
+        # 1. Con descarga anónima activada
+        os.environ["PWA_ALLOW_ANON_DB"] = "1"
+        resp = self.client.get("/api/database")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get("content-type"), "application/octet-stream")
+        self.assertIn("ganaderos_campo.sqlite", resp.headers.get("content-disposition", ""))
+        self.assertGreater(len(resp.content), 1024)
+
+        # 2. Con descarga anónima desactivada -> exige token Bearer
+        os.environ["PWA_ALLOW_ANON_DB"] = "0"
+        try:
+            unauth_resp = self.client.get("/api/database")
+            self.assertEqual(unauth_resp.status_code, 401)
+
+            # Proporcionar token válido
+            login_resp = self.client.post("/api/auth/login", json={"password": "mvp-testing"})
+            token = login_resp.json()["token"]
+            auth_resp = self.client.get("/api/database", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(auth_resp.status_code, 200)
+            self.assertGreater(len(auth_resp.content), 1024)
+        finally:
+            os.environ["PWA_ALLOW_ANON_DB"] = "1"
 
     def test_auth_login_success_and_token_validation(self):
         # 1. Login exitoso con la contraseña compartida y operador seleccionado

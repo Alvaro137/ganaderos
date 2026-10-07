@@ -357,7 +357,18 @@ def verify_token(
 
 
 def get_censo_service() -> Optional[CensoService]:
-    return getattr(app.state, "censo_service", None)
+    service = getattr(app.state, "censo_service", None)
+    if service is None:
+        db_file = _buscar_archivo_sqlite()
+        if db_file:
+            try:
+                conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
+                animal_repo = SQLiteAnimalRepository(conn)
+                service = CensoService(animal_repo)
+                app.state.censo_service = service
+            except Exception:
+                pass
+    return service
 
 
 def get_sanidad_service() -> Optional[SanidadService]:

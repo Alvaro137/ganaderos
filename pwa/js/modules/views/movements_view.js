@@ -247,6 +247,7 @@ export function generarCardMovimientoHtml(m) {
   const badgeTexto = m.label_display || clasificacion.label || m.tipo_display || m.tipo || "MOVIMIENTO";
 
   const crotal4 = m.crotal_4 || (m.crotal && m.crotal.length >= 4 ? m.crotal.slice(-4) : m.crotal);
+  const tieneFicha = m.estado === "A" || m.estado === "Activo" || (m.estado === undefined && Boolean(m.crotal));
   const estadoBadge = m.estado === "A" 
     ? '<span style="background: #f0fdf4; color: #166534; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 700;">Activo en finca</span>' 
     : '<span style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600;">Baja</span>';
@@ -266,7 +267,7 @@ export function generarCardMovimientoHtml(m) {
 
       <div class="mov-animal-row">
         <span class="mov-crotal-4">${escapeHtml(crotal4)}</span>
-        <span class="mov-crotal-completo" data-action="select-animal" data-crotal="${escapeHtml(m.crotal)}" style="cursor: pointer;">
+        <span class="mov-crotal-completo" ${tieneFicha ? `data-action="select-animal" data-crotal="${escapeHtml(m.crotal)}" style="cursor: pointer;"` : ""}>
           ${escapeHtml(m.crotal)}
         </span>
         ${estadoBadge}
@@ -289,6 +290,7 @@ export function generarCardMovimientoHtml(m) {
           ${m.sexo ? `<span>${escapeHtml(m.sexo)}</span> ` : ""}
           ${corralInfo}
         </div>
+        ${tieneFicha ? `
         <button 
           class="btn-ver-ficha-animal" 
           data-action="select-animal" 
@@ -296,6 +298,7 @@ export function generarCardMovimientoHtml(m) {
           <span>Ver ficha</span>
           <span aria-hidden="true">→</span>
         </button>
+        ` : ""}
       </div>
     </article>
   `;

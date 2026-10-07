@@ -30,7 +30,7 @@ export function renderVistaAlimentos() {
             autocomplete="off"
             spellcheck="false"
           />
-          ${AppState.filtroAlimentos ? '<button class="btn-input-clear" id="btn-clear-alimentos">✕</button>' : ''}
+          <button class="btn-input-clear" id="btn-clear-alimentos" style="display: ${AppState.filtroAlimentos ? 'flex' : 'none'};">✕</button>
         </div>
       </div>
 
@@ -43,10 +43,14 @@ export function renderVistaAlimentos() {
     </div>
   `;
 
+  const btnClear = document.getElementById("btn-clear-alimentos");
   const inputAlimentos = document.getElementById("txt-busqueda-alimentos");
   if (inputAlimentos) {
     inputAlimentos.addEventListener("input", (e) => {
       AppState.filtroAlimentos = e.target.value;
+      if (btnClear) {
+        btnClear.style.display = e.target.value ? "flex" : "none";
+      }
       ejecutarBusquedaAlimentos();
     });
     if (esPantallaEscritorio()) {
@@ -54,10 +58,10 @@ export function renderVistaAlimentos() {
     }
   }
 
-  const btnClear = document.getElementById("btn-clear-alimentos");
   if (btnClear) {
     btnClear.addEventListener("click", () => {
       AppState.filtroAlimentos = "";
+      btnClear.style.display = "none";
       if (inputAlimentos) {
         inputAlimentos.value = "";
         inputAlimentos.focus();
