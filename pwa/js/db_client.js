@@ -10,19 +10,12 @@ const IDB_CONFIG = {
   key: "sqlite_db_file"
 };
 
-function openIndexedDB(timeoutMs = 1500) {
+function openIndexedDB() {
   return new Promise((resolve) => {
-    if (!window.indexedDB) {
+    if (typeof window === "undefined" || !window.indexedDB) {
       resolve(null);
       return;
     }
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      console.warn("[IDB] Timeout abriendo IndexedDB (" + timeoutMs + "ms). Continuando con carga directa...");
-      resolve(null);
-    }, timeoutMs);
-
     try {
       const req = window.indexedDB.open(IDB_CONFIG.name, IDB_CONFIG.version);
       req.onupgradeneeded = () => {
@@ -31,23 +24,16 @@ function openIndexedDB(timeoutMs = 1500) {
           db.createObjectStore(IDB_CONFIG.store);
         }
       };
-      req.onsuccess = () => {
-        clearTimeout(timer);
-        if (!timedOut) resolve(req.result);
-      };
+      req.onsuccess = () => resolve(req.result);
       req.onerror = () => {
-        clearTimeout(timer);
-        console.warn("[IDB] Error abriendo IndexedDB:", req.error);
-        if (!timedOut) resolve(null);
+        console.error("[IDB] Error abriendo IndexedDB:", req.error);
+        resolve(null);
       };
       req.onblocked = () => {
-        clearTimeout(timer);
-        console.warn("[IDB] Apertura de IndexedDB bloqueada.");
-        if (!timedOut) resolve(null);
+        console.warn("[IDB] Apertura de IndexedDB bloqueada por otra pestaña.");
       };
     } catch (e) {
-      clearTimeout(timer);
-      console.warn("[IDB] Excepción abriendo IndexedDB:", e);
+      console.error("[IDB] Excepción abriendo IndexedDB:", e);
       resolve(null);
     }
   });
@@ -55,7 +41,7 @@ function openIndexedDB(timeoutMs = 1500) {
 
 async function guardarBaseDatosLocal(buffer) {
   try {
-    const db = await openIndexedDB(2000);
+    const db = await openIndexedDB();
     if (!db) return false;
     return new Promise((resolve) => {
       try {
@@ -83,31 +69,22 @@ async function guardarBaseDatosLocal(buffer) {
 
 async function obtenerBaseDatosLocal() {
   try {
-    const db = await openIndexedDB(1500);
+    const db = await openIndexedDB();
     if (!db) return null;
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        console.warn("[IDB] Timeout leyendo base de datos local.");
-        try { db.close(); } catch (_) {}
-        resolve(null);
-      }, 1500);
-
       try {
         const tx = db.transaction(IDB_CONFIG.store, "readonly");
         const req = tx.objectStore(IDB_CONFIG.store).get(IDB_CONFIG.key);
         req.onsuccess = () => {
-          clearTimeout(timer);
           try { db.close(); } catch (_) {}
           resolve(req.result || null);
         };
         req.onerror = () => {
-          clearTimeout(timer);
           console.warn("[IDB] Error leyendo base de datos local:", req.error);
           try { db.close(); } catch (_) {}
           resolve(null);
         };
       } catch (e) {
-        clearTimeout(timer);
         try { db.close(); } catch (_) {}
         resolve(null);
       }

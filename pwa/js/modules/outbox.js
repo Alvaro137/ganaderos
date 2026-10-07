@@ -48,19 +48,12 @@ export function obtenerDeviceId() {
   return id;
 }
 
-function abrirOutboxDB(timeoutMs = 1500) {
+function abrirOutboxDB() {
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !window.indexedDB) {
       resolve(null);
       return;
     }
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      console.warn("[Outbox] Timeout abriendo IndexedDB (" + timeoutMs + "ms).");
-      resolve(null);
-    }, timeoutMs);
-
     try {
       const req = window.indexedDB.open(OUTBOX_IDB_CONFIG.name, OUTBOX_IDB_CONFIG.version);
       req.onupgradeneeded = () => {
@@ -71,23 +64,16 @@ function abrirOutboxDB(timeoutMs = 1500) {
           store.createIndex("created_at", "created_at", { unique: false });
         }
       };
-      req.onsuccess = () => {
-        clearTimeout(timer);
-        if (!timedOut) resolve(req.result);
-      };
+      req.onsuccess = () => resolve(req.result);
       req.onerror = () => {
-        clearTimeout(timer);
-        console.warn("[Outbox] Error abriendo IndexedDB:", req.error);
-        if (!timedOut) resolve(null);
+        console.error("[Outbox] Error abriendo IndexedDB:", req.error);
+        resolve(null);
       };
       req.onblocked = () => {
-        clearTimeout(timer);
-        console.warn("[Outbox] Apertura bloqueada.");
-        if (!timedOut) resolve(null);
+        console.warn("[Outbox] Apertura de IndexedDB bloqueada por otra pestaña.");
       };
     } catch (e) {
-      clearTimeout(timer);
-      console.warn("[Outbox] Excepción al abrir IndexedDB:", e);
+      console.error("[Outbox] Excepción al abrir IndexedDB:", e);
       resolve(null);
     }
   });
