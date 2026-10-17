@@ -1,42 +1,34 @@
-# ADR 0007: Framework de Benchmarking y Evaluación Cuantitativa del Asistente de IA
+# ADR 0007: Marco de evaluación cuantitativa del asistente de IA
 
 - **Estado:** Aceptado
 - **Fecha:** 2026-09-22
 - **Decisores:** Álvaro Gil, Lead Systems Architect
 
----
+## Contexto y planteamiento del problema
 
-## Contexto y Declaración del Problema
+El asistente en lenguaje natural de Ganaderos Campo debe clasificar intenciones y extraer parámetros estructurados (crotales, lotes, fechas) de consultas de campo. Sin una batería de pruebas cuantitativa y reproducible, no es posible detectar regresiones ante modificaciones en las instrucciones del sistema (prompts) o en las definiciones de esquemas.
 
-El asistente de lenguaje natural de Ganaderos Campo debe operar tanto online (Groq LLM Llama 3.3) como offline (motor heurístico de expresiones regulares y tokenización). En auditorías de software senior, un asistente sin una suite de evaluación cuantitativa se cataloga como "vibe coding".
+Se requiere un método sistemático para medir la exactitud en la asignación de intenciones, la cobertura de argumentos y la resistencia ante errores de transcripción o entradas anómalas, sin generar costes de API ni introducir latencias elevadas en el flujo de integración continua.
 
-Necesitamos una metodología estándar y reproducible para evaluar cuantitativamente la precisión de clasificación de intenciones, la extracción de parámetros de negocio (crotales, lotes, fechas) y la robustez ante ruido acústico y ataques de inyección, sin incurrir en costes prohibitivos de API ni dependencias pesadas en CI.
+## Alternativas consideradas
 
----
+1. Evaluación basada en modelos externos (DeepEval o Ragas): Descartada. Exige llamadas a modelos propietarios o ejecución local con dependencias de cálculo complejas (PyTorch), lo que añade coste económico, variabilidad en los resultados y tiempos excesivos en CI.
+2. Plataformas externas de evaluación comparativa (BFCL v4 o Inspect): Descartada. Están orientadas a comparar modelos base de proveedores y no a verificar casos de uso específicos del dominio agropecuario en un repositorio de producción.
+3. Batería de pruebas interna basada en métricas BFCL con datos en JSON: Seleccionada. Implementa un evaluador determinista en Python que calcula exactitud de intenciones, coincidencia de argumentos tipados y validación mediante esquemas Pydantic, sin dependencias de red en el proceso de verificación.
 
-## Opciones Consideradas
+## Decisión
 
-1. **Framework pesado con LLM-as-a-Judge (DeepEval / Ragas):** Requiere llamadas a APIs de OpenAI o modelos pesados locales (PyTorch). Introduce lentitud, coste por token y variabilidad estocástica en CI.
-2. **Plataforma Externa Específica (BFCL v4 CLI / Inspect):** Diseñada para comparar modelos fundacionales, no para testing continuo de casos de uso agrotech en repositorios de producción.
-3. **Harness Estandarizado Basado en Métricas BFCL con Dataset JSON Portable (Seleccionada):** Implementa un evaluador determinista en Python que calcula Accuracy de Intents, Recall de Argumentos (AST match) y validación de esquemas Pydantic, desacoplado de proveedores externos para CI y compatible con Promptfoo.
-
----
-
-## Decisión Tomada
-
-Se adopta la **Opción 3**:
-1. Creación de un dataset canónico de 60 casos de uso ganaderos (`tests/eval/dataset_intents_campo.json`).
-2. Implementación de un runner de benchmarking (`scripts/run_ai_benchmark.py`) y una suite de pruebas de regresión (`tests/eval/test_benchmark_intents.py`).
-3. Quality Gate en CI: La suite fallará si la exactitud de clasificación de intents del motor desciende del 90%.
-
----
+Adoptar una batería de pruebas interna determinista:
+1. Crear un conjunto canónico de 60 casos de prueba en formato estructurado (`tests/eval/dataset_intents_campo.json`).
+2. Implementar un ejecutor de pruebas (`scripts/run_ai_benchmark.py`) y una suite de pruebas de regresión (`tests/eval/test_benchmark_intents.py`).
+3. Criterio de aceptación en integración continua: la ejecución falla si la exactitud global en la clasificación de intenciones cae por debajo del 90%.
 
 ## Consecuencias
 
 ### Positivas
-- **Cero costes de ejecución en CI:** El harness offline evalúa de forma instantánea (< 0.1s) sin necesidad de API keys.
-- **Reproducibilidad:** Cada pull request valida cuantitativamente que ningún cambio en prompts o reglas introduce regresiones en frases de campo.
-- **Transparencia:** Generación automática de matrices de confusión y resúmenes Markdown en `reports/eval_summary.md`.
+- Sin coste de API en integración continua: las pruebas locales se ejecutan en menos de 0,1 segundos sin requerir credenciales externas.
+- Reproducibilidad: cada solicitud de cambio (pull request) valida de forma automática que las modificaciones de esquemas o plantillas no degradan la tasa de acierto.
+- Generación de informes estructurados: exportación directa de matrices de confusión y resúmenes de rendimiento en formato Markdown (`reports/eval_summary.md`).
 
-### Negativas
-- Requiere mantener actualizado el dataset de frases cuando se añadan nuevos tipos de intents de negocio.
+### Negativas y limitaciones
+- Mantenimiento del conjunto de datos: cada nueva intención de negocio exige registrar nuevos ejemplos representativos en el archivo JSON de evaluación.
