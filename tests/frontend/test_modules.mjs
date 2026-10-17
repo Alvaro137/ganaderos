@@ -110,9 +110,12 @@ async function runAllTests() {
     assert.strictEqual(typeof modDb.ejecutarConsulta, "function");
     assert.strictEqual(typeof modDb.buscarAnimales, "function");
     assert.strictEqual(typeof modDb.registrarPartoOptimista, "function");
+    assert.strictEqual(typeof modDb.obtenerLiquidaciones, "function");
+    assert.strictEqual(typeof modDb.obtenerDetalleLiquidacion, "function");
+    assert.strictEqual(typeof modDb.obtenerResumenKpisLiquidaciones, "function");
   });
 
-  await test("Integridad ES Modules: Exportaciones de views de dominio (recetas, piensos, movimientos, partos)", async () => {
+  await test("Integridad ES Modules: Exportaciones de views de dominio (recetas, piensos, movimientos, partos, ventas)", async () => {
     const modSanitary = await import('../../pwa/js/modules/views/sanitary_view.js');
     assert.strictEqual(typeof modSanitary.renderVistaRecetas, "function");
 
@@ -124,6 +127,10 @@ async function runAllTests() {
 
     const modBirth = await import('../../pwa/js/modules/views/birth_modal.js');
     assert.strictEqual(typeof modBirth.abrirModalRegistroParto, "function");
+
+    const modSales = await import('../../pwa/js/modules/views/sales_view.js');
+    assert.strictEqual(typeof modSales.renderVistaLiquidaciones, "function");
+    assert.strictEqual(typeof modSales.verDetalleLiquidacion, "function");
   });
 
   await test("Integridad ES Modules: Exportaciones de auth, voice y api", async () => {
@@ -357,6 +364,63 @@ async function runAllTests() {
     });
     assert.strictEqual(html.includes('class="btn-ver-ficha-animal"'), true);
     assert.strictEqual(html.includes('Ver ficha'), true);
+  });
+
+  await test("Rendimiento en Canal: Visualización en Ficha de Animal", async () => {
+    const { generarHtmlDetalleAnimal } = await import('../../pwa/js/modules/views/detail_view.js');
+    const vacaVendidaCanal = {
+      crotal: "ES091008679093",
+      crotal_4: "9093",
+      nombre: "Ternera Cebo",
+      raza: "Cruzada",
+      sexo: "H",
+      estado: "B",
+      fecha_nacimiento: "2023-01-10",
+      fecha_alta: "2023-01-10",
+      corral: "CEBADERO",
+      partos: [],
+      movimientos: [],
+      liquidacion_canal: {
+        factura_id: 1,
+        numero_factura: "F-2024-001",
+        fecha_factura: "2024-04-15",
+        peso_canal_kg: 284.5,
+        precio_unitario: 7.15,
+        importe_linea: 2034.18
+      }
+    };
+
+    const html = generarHtmlDetalleAnimal(vacaVendidaCanal);
+    assert.strictEqual(html.includes("Rendimiento en Canal y Venta"), true);
+    assert.strictEqual(html.includes("GANAVAEX"), true);
+    assert.strictEqual(html.includes("7.15 €/kg"), true);
+    assert.strictEqual(html.includes("F-2024-001"), true);
+    assert.strictEqual(html.includes('data-action="ver-factura"'), true);
+  });
+
+  await test("Rendimiento en Canal: Badge y CTA en Tarjeta de Movimiento", async () => {
+    const { generarCardMovimientoHtml } = await import('../../pwa/js/modules/views/movements_view.js');
+    const movConCanal = {
+      id: 99,
+      crotal: "ES091008679093",
+      crotal_4: "9093",
+      fecha: "2024-04-15",
+      tipo: "VENTA",
+      origen: "ES371261100122",
+      destino: "ES373762000081",
+      peso_canal_kg: 284.5,
+      canal_precio: 7.15,
+      canal_importe: 2034.18,
+      canal_factura: "F-2024-001",
+      canal_factura_id: 1
+    };
+
+    const html = generarCardMovimientoHtml(movConCanal);
+    assert.strictEqual(html.includes("mov-canal-badge-box"), true);
+    assert.strictEqual(html.includes("284.5 kg canal"), true);
+    assert.strictEqual(html.includes("7.15 €/kg"), true);
+    assert.strictEqual(html.includes("Factura F-2024-001"), true);
+    assert.strictEqual(html.includes('data-factura-id="1"'), true);
   });
 
   // 17. Tests de Motor Local-First Outbox
