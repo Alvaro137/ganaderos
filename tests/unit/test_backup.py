@@ -105,6 +105,35 @@ class TestBackupDB(unittest.TestCase):
         )
         self.assertIsNone(resultado)
 
+    def test_backup_to_usb_atomic_and_rotation(self):
+        from scripts.backup_to_usb import backup_sqlite_atomico, rotar_copias_antiguas
+
+        usb_dest = self.base_path / "usb_mount" / "backups"
+        fichero_bak = usb_dest / "ganaderos_campo_20261017_120000.sqlite"
+        backup_sqlite_atomico(self.db_path, fichero_bak)
+
+        self.assertTrue(fichero_bak.exists())
+        # Verificar contenido
+        conn = sqlite3.connect(fichero_bak)
+        try:
+            self.assertEqual(conn.execute("SELECT count(*) FROM animales").fetchone()[0], 1)
+        finally:
+            conn.close()
+
+        # Test rotación de copias antiguas
+        for i in range(10):
+            dummy = usb_dest / f"ganaderos_campo_202610{i:02d}_000000.sqlite"
+            dummy.write_text("test")
+            import os
+            t = time.time() - (10 - i) * 100
+            os.utime(dummy, (t, t))
+
+        eliminados = rotar_copias_antiguas(usb_dest, max_copias=3)
+        self.assertGreater(eliminados, 0)
+        restantes = list(usb_dest.glob("ganaderos_campo_*.sqlite"))
+        self.assertLessEqual(len(restantes), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
+
