@@ -1353,6 +1353,117 @@ class CampoDB {
     }
   }
 
+  tieneTablaLonja() {
+    try {
+      const res = this.ejecutarQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cotizaciones_lonja'");
+      return res && res.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  obtenerRadarLonjaCarne(anio = null) {
+    if (!this.tieneTablaLonja()) return [];
+    try {
+      let whereLonja = "1=1";
+      let whereVentas = "1=1";
+      const paramsLonja = [];
+      const paramsVentas = [];
+
+      if (anio && anio !== "TODOS") {
+        whereLonja += " AND substr(fecha, 1, 4) = ?";
+        paramsLonja.push(String(anio));
+        whereVentas += " AND substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 4) = ?";
+        paramsVentas.push(String(anio));
+      } else {
+        whereLonja += " AND fecha >= date('now', '-24 months')";
+        whereVentas += " AND COALESCE(vc.fecha_salida_lote, vl.fecha_factura) >= date('now', '-24 months')";
+      }
+
+      // Cotizaciones mensuales Lonja de Salamanca (Mesa Bovino de Carne en €/kg canal)
+      const rowsLonja = this.ejecutarQuery(`
+        SELECT 
+          substr(fecha, 1, 7) as mes,
+          categoria,
+          ROUND(AVG(precio), 3) as precio_medio_kg
+        FROM cotizaciones_lonja
+        WHERE ${whereLonja} AND categoria IN ('AÑOJO_EXTRA', 'AÑOJO_PESADO', 'TERNERA_EXTRA', 'VACA_DESVIEJE', 'VACA_EXTRA')
+        GROUP BY mes, categoria
+        ORDER BY mes ASC
+      `, paramsLonja);
+
+      // Precios medios reales de venta en matadero de la explotación
+      const tieneVentas = this.tieneTablaVentas();
+      let rowsVentas = [];
+      if (tieneVentas) {
+        rowsVentas = this.ejecutarQuery(`
+          SELECT 
+            substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 7) as mes,
+            ROUND(COALESCE(SUM(vc.importe_linea) / NULLIF(SUM(vc.peso_canal_kg), 0), 0), 3) as precio_medio_granja,
+            ROUND(AVG(vc.peso_canal_kg), 1) as peso_medio_canal,
+            COUNT(1) as canales_vendidas,
+            ROUND(SUM(vc.peso_canal_kg), 1) as total_kg_canal
+          FROM ventas_canales vc
+          JOIN ventas_liquidaciones vl ON vc.factura_id = vl.id
+          WHERE ${whereVentas} AND vc.peso_canal_kg > 1
+          GROUP BY mes
+          ORDER BY mes ASC
+        `, paramsVentas);
+      }
+
+      const mapaMeses = new Map();
+
+      (rowsLonja || []).forEach(r => {
+        if (!r.mes) return;
+        if (!mapaMeses.has(r.mes)) {
+          mapaMeses.set(r.mes, {
+            mes: r.mes,
+            anojo_extra_lonja: null,
+            anojo_pesado_lonja: null,
+            ternera_extra_lonja: null,
+            vaca_desvieje_lonja: null,
+            precio_medio_granja: null,
+            peso_medio_granja: null,
+            canales_vendidas: 0,
+            total_kg_canal: 0
+          });
+        }
+        const item = mapaMeses.get(r.mes);
+        if (r.categoria === "AÑOJO_EXTRA") item.anojo_extra_lonja = Number(r.precio_medio_kg);
+        if (r.categoria === "AÑOJO_PESADO") item.anojo_pesado_lonja = Number(r.precio_medio_kg);
+        if (r.categoria === "TERNERA_EXTRA") item.ternera_extra_lonja = Number(r.precio_medio_kg);
+        if (r.categoria === "VACA_DESVIEJE") item.vaca_desvieje_lonja = Number(r.precio_medio_kg);
+      });
+
+      (rowsVentas || []).forEach(v => {
+        if (!v.mes) return;
+        if (!mapaMeses.has(v.mes)) {
+          mapaMeses.set(v.mes, {
+            mes: v.mes,
+            anojo_extra_lonja: null,
+            anojo_pesado_lonja: null,
+            ternera_extra_lonja: null,
+            vaca_desvieje_lonja: null,
+            precio_medio_granja: null,
+            peso_medio_granja: null,
+            canales_vendidas: 0,
+            total_kg_canal: 0
+          });
+        }
+        const item = mapaMeses.get(v.mes);
+        item.precio_medio_granja = Number(v.precio_medio_granja);
+        item.peso_medio_granja = Number(v.peso_medio_canal);
+        item.canales_vendidas = Number(v.canales_vendidas);
+        item.total_kg_canal = Number(v.total_kg_canal);
+      });
+
+      return Array.from(mapaMeses.values()).sort((a, b) => a.mes.localeCompare(b.mes));
+    } catch (e) {
+      console.error("[DB] Error en obtenerRadarLonjaCarne:", e);
+      return [];
+    }
+  }
+
   obtenerMovimientos(params = {}) {
 
     const { filtro = "", tipo = "TODOS", anio = "TODOS", destino = "TODOS", limite = 100, offset = 0 } = params;

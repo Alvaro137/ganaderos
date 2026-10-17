@@ -339,3 +339,179 @@ export function renderGraficoRadarMateriasPrimas(datosMeses, opts = {}) {
   `;
 }
 
+/**
+ * Renderiza el gráfico de Evolución de Precios de Vacuno de Carne:
+ * Cotización Lonja de Salamanca (Añojo Extra, Añojo Pesado, Ternera Extra, Vaca Desvieje)
+ * vs Precio Medio Efectivo Cobrado en Matadero (€/kg Canal).
+ *
+ * @param {Array} datosMeses Array con datos mensuales de cotización y ventas
+ * @param {Object} opts Opciones de dimensiones
+ * @returns {string} Fragmento HTML con SVG responsivo
+ */
+export function renderGraficoLonjaCarne(datosMeses, opts = {}) {
+  if (!datosMeses || datosMeses.length === 0) {
+    return `
+      <div class="chart-empty-notice" style="padding: 24px; text-align: center; color: var(--text-dim, #777); font-size: 0.9rem;">
+        No hay datos de cotizaciones de carne en el periodo seleccionado.
+      </div>
+    `;
+  }
+
+  const ancho = opts.ancho || 640;
+  const alto = opts.alto || 230;
+  const margen = { top: 32, right: 30, bottom: 40, left: 55 };
+  const anchoPlot = ancho - margen.left - margen.right;
+  const altoPlot = alto - margen.top - margen.bottom;
+
+  const valoresTodos = [];
+  datosMeses.forEach(d => {
+    if (d.anojo_extra_lonja) valoresTodos.push(d.anojo_extra_lonja);
+    if (d.anojo_pesado_lonja) valoresTodos.push(d.anojo_pesado_lonja);
+    if (d.ternera_extra_lonja) valoresTodos.push(d.ternera_extra_lonja);
+    if (d.vaca_desvieje_lonja) valoresTodos.push(d.vaca_desvieje_lonja);
+    if (d.precio_medio_granja) valoresTodos.push(d.precio_medio_granja);
+  });
+
+  const minV = valoresTodos.length > 0 ? Math.floor(Math.min(...valoresTodos) * 0.92 * 10) / 10 : 3.8;
+  const maxV = valoresTodos.length > 0 ? Math.ceil(Math.max(...valoresTodos) * 1.05 * 10) / 10 : 8.0;
+  const rango = Math.max(1.0, maxV - minV);
+
+  // Ejes y líneas de cuadrícula
+  let gridLines = "";
+  for (let i = 0; i <= 4; i++) {
+    const yVal = minV + (rango / 4) * i;
+    const yPos = margen.top + altoPlot - ((yVal - minV) / rango) * altoPlot;
+    gridLines += `
+      <line x1="${margen.left}" y1="${yPos.toFixed(1)}" x2="${ancho - margen.right}" y2="${yPos.toFixed(1)}" stroke="var(--md-outline-variant, #e5e7eb)" stroke-dasharray="3,3" stroke-width="1"/>
+      <text x="${margen.left - 8}" y="${(yPos + 4).toFixed(1)}" font-size="10" font-family="system-ui, sans-serif" fill="var(--text-muted, #6b7280)" text-anchor="end">${yVal.toFixed(2)}€</text>
+    `;
+  }
+
+  const stepX = anchoPlot / Math.max(1, datosMeses.length);
+
+  let ptsAnojo = [];
+  let ptsAnojoPes = [];
+  let ptsTernera = [];
+  let ptsVaca = [];
+  let barsGranja = "";
+  let labelsX = "";
+
+  datosMeses.forEach((d, idx) => {
+    const xCentro = margen.left + idx * stepX + (stepX / 2);
+    const partes = (d.mes || "").split("-");
+    const mesNum = parseInt(partes[1], 10);
+    const nombreMes = (mesNum >= 1 && mesNum <= 12) ? NOMBRES_MESES[mesNum - 1] : (partes[1] || d.mes);
+
+    labelsX += `
+      <text x="${xCentro.toFixed(1)}" y="${(alto - 14).toFixed(1)}" font-size="11" font-weight="600" font-family="system-ui, sans-serif" fill="var(--text-main, #374151)" text-anchor="middle">${nombreMes}</text>
+    `;
+
+    // 1. Barras o marcadores del Precio Cobrado por la Granja (€/kg)
+    if (d.precio_medio_granja && d.precio_medio_granja > 0) {
+      const hG = Math.max(0, ((d.precio_medio_granja - minV) / rango) * altoPlot);
+      const yG = margen.top + altoPlot - hG;
+      const bW = Math.max(10, Math.min(22, stepX * 0.4));
+      barsGranja += `
+        <rect x="${(xCentro - bW/2).toFixed(1)}" y="${yG.toFixed(1)}" width="${bW.toFixed(1)}" height="${hG.toFixed(1)}" rx="3" fill="#ea580c" fill-opacity="0.25" stroke="#ea580c" stroke-width="1.5">
+          <title>${d.mes} | Precio Cobrado Granja: ${d.precio_medio_granja.toFixed(2)} €/kg (${d.canales_vendidas || 0} canales)</title>
+        </rect>
+        <text x="${xCentro.toFixed(1)}" y="${(yG - 6).toFixed(1)}" font-size="9" font-weight="800" fill="#c2410c" text-anchor="middle">${d.precio_medio_granja.toFixed(2)}€</text>
+      `;
+    }
+
+    // 2. Puntos Añojo Extra
+    if (d.anojo_extra_lonja && d.anojo_extra_lonja > 0) {
+      const yA = margen.top + altoPlot - ((d.anojo_extra_lonja - minV) / rango) * altoPlot;
+      ptsAnojo.push({ x: xCentro, y: yA, val: d.anojo_extra_lonja, mes: d.mes });
+    }
+
+    // 3. Puntos Añojo Pesado
+    if (d.anojo_pesado_lonja && d.anojo_pesado_lonja > 0) {
+      const yAP = margen.top + altoPlot - ((d.anojo_pesado_lonja - minV) / rango) * altoPlot;
+      ptsAnojoPes.push({ x: xCentro, y: yAP, val: d.anojo_pesado_lonja, mes: d.mes });
+    }
+
+    // 4. Puntos Ternera Extra
+    if (d.ternera_extra_lonja && d.ternera_extra_lonja > 0) {
+      const yT = margen.top + altoPlot - ((d.ternera_extra_lonja - minV) / rango) * altoPlot;
+      ptsTernera.push({ x: xCentro, y: yT, val: d.ternera_extra_lonja, mes: d.mes });
+    }
+
+    // 5. Puntos Vaca Desvieje
+    if (d.vaca_desvieje_lonja && d.vaca_desvieje_lonja > 0) {
+      const yV = margen.top + altoPlot - ((d.vaca_desvieje_lonja - minV) / rango) * altoPlot;
+      ptsVaca.push({ x: xCentro, y: yV, val: d.vaca_desvieje_lonja, mes: d.mes });
+    }
+  });
+
+  const pathAnojo = ptsAnojo.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+  const pathAnojoPes = ptsAnojoPes.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+  const pathTernera = ptsTernera.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+  const pathVaca = ptsVaca.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+
+  let dotsHtml = "";
+  ptsAnojo.forEach(p => {
+    dotsHtml += `
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#15803d" stroke="#ffffff" stroke-width="1.5">
+        <title>${p.mes} | Añojo Extra Lonja: ${p.val.toFixed(2)} €/kg</title>
+      </circle>
+    `;
+  });
+  ptsTernera.forEach(p => {
+    dotsHtml += `
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#7c3aed" stroke="#ffffff" stroke-width="1">
+        <title>${p.mes} | Ternera Extra Lonja: ${p.val.toFixed(2)} €/kg</title>
+      </circle>
+    `;
+  });
+
+  return `
+    <div class="chart-container-card" style="background: var(--md-surface-container-low, #ffffff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: var(--md-shape-lg, 16px); padding: 16px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+        <div style="font-weight: 800; font-size: 0.98rem; color: var(--brand-primary, #1e3a2b);">
+          🥩 Cotización Vacuno de Carne (€/kg Canal): Lonja Salamanca vs Granja
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; font-size: 0.8rem; font-weight: 700; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #15803d;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #15803d;"></span>
+            Añojo Extra (&lt;350kg)
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #2563eb;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #2563eb;"></span>
+            Añojo Pesado (&gt;350kg)
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #7c3aed;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #7c3aed;"></span>
+            Ternera Extra
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #64748b;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #64748b;"></span>
+            Vaca Desvieje
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #ea580c;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: rgba(234, 88, 12, 0.4); border: 1px solid #ea580c;"></span>
+            Precio Cobrado Granja
+          </span>
+        </div>
+      </div>
+
+      <div class="chart-scroll-box" style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+        <svg viewBox="0 0 ${ancho} ${alto}" style="width: 100%; min-width: 440px; height: auto; display: block;" preserveAspectRatio="xMidYMid meet">
+          <g class="chart-grid">${gridLines}</g>
+          <g class="chart-bars">${barsGranja}</g>
+          ${pathAnojo ? `<path d="${pathAnojo}" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${pathAnojoPes ? `<path d="${pathAnojoPes}" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="4,3" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${pathTernera ? `<path d="${pathTernera}" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${pathVaca ? `<path d="${pathVaca}" fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="3,3" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          <g class="chart-dots">${dotsHtml}</g>
+          <g class="chart-labels-x">${labelsX}</g>
+        </svg>
+      </div>
+      <div style="font-size: 0.76rem; color: var(--text-dim, #777); margin-top: 6px; text-align: right;">
+        Cotizaciones oficiales de los lunes en la Lonja de Salamanca (Diputación) contrastadas con liquidaciones de la explotación.
+      </div>
+    </div>
+  `;
+}
+
+
