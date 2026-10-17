@@ -259,4 +259,25 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v13_subir_factura_pdf.png') });
   });
+
+  test('V14. Gráficos Interactivos de Rentabilidad: Balance Carne vs Pienso y Cotización', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnGraficos = page.locator('#btn-toggle-charts');
+    await expect(btnGraficos).toBeVisible({ timeout: 10000 });
+    await btnGraficos.click();
+
+    const seccionGraficos = page.locator('.financial-charts-section');
+    await expect(seccionGraficos).toBeVisible({ timeout: 5000 });
+    await expect(seccionGraficos.locator('svg').first()).toBeVisible({ timeout: 5000 });
+
+    await seccionGraficos.scrollIntoViewIfNeeded();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v14_graficos_rentabilidad.png') });
+  });
 });
