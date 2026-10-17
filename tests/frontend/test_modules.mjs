@@ -22,7 +22,8 @@ import {
 } from '../../pwa/js/modules/config.js';
 import {
   renderGraficoBarrasComparativas,
-  renderGraficoCotizacionCanal
+  renderGraficoCotizacionCanal,
+  renderGraficoRadarMateriasPrimas
 } from '../../pwa/js/modules/components/charts_svg.js';
 
 console.log("==================================================");
@@ -592,6 +593,25 @@ async function runAllTests() {
     assert.ok(htmlCot.includes("<svg"), "Debe generar elemento <svg>");
     assert.ok(htmlCot.includes("<path d=\"M "), "Debe generar línea de tendencia con path SVG");
     assert.ok(htmlCot.includes("5.42€"), "Debe mostrar precio medio en tooltips/etiquetas");
+  });
+
+  await test("Gráfico SVG Radar Materias Primas: Manejo de array vacío", () => {
+    const htmlVacio = renderGraficoRadarMateriasPrimas([]);
+    assert.ok(htmlVacio.includes("No hay datos de cotizaciones"), "Debe informar de ausencia de cotizaciones");
+  });
+
+  await test("Gráfico SVG Radar Materias Primas: Renderizado de curvas de lonja y barras de pienso", () => {
+    const mockRadar = [
+      { mes: "2026-01", cebada_lonja_t: 215, maiz_lonja_t: 235, pienso_lonja_t: 310, pienso_real_t: 318, kg_comprados: 12000 },
+      { mes: "2026-02", cebada_lonja_t: 218, maiz_lonja_t: 238, pienso_lonja_t: 312, pienso_real_t: 315, kg_comprados: 14000 }
+    ];
+    const htmlRadar = renderGraficoRadarMateriasPrimas(mockRadar, { ancho: 600, alto: 240 });
+    assert.ok(htmlRadar.includes("<svg"), "Debe generar elemento <svg>");
+    assert.ok(htmlRadar.includes("viewBox=\"0 0 600 240\""), "Debe respetar dimensiones");
+    assert.ok(htmlRadar.includes("Cebada Lonja"), "Debe incluir leyenda de cebada");
+    assert.ok(htmlRadar.includes("Maíz Lonja"), "Debe incluir leyenda de maíz");
+    assert.ok(htmlRadar.includes("Pienso T-3 Comprado"), "Debe incluir leyenda de pienso");
+    assert.ok(htmlRadar.includes("Ene"), "Debe etiquetar el mes");
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

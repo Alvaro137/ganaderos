@@ -1,6 +1,29 @@
 from typing import Any, List, Optional, Protocol
 
-from src.domain.models import Animal, Parto, Pesaje, RecetaSanitaria, TratamientoIndividual, Usuario
+from src.domain.models import (
+    Animal,
+    CotizacionLonja,
+    Parto,
+    Pesaje,
+    RecetaSanitaria,
+    TratamientoIndividual,
+    Usuario,
+)
+
+
+class LonjaRepository(Protocol):
+    def list_cotizaciones(
+        self, categoria: Optional[str] = None, fecha_desde: Optional[Any] = None
+    ) -> List[CotizacionLonja]:
+        ...
+
+    def get_cotizacion_cercana(
+        self, fecha_referencia: Any, categoria: str
+    ) -> Optional[CotizacionLonja]:
+        ...
+
+    def save(self, cotizacion: CotizacionLonja) -> CotizacionLonja:
+        ...
 
 
 class AnimalRepository(Protocol):
