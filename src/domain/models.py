@@ -207,3 +207,68 @@ class TratamientoIndividual:
         return self.fecha_inicio <= ref <= fin_retirada
 
 
+@dataclass
+class CotizacionLonja:
+    """Cotización oficial de lonja agropecuaria de referencia (Salamanca / MAPA)."""
+    fecha: date
+    mesa: str  # 'CARNE', 'CEREALES', 'VIDA'
+    categoria: str  # 'AÑOJO_EXTRA', 'AÑOJO_PESADO', 'TERNERA_EXTRA', 'VACA_DESVIEJE', 'CEBADA', 'MAIZ'
+    unidad: str  # 'EUR_KG_CANAL', 'EUR_TONELADA', 'EUR_KG_VIVO'
+    precio: float
+    variacion: Optional[float] = None
+    lonja: str = "SALAMANCA"
+    id: Optional[int] = None
+
+
+class DevengoCebo:
+    """Lógica de dominio zootécnico y económico para ciclo de cebo y benchmarking con lonja."""
+
+    @staticmethod
+    def calcular_coste_pienso_imputado(
+        dias_cebadero: int,
+        peso_canal_kg: float,
+        peso_destete_kg: float = 240.0,
+        fcr: float = 5.0,
+        precio_pienso_medio: float = 0.315
+    ) -> dict:
+        """Imputa el consumo de pienso de un ternero según ganancia de peso vivo y conversión FCR."""
+        rendimiento = 0.58
+        peso_vivo_estimado = round(peso_canal_kg / rendimiento, 1) if peso_canal_kg > 0 else 0.0
+        ganancia_pv = max(0.0, round(peso_vivo_estimado - peso_destete_kg, 1))
+        kg_pienso = round(ganancia_pv * fcr, 0)
+        coste_pienso = round(kg_pienso * precio_pienso_medio, 2)
+        gmd_estimada = round(ganancia_pv / dias_cebadero, 3) if dias_cebadero > 0 else 0.0
+
+        return {
+            "peso_vivo_estimado": peso_vivo_estimado,
+            "ganancia_peso_vivo": ganancia_pv,
+            "kg_pienso_imputados": kg_pienso,
+            "coste_pienso_imputado": coste_pienso,
+            "gmd_estimada": gmd_estimada
+        }
+
+    @staticmethod
+    def auditar_precio_vs_lonja(precio_liquidado: float, precio_lonja: float) -> dict:
+        """Calcula la prima o penalización en €/kg respecto a la cotización de lonja."""
+        if precio_lonja <= 0 or precio_liquidado <= 0:
+            return {"diferencia_kg": 0.0, "tipo": "NEUTRO", "porcentaje": 0.0}
+        diff = round(precio_liquidado - precio_lonja, 3)
+        pct = round((diff / precio_lonja) * 100, 2)
+        tipo = "PRIMA" if diff > 0.01 else ("PENALIZACION" if diff < -0.01 else "PARIDAD")
+        return {"diferencia_kg": diff, "tipo": tipo, "porcentaje": pct}
+
+    @staticmethod
+    def detectar_penalizacion_sobrepeso(peso_canal_kg: float, precio_liquidado: float, precio_optimo_lonja: float) -> Optional[dict]:
+        """Detecta si un añojo sobrepasó los 350 kg canal y estima la penalización en precio."""
+        if peso_canal_kg <= 350.0:
+            return None
+        exceso_kg = round(peso_canal_kg - 350.0, 1)
+        perdida_precio_kg = max(0.0, round(precio_optimo_lonja - precio_liquidado, 3))
+        penalizacion_total = round(perdida_precio_kg * peso_canal_kg, 2)
+        return {
+            "exceso_kg_canal": exceso_kg,
+            "perdida_precio_kg": perdida_precio_kg,
+            "penalizacion_total_eur": penalizacion_total
+        }
+
+

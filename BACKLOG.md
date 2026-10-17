@@ -33,25 +33,42 @@ La explotación opera bajo dos códigos REGA:
 - [ ] US-103 (Informe de regularización): generación de informe para la unidad veterinaria de la Junta.
  
 ### Épica 2: control de peso y ganancia media diaria (GMD)
-- [ ] US-201 (Esquema de pesajes en SQLite):
-  - Tabla `Pesajes`: `id`, `animal_id`, `fecha`, `peso_kg`, `tipo` (Destete, Control, Salida), `operador`.
-- [ ] US-202 (Cálculo de GMD en ficha):
-  - Mostrar en la ficha técnica de la PWA la evolución de peso y el cálculo de GMD:  
-    $$\text{GMD} = \frac{\text{Peso actual} - \text{Peso anterior}}{\text{Días transcurridos}} \quad (\text{kg/día})$$
+- [x] US-201 (Esquema de pesajes en SQLite):
+  - Tabla `pesajes`: `id`, `crotal`, `fecha`, `peso_kg`, `tipo` (Destete, Control, Salida), `operador`.
+- [x] US-202 (Cálculo de GMD en ficha y rendimiento a la canal):
+  - Ficha técnica en PWA con historial de pesajes, badges de GMD y vinculación con rendimiento oficial a la canal (% canal / vivo).
 - [ ] US-203 (Previsión de salida a matadero):
   - Estimar la fecha en la que el animal alcanza los 520-540 kg comerciales según su GMD histórica.
- 
+
 ### Épica 3: trazabilidad sanitaria y libro digital de explotación
 - [ ] US-301 (Exportador de hoja de tratamientos oficial):
   - Generar informe PDF conforme a la normativa de sanidad animal de Castilla y León para inspecciones veterinarias.
-- [ ] US-302 (Alerta de fin de retirada):
-  - Alerta visual en la PWA si se selecciona para traslado o venta un animal en periodo de retirada sanitaria.
- 
+- [x] US-302 (Alerta de fin de retirada sanitaria):
+  - Banner interactivo de alta visibilidad en la ficha del animal si está en periodo de supresión médica.
+
 ### Épica 4: costes de alimentación y control de silos
-- [ ] US-401 (Módulo de silos):
-  - Registrar albaranes de pienso y seguir el stock disponible en tolvas y silos.
-- [ ] US-402 (Coste alimentario por ternero):
-  - Imputar el coste estimado de pienso por lote durante el cebo.
+- [x] US-401 (Módulo de piensos y albaranes):
+  - Consulta offline de albaranes de pienso, desglose de kilos, tipo de producto y coste por tonelada.
+- [ ] US-402 (Control de stock en silos):
+  - Estimación de niveles de tolvas según consumo animal y albaranes recibidos.
+
+### Épica 5: análisis económico, devengo de cebo y lonjas agropecuarias
+- [ ] US-501 (Doble perspectiva: tesorería vs margen técnico por ciclo de cebo):
+  - Separar explícitamente en la PWA la visión de **Tesorería / Cash Flow** (entradas y salidas bancarias del mes) del **Margen Técnico de Cebo** (devengo biológico).
+  - Imputar a cada ternero vendido el coste del pienso consumido durante sus días reales de estancia en el cebadero (`122`):
+    $$D = \text{Fecha Sacrificio} - \text{Fecha Entrada Cebadero}$$
+    $$\text{Pienso Imputado} = \Delta PV \times \text{FCR (4.8 - 5.2 kg/kg)} \times \bar{P}_{\text{pienso}}$$
+- [ ] US-502 (Ventana móvil acumulada LTM de 12 meses):
+  - Gráfico de balance con media móvil de 12 meses para neutralizar el desfase estacional y los picos de llenado de silos.
+- [ ] US-503 (Ingesta semanal de la Lonja de Salamanca):
+  - Tabla SQLite `cotizaciones_lonja` (`fecha`, `mesa`, `categoria`, `unidad`, `precio`, `variacion`).
+  - Script semanal en la Orange Pi para descargar e ingestar las sesiones de los lunes desde `datosabiertossalamanca.es` (añojo extra, ternera, vaca desvieje, cebada, maíz).
+- [ ] US-504 (Auditoría de liquidaciones y prima sobre lonja):
+  - Comparar el precio liquidado en matadero (€/kg canal) con la cotización de la Lonja de Salamanca de la semana de sacrificio, mostrando la prima o descuento obtenido por lote y animal.
+- [ ] US-505 (Detección y coste de sobrepeso en canal):
+  - Cuantificar la penalización por exceso de peso (>350 kg canal en añojos) y el coste de los días extra de pienso consumido frente al punto óptimo de sacrificio.
+- [ ] US-506 (Herramienta analítica de materias primas y timing de compra):
+  - Gráfico comparativo de la evolución de cereales en lonja (cebada y maíz) frente a los precios de albaranes de pienso compuesto, proporcionando al ganadero una herramienta visual para evaluar el momento oportuno de reposición de silos sin recomendaciones automáticas invasivas.
  
 ---
  
