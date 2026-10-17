@@ -8,6 +8,8 @@ import {
   AppState,
   formatearFecha,
   formatearExplotacionAmigable,
+  formatearKg,
+  formatearMoneda,
   calcularEdad,
   calcularTiempoTranscurrido,
   extraer4Digitos,
@@ -19,6 +21,9 @@ import {
 import { obtenerDetalleAnimal, obtenerAnimalesDeLote } from '../db.js';
 import { renderVistaAnimales } from './cattle_view.js';
 import { abrirModalRegistroParto } from './birth_modal.js';
+import { renderVistaLiquidaciones, verDetalleLiquidacion } from './sales_view.js';
+import { renderVistaMovimientos } from './movements_view.js';
+
 
 function adjuntarEventosDetalle(contenedor) {
   if (!contenedor) return;
@@ -47,7 +52,24 @@ function adjuntarEventosDetalle(contenedor) {
       abrirModalRegistroParto({ madreCrotal: crotal, madre4: c4, madreRaza: raza });
     });
   });
+  contenedor.querySelectorAll('[data-action="ver-factura"]').forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const rawFid = btn.dataset.facturaId;
+      const fid = Number(rawFid);
+      if (rawFid && !isNaN(fid) && fid > 0) {
+        if (AppState.crotalSeleccionado) {
+          const a = obtenerDetalleAnimal(AppState.crotalSeleccionado);
+          registrarPasoHistorial("animal", AppState.crotalSeleccionado, `Vaca ${a ? a.crotal_4 : ""}`, {
+            crotal_4: a ? a.crotal_4 : ""
+          });
+        }
+        verDetalleLiquidacion(fid, true);
+      }
+    });
+  });
 }
+
 
 export function seleccionarAnimal(crotal, pushHistory = true) {
   if (!crotal) return;
@@ -92,12 +114,10 @@ export function seleccionarAnimal(crotal, pushHistory = true) {
 
   const htmlFicha = generarHtmlDetalleAnimal(animal);
 
-  if (esPantallaEscritorio()) {
-    const rightPanel = document.getElementById("detail-panel");
-    if (rightPanel) {
-      rightPanel.innerHTML = htmlFicha;
-      adjuntarEventosDetalle(rightPanel);
-    }
+  const rightPanel = document.getElementById("detail-panel");
+  if (esPantallaEscritorio() && rightPanel) {
+    rightPanel.innerHTML = htmlFicha;
+    adjuntarEventosDetalle(rightPanel);
   } else {
     const container = document.getElementById("app-container");
     if (container) {
@@ -210,6 +230,16 @@ export function volverAtras() {
     seleccionarAnimal(anterior.id, false);
   } else if (anterior.tipo === "corral") {
     verDetalleCorral(anterior.id, false);
+  } else if (anterior.tipo === "liquidaciones") {
+    if (anterior.id) {
+      verDetalleLiquidacion(anterior.id, false);
+    } else {
+      renderVistaLiquidaciones();
+    }
+  } else if (anterior.tipo === "movimientos") {
+    renderVistaMovimientos();
+  } else {
+    renderVistaAnimales();
   }
 }
 
@@ -414,7 +444,45 @@ export function generarHtmlDetalleAnimal(animal) {
         </div>
       </div>
 
+      ${animal.liquidacion_canal ? `
+      <div class="spec-section" style="background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; margin: 16px 0 6px 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <span style="font-weight: 800; color: var(--brand-primary); font-size: 1.05rem;">Rendimiento en Canal y Venta</span>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1px;">Liquidación oficial en matadero (GANAVAEX, S.COOP)</div>
+          </div>
+          <span class="status-pill venta">Liquidado</span>
+        </div>
+        <div class="spec-grid">
+          <div>
+            <div class="spec-label">Peso Canal (Báscula)</div>
+            <div class="spec-val" style="font-size: 1.2rem; font-weight: 800; color: var(--brand-primary);">${formatearKg(animal.liquidacion_canal.peso_canal_kg)} kg</div>
+          </div>
+          <div>
+            <div class="spec-label">Cotización / Precio</div>
+            <div class="spec-val" style="font-weight: 700;">${animal.liquidacion_canal.precio_unitario ? `${animal.liquidacion_canal.precio_unitario.toFixed(2)} €/kg` : "N/D"}</div>
+          </div>
+          <div>
+            <div class="spec-label">Importe Liquidado</div>
+            <div class="spec-val" style="font-weight: 800; color: var(--text-main);">${formatearMoneda(animal.liquidacion_canal.importe_linea)} €</div>
+          </div>
+          <div>
+            <div class="spec-label">Factura Liquidación</div>
+            <button class="clickable-chip chip-factura" data-action="ver-factura" data-factura-id="${animal.liquidacion_canal.factura_id}" title="Ver factura y canales del lote" style="margin-top: 2px;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+              <span>Factura <strong>${escapeHtml(animal.liquidacion_canal.numero_factura || "")}</strong> (${formatearFecha(animal.liquidacion_canal.fecha_factura)})</span>
+              <span class="chip-action">Ver factura →</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      ` : ""}
+
       <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center;">
+
         <span>Historial de Partos y Crías (${animal.partos ? animal.partos.length : 0})</span>
         ${esHembra && esActivo ? `
           <button class="btn-registrar-parto-detail" data-action="registrar-parto" data-madre-crotal="${escapeHtml(animal.crotal)}" data-madre-4="${escapeHtml(animal.crotal_4)}" data-madre-raza="${escapeHtml(animal.raza || '')}">

@@ -8,11 +8,16 @@ import {
   esPantallaEscritorio,
   escapeHtml,
   formatearFecha,
+  formatearMoneda,
+  formatearKg,
   formatearExplotacionAmigable,
-  clasificarMovimientoUnificado
+  clasificarMovimientoUnificado,
+  registrarPasoHistorial
 } from '../config.js';
 import { obtenerMovimientos, obtenerAniosMovimientos } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
+import { renderVistaLiquidaciones, verDetalleLiquidacion } from './sales_view.js';
+
 
 export function renderVistaMovimientos() {
   const container = document.getElementById("app-container");
@@ -53,7 +58,7 @@ export function renderVistaMovimientos() {
 
   container.innerHTML = `
     <div style="max-width: 960px; margin: 0 auto;">
-      <div style="margin-bottom: 20px;">
+      <div style="margin-bottom: 16px;">
         <h2 style="font-size: 1.4rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 4px;">
           Movimientos del Censo
         </h2>
@@ -62,7 +67,30 @@ export function renderVistaMovimientos() {
         </p>
       </div>
 
+      <!-- Banner de acceso a Liquidaciones de Venta (Profundidad Progresiva) -->
+      <div class="banner-liquidaciones" id="banner-ir-liquidaciones" style="cursor: pointer; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="banner-icon-badge">📊</div>
+          <div>
+            <div style="font-weight: 800; color: var(--brand-primary); font-size: 0.95rem;">
+              Liquidaciones de Venta y Matadero
+            </div>
+            <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+              11 facturas oficiales GANAVAEX · 54 canales pesadas · Pesos y cotizaciones
+            </div>
+          </div>
+        </div>
+        <button class="btn-profundizar" style="pointer-events: none;">
+          <span>Ver liquidaciones</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </div>
+
       <div class="filtros-movimientos-wrapper">
+
         <div class="search-input-wrapper">
           <input 
             type="text" 
@@ -165,9 +193,24 @@ export function renderVistaMovimientos() {
     });
   }
 
+  const bannerLiq = container.querySelector("#banner-ir-liquidaciones");
+  if (bannerLiq) {
+    bannerLiq.addEventListener("click", () => {
+      registrarPasoHistorial("movimientos", null, "Movimientos");
+      renderVistaLiquidaciones();
+    });
+  }
+
   const listaContenedor = document.getElementById("movimientos-list");
   if (listaContenedor) {
     listaContenedor.addEventListener("click", (e) => {
+      const targetFactura = e.target.closest('[data-action="ver-factura"]');
+      if (targetFactura && targetFactura.dataset.facturaId) {
+        registrarPasoHistorial("movimientos", null, "Movimientos");
+        verDetalleLiquidacion(Number(targetFactura.dataset.facturaId), true);
+        return;
+      }
+
       const targetAnimal = e.target.closest('[data-action="select-animal"]');
       if (targetAnimal && targetAnimal.dataset.crotal) {
         if (AppState.tabActual !== "animales") {
@@ -186,6 +229,7 @@ export function renderVistaMovimientos() {
       }
     });
   }
+
 
   ejecutarBusquedaMovimientos();
 }
@@ -287,7 +331,24 @@ export function generarCardMovimientoHtml(m) {
         </div>
       </div>
 
+      ${m.peso_canal_kg != null ? `
+      <div class="mov-canal-badge-box" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: var(--md-surface-container-high); padding: 8px 12px; border-radius: var(--md-shape-sm); margin: 8px 0; border: 1px solid var(--md-outline-variant);">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem;">
+          <span style="font-weight: 800; color: var(--brand-primary);">⚖️ ${m.peso_canal_kg} kg canal</span>
+          ${m.canal_precio ? `<span style="color: var(--text-muted);">• ${Number(m.canal_precio).toFixed(2)} €/kg</span>` : ""}
+          ${m.canal_importe ? `<span style="font-weight: 700; color: var(--text-main);">(${formatearMoneda(m.canal_importe)} €)</span>` : ""}
+        </div>
+        ${m.canal_factura && m.canal_factura_id ? `
+        <button class="clickable-chip chip-factura" data-action="ver-factura" data-factura-id="${m.canal_factura_id}" style="padding: 4px 10px; font-size: 0.8rem;">
+          <span>Factura ${escapeHtml(m.canal_factura)}</span>
+          <span class="chip-action">→</span>
+        </button>
+        ` : ""}
+      </div>
+      ` : ""}
+
       <div class="mov-card-footer">
+
         <div>
           ${m.sexo ? `<span>${escapeHtml(m.sexo)}</span> ` : ""}
           ${corralInfo}
