@@ -36,7 +36,10 @@ CREATE TABLE IF NOT EXISTS campo_registros (
     device_id TEXT,
     ts_dispositivo TEXT,
     ts_servidor TEXT NOT NULL DEFAULT (datetime('now')),
-    payload TEXT
+    payload TEXT,
+    conciliado_en_access INTEGER NOT NULL DEFAULT 0,
+    ts_conciliado TEXT,
+    crotal_asignado TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_campo_crotal ON campo_registros(crotal);
 CREATE INDEX IF NOT EXISTS idx_campo_tipo ON campo_registros(tipo);
@@ -74,6 +77,23 @@ class SyncService:
         conn.execute("PRAGMA synchronous = FULL")
         cur = conn.cursor()
         cur.executescript(SQL_TABLAS_SYNC)
+
+        # Migración de columnas defensiva para bases de datos existentes
+        for col_def in (
+            "conciliado_en_access INTEGER NOT NULL DEFAULT 0",
+            "ts_conciliado TEXT",
+            "crotal_asignado TEXT",
+        ):
+            try:
+                conn.execute(f"ALTER TABLE campo_registros ADD COLUMN {col_def}")
+            except sqlite3.OperationalError:
+                pass
+
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_campo_conciliado ON campo_registros(conciliado_en_access)")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
         return conn
 
@@ -252,7 +272,8 @@ class SyncService:
             try:
                 historico = [dict(r) for r in vieja.execute(
                     "SELECT uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
-                    "ts_servidor, payload FROM campo_registros"
+                    "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado "
+                    "FROM campo_registros"
                 ).fetchall()]
                 epoch_previo = self._leer_estado(vieja)["epoch"]
             finally:
@@ -268,9 +289,11 @@ class SyncService:
                     conn.execute(
                         "INSERT OR IGNORE INTO campo_registros "
                         "(uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
-                        "ts_servidor, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (r["uuid"], r["tipo"], r["crotal"], r["operador"], r["device_id"],
-                         r["ts_dispositivo"], r["ts_servidor"], r["payload"]),
+                         r["ts_dispositivo"], r["ts_servidor"], r["payload"],
+                         r.get("conciliado_en_access", 0), r.get("ts_conciliado"), r.get("crotal_asignado")),
                     )
                 nuevo_epoch = epoch_previo + 1
                 conn.execute(
@@ -307,7 +330,7 @@ class SyncService:
         return resumen
 
     # ------------------------------------------------------------------ #
-    # Historial (auditoría / atribución de cambios de campo)
+    # Historial y Conciliación con Access
     # ------------------------------------------------------------------ #
 
     def historial(self, limite: int = 50) -> List[Dict[str, Any]]:
@@ -315,12 +338,76 @@ class SyncService:
         try:
             rows = conn.execute(
                 "SELECT uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
-                "ts_servidor, payload FROM campo_registros "
+                "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado "
+                "FROM campo_registros "
                 "ORDER BY ts_servidor DESC, uuid LIMIT ?",
                 (max(1, min(limite, 200)),),
             ).fetchall()
-            cols = ["uuid", "tipo", "crotal", "operador", "device_id",
-                    "ts_dispositivo", "ts_servidor", "payload"]
+            cols = [
+                "uuid", "tipo", "crotal", "operador", "device_id",
+                "ts_dispositivo", "ts_servidor", "payload",
+                "conciliado_en_access", "ts_conciliado", "crotal_asignado",
+            ]
             return [dict(zip(cols, r)) for r in rows]
+        finally:
+            conn.close()
+
+    def listar_pendientes(self, tipo: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Devuelve los registros de campo pendientes de conciliar en Access (conciliado_en_access = 0)."""
+        conn = self._conectar()
+        try:
+            sql = (
+                "SELECT uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
+                "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado "
+                "FROM campo_registros WHERE conciliado_en_access = 0"
+            )
+            params: list[Any] = []
+            if tipo:
+                sql += " AND tipo = ?"
+                params.append(tipo.lower().strip())
+            sql += " ORDER BY ts_servidor ASC, uuid ASC"
+            rows = conn.execute(sql, params).fetchall()
+            cols = [
+                "uuid", "tipo", "crotal", "operador", "device_id",
+                "ts_dispositivo", "ts_servidor", "payload",
+                "conciliado_en_access", "ts_conciliado", "crotal_asignado",
+            ]
+            resultado = []
+            for r in rows:
+                item = dict(zip(cols, r))
+                if item.get("payload"):
+                    try:
+                        item["payload"] = json.loads(item["payload"])
+                    except (TypeError, ValueError):
+                        pass
+                resultado.append(item)
+            return resultado
+        finally:
+            conn.close()
+
+    def marcar_conciliados(self, conciliados: List[Dict[str, Any]]) -> int:
+        """Marca una lista de registros como conciliados en Access con timestamp y crotal oficial."""
+        if not conciliados:
+            return 0
+        conn = self._conectar()
+        try:
+            actualizados = 0
+            for item in conciliados:
+                uuid = str(item.get("uuid") or "").strip()
+                if not uuid:
+                    continue
+                crotal_asignado = item.get("crotal_asignado")
+                cur = conn.execute(
+                    "UPDATE campo_registros "
+                    "SET conciliado_en_access = 1, ts_conciliado = datetime('now'), "
+                    "crotal_asignado = COALESCE(?, crotal_asignado) "
+                    "WHERE uuid = ?",
+                    (crotal_asignado, uuid),
+                )
+                if cur.rowcount > 0:
+                    actualizados += cur.rowcount
+            if actualizados > 0:
+                conn.commit()
+            return actualizados
         finally:
             conn.close()
