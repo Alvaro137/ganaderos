@@ -1475,21 +1475,30 @@ class CampoDB {
         ORDER BY mes ASC
       `, paramsLonja);
 
-      // Precios medios reales de venta en matadero de la explotación
+      // Precios medios reales de venta en matadero de la explotación desglosados por categoría
       const tieneVentas = this.tieneTablaVentas();
       let rowsVentas = [];
       if (tieneVentas) {
         rowsVentas = this.ejecutarQuery(`
           SELECT 
             substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 7) as mes,
-            ROUND(COALESCE(SUM(vc.importe_linea) / NULLIF(SUM(vc.peso_canal_kg), 0), 0), 3) as precio_medio_granja,
-            ROUND(AVG(vc.peso_canal_kg), 1) as peso_medio_canal,
-            COUNT(1) as canales_vendidas,
-            ROUND(SUM(vc.peso_canal_kg), 1) as total_kg_canal
+            CASE 
+              WHEN vc.articulo LIKE '%TERNERO%' THEN 'ANOJO'
+              WHEN vc.articulo LIKE '%TERNERA%' THEN 'TERNERA'
+              WHEN vc.articulo LIKE '%VACA%' OR vc.articulo LIKE '%TORO%' THEN 'VACA'
+              ELSE 'OTRO'
+            END as categoria_animal,
+            ROUND(SUM(vc.importe_linea) / NULLIF(SUM(vc.peso_canal_kg), 0), 3) as precio_medio_cat,
+            ROUND(AVG(vc.peso_canal_kg), 1) as peso_medio_cat,
+            COUNT(vc.id) as canales_cat,
+            ROUND(SUM(vc.peso_canal_kg), 1) as kg_cat,
+            ROUND(SUM(vc.importe_linea), 2) as importe_cat
           FROM ventas_canales vc
           JOIN ventas_liquidaciones vl ON vc.factura_id = vl.id
-          WHERE ${whereVentas} AND vc.peso_canal_kg > 1
-          GROUP BY mes
+          WHERE ${whereVentas} 
+            AND vc.peso_canal_kg >= 50 
+            AND (vc.importe_linea / vc.peso_canal_kg) BETWEEN 1.5 AND 20.0
+          GROUP BY mes, categoria_animal
           ORDER BY mes ASC
         `, paramsVentas);
       }
@@ -1509,12 +1518,22 @@ class CampoDB {
             peso_medio_granja: null,
             precio_estimado: false,
             canales_vendidas: 0,
-            total_kg_canal: 0
+            total_kg_canal: 0,
+            total_importe: 0,
+            canales_anojo: 0,
+            kg_anojo: 0,
+            canales_ternera: 0,
+            kg_ternera: 0,
+            canales_vaca: 0,
+            kg_vaca: 0,
+            lonja_referencia: null,
+            diferencial_lonja: null,
+            mix_texto: ""
           });
         }
         const item = mapaMeses.get(r.mes);
-        if (r.categoria === "AÑOJO_EXTRA") item.anojo_extra_lonja = Number(r.precio_medio_kg);
-        if (r.categoria === "AÑOJO_PESADO") item.anojo_pesado_lonja = Number(r.precio_medio_kg);
+        if (r.categoria === "AÑOJO_EXTRA" || (r.categoria && r.categoria.endsWith("OJO_EXTRA"))) item.anojo_extra_lonja = Number(r.precio_medio_kg);
+        if (r.categoria === "AÑOJO_PESADO" || (r.categoria && r.categoria.endsWith("OJO_PESADO"))) item.anojo_pesado_lonja = Number(r.precio_medio_kg);
         if (r.categoria === "TERNERA_EXTRA") item.ternera_extra_lonja = Number(r.precio_medio_kg);
         if (r.categoria === "VACA_DESVIEJE") item.vaca_desvieje_lonja = Number(r.precio_medio_kg);
       });
@@ -1532,14 +1551,80 @@ class CampoDB {
             peso_medio_granja: null,
             precio_estimado: false,
             canales_vendidas: 0,
-            total_kg_canal: 0
+            total_kg_canal: 0,
+            total_importe: 0,
+            canales_anojo: 0,
+            kg_anojo: 0,
+            canales_ternera: 0,
+            kg_ternera: 0,
+            canales_vaca: 0,
+            kg_vaca: 0,
+            lonja_referencia: null,
+            diferencial_lonja: null,
+            mix_texto: ""
           });
         }
         const item = mapaMeses.get(v.mes);
-        item.precio_medio_granja = Number(v.precio_medio_granja);
-        item.peso_medio_granja = Number(v.peso_medio_canal);
-        item.canales_vendidas = Number(v.canales_vendidas);
-        item.total_kg_canal = Number(v.total_kg_canal);
+        const cat = v.categoria_animal;
+        const nCan = Number(v.canales_cat || 0);
+        const nKg = Number(v.kg_cat || 0);
+        const nImp = Number(v.importe_cat || 0);
+
+        item.canales_vendidas += nCan;
+        item.total_kg_canal += nKg;
+        item.total_importe += nImp;
+
+        if (cat === "ANOJO") {
+          item.canales_anojo += nCan;
+          item.kg_anojo += nKg;
+        } else if (cat === "TERNERA") {
+          item.canales_ternera += nCan;
+          item.kg_ternera += nKg;
+        } else if (cat === "VACA") {
+          item.canales_vaca += nCan;
+          item.kg_vaca += nKg;
+        }
+      });
+
+      // Calcular precio medio global, benchmark ponderado de Lonja y texto de composición
+      mapaMeses.forEach(item => {
+        if (item.total_kg_canal > 0) {
+          item.precio_medio_granja = Number((item.total_importe / item.total_kg_canal).toFixed(2));
+          item.peso_medio_granja = Number((item.total_kg_canal / item.canales_vendidas).toFixed(1));
+
+          // Benchmark ponderado oficial de Lonja según el mix de animales vendidos
+          let lonjaSuma = 0;
+          let kgSuma = 0;
+          if (item.kg_anojo > 0 && item.anojo_extra_lonja) {
+            lonjaSuma += item.kg_anojo * item.anojo_extra_lonja;
+            kgSuma += item.kg_anojo;
+          }
+          if (item.kg_ternera > 0 && item.ternera_extra_lonja) {
+            lonjaSuma += item.kg_ternera * item.ternera_extra_lonja;
+            kgSuma += item.kg_ternera;
+          }
+          if (item.kg_vaca > 0 && item.vaca_desvieje_lonja) {
+            lonjaSuma += item.kg_vaca * item.vaca_desvieje_lonja;
+            kgSuma += item.kg_vaca;
+          }
+
+          if (kgSuma > 0) {
+            item.lonja_referencia = Number((lonjaSuma / kgSuma).toFixed(2));
+          } else {
+            item.lonja_referencia = item.anojo_extra_lonja || null;
+          }
+
+          item.diferencial_lonja = (item.precio_medio_granja != null && item.lonja_referencia != null)
+            ? Number((item.precio_medio_granja - item.lonja_referencia).toFixed(2))
+            : null;
+
+          // Etiqueta descriptiva del mix vendido
+          const partes = [];
+          if (item.canales_anojo > 0) partes.push(`${item.canales_anojo} añojo${item.canales_anojo > 1 ? 's' : ''}`);
+          if (item.canales_ternera > 0) partes.push(`${item.canales_ternera} ternera${item.canales_ternera > 1 ? 's' : ''}`);
+          if (item.canales_vaca > 0) partes.push(`${item.canales_vaca} vaca${item.canales_vaca > 1 ? 's' : ''}`);
+          item.mix_texto = partes.join(", ");
+        }
       });
 
       // Si las estimaciones están activas, imputar precio Lonja en meses sin liquidaciones de venta
@@ -1548,7 +1633,10 @@ class CampoDB {
           if (item.precio_medio_granja == null || item.precio_medio_granja === 0) {
             if (item.anojo_extra_lonja != null) {
               item.precio_medio_granja = item.anojo_extra_lonja;
+              item.lonja_referencia = item.anojo_extra_lonja;
+              item.diferencial_lonja = 0.00;
               item.precio_estimado = true;
+              item.mix_texto = "Estimación Lonja";
             }
           }
         });
@@ -1588,38 +1676,73 @@ class CampoDB {
         else if (r.categoria === 'VACA_DESVIEJE') vaca_desvieje.push(pt);
       });
 
+      // Consultar precios reales de la granja filtrando exclusivamente animales con peso canal válido (>= 50kg)
       let sqlGranja = `
         SELECT 
           COALESCE(vc.fecha_salida_lote, vl.fecha_factura) as time,
+          CASE 
+            WHEN vc.articulo LIKE '%TERNER%' THEN 'CEBO'
+            WHEN vc.articulo LIKE '%VACA%' OR vc.articulo LIKE '%TORO%' THEN 'VACA'
+            ELSE 'OTRO'
+          END as tipo,
           ROUND(SUM(vc.importe_linea) / SUM(vc.peso_canal_kg), 3) as value,
           ROUND(SUM(vc.peso_canal_kg), 1) as kg_total,
           COUNT(vc.id) as canales_total
         FROM ventas_canales vc
         LEFT JOIN ventas_liquidaciones vl ON vc.factura_id = vl.id
-        WHERE vc.peso_canal_kg > 0 AND COALESCE(vc.fecha_salida_lote, vl.fecha_factura) IS NOT NULL
+        WHERE vc.peso_canal_kg >= 50 
+          AND (vc.importe_linea / vc.peso_canal_kg) BETWEEN 1.5 AND 20.0
+          AND COALESCE(vc.fecha_salida_lote, vl.fecha_factura) IS NOT NULL
       `;
       const paramsGranja = [];
       if (anio && anio !== "TODOS") {
         sqlGranja += " AND substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 4) = ?";
         paramsGranja.push(String(anio));
       }
-      sqlGranja += " GROUP BY time ORDER BY time ASC";
+      sqlGranja += " GROUP BY time, tipo ORDER BY time ASC";
 
       const rowsGranja = this.ejecutarQuery(sqlGranja, paramsGranja);
 
-      const precio_granja = (rowsGranja || []).map(r => ({
-        time: String(r.time).slice(0, 10),
-        value: Number(r.value),
-        kg_total: Number(r.kg_total),
-        canales_total: Number(r.canales_total),
+      const precio_granja_cebo = [];
+      const precio_granja_vacas = [];
+      const precio_granja_map = new Map();
+
+      (rowsGranja || []).forEach(r => {
+        const pt = {
+          time: String(r.time).slice(0, 10),
+          value: Number(r.value),
+          kg_total: Number(r.kg_total),
+          canales_total: Number(r.canales_total),
+          estimado: false
+        };
+        if (r.tipo === 'CEBO') {
+          precio_granja_cebo.push(pt);
+        } else if (r.tipo === 'VACA') {
+          precio_granja_vacas.push(pt);
+        }
+
+        if (!precio_granja_map.has(pt.time)) {
+          precio_granja_map.set(pt.time, { time: pt.time, importe: 0, kg: 0, canales: 0 });
+        }
+        const item = precio_granja_map.get(pt.time);
+        item.kg += Number(r.kg_total);
+        item.importe += Number(r.value) * Number(r.kg_total);
+        item.canales += Number(r.canales_total);
+      });
+
+      const precio_granja = Array.from(precio_granja_map.values()).map(g => ({
+        time: g.time,
+        value: Number((g.importe / g.kg).toFixed(3)),
+        kg_total: g.kg,
+        canales_total: g.canales,
         estimado: false
-      }));
+      })).sort((a, b) => a.time.localeCompare(b.time));
 
       if (usarEstimaciones && anojo_extra.length > 0) {
-        const fechasGranja = new Set(precio_granja.map(p => p.time));
+        const fechasCebo = new Set(precio_granja_cebo.map(p => p.time));
         anojo_extra.forEach(pt => {
-          if (!fechasGranja.has(pt.time)) {
-            precio_granja.push({
+          if (!fechasCebo.has(pt.time)) {
+            precio_granja_cebo.push({
               time: pt.time,
               value: pt.value,
               kg_total: 0,
@@ -1628,7 +1751,7 @@ class CampoDB {
             });
           }
         });
-        precio_granja.sort((a, b) => a.time.localeCompare(b.time));
+        precio_granja_cebo.sort((a, b) => a.time.localeCompare(b.time));
       }
 
       return {
@@ -1636,11 +1759,13 @@ class CampoDB {
         anojo_pesado,
         ternera_extra,
         vaca_desvieje,
+        precio_granja_cebo,
+        precio_granja_vacas,
         precio_granja
       };
     } catch (e) {
       console.error("[DB] Error en obtenerSeriesTradingCarne:", e);
-      return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja: [] };
+      return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja_cebo: [], precio_granja_vacas: [], precio_granja: [] };
     }
   }
 
