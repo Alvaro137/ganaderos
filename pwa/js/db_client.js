@@ -343,16 +343,20 @@ class CampoDB {
     let params;
 
     if (soloDigitos.length >= 1 && soloDigitos.length <= 4) {
-      // Coincidencia por dígitos iniciales (búsqueda incremental mientras teclea: 1->0->4->5)
+      // Coincidencia flexible por dígitos:
+      // 1. Prefijo incremental mientras teclea: '10%' -> 1045, 1022
+      // 2. Padding de ceros a la izquierda: '45' -> '0045'
+      // 3. Coincidencia por sufijo: '%45'
       const condActivo = soloActivos ? "AND estado = 'A'" : "";
+      const conCeros = soloDigitos.padStart(4, "0");
       sql = `
         SELECT crotal, crotal_4, nombre, sexo, raza, estado, corral, fecha_ult_parto, total_partos, fecha_nacimiento
         FROM animales
-        WHERE crotal_4 LIKE ? ${condActivo}
-        ORDER BY (estado = 'A') DESC, crotal_4 ASC
+        WHERE (crotal_4 LIKE ? OR crotal_4 = ? OR crotal_4 LIKE ? OR crotal LIKE ?) ${condActivo}
+        ORDER BY (crotal_4 = ?) DESC, (crotal_4 = ?) DESC, (crotal_4 LIKE ?) DESC, (estado = 'A') DESC, crotal_4 ASC
         LIMIT ${lim}
       `;
-      params = [`${soloDigitos}%`];
+      params = [`${soloDigitos}%`, conCeros, `%${soloDigitos}`, `%${soloDigitos}`, soloDigitos, conCeros, `${soloDigitos}%`];
     } else {
       // Búsqueda por crotal completo o corral
       const condActivo = soloActivos ? "AND estado = 'A'" : "";

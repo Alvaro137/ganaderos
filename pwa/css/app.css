@@ -327,14 +327,15 @@ body {
 .btn-nuevo-parto-header {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 14px;
+  gap: 8px;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 16px;
   border-radius: var(--md-shape-full, 9999px);
   background: var(--md-primary, #1e5e3a);
   color: var(--md-on-primary, #ffffff);
   border: 1px solid rgba(0, 0, 0, 0.08);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
@@ -354,8 +355,8 @@ body {
 }
 
 .btn-nuevo-parto-header svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   stroke: currentColor;
 }
 
@@ -535,7 +536,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
-  padding: 12px 42px 12px 18px;
+  padding: 12px 48px 12px 18px;
   border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-xl);
   background: var(--md-surface-container-high);
@@ -559,13 +560,20 @@ body {
 
 .btn-input-clear {
   position: absolute;
-  right: 12px;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   background: transparent;
   border: none;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   color: var(--md-outline);
   cursor: pointer;
-  padding: 4px;
+  min-width: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--md-shape-full);
 }
 
 .btn-input-clear:hover {
@@ -603,14 +611,15 @@ body {
   background: var(--md-surface-container-low);
   border: 1px solid var(--md-outline-variant);
   color: var(--md-on-surface-variant);
-  padding: 6px 14px;
+  min-height: 48px;
+  padding: 0 16px;
   border-radius: var(--md-shape-full);
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   transition: all 0.15s ease;
 }
 
@@ -622,12 +631,16 @@ body {
 
 /* Teclado Táctil Grande para Campo */
 .touch-keypad {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--md-outline-variant);
+}
+
+.touch-keypad.visible {
+  display: grid;
 }
 
 .t-key {
