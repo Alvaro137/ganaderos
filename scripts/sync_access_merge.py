@@ -111,7 +111,13 @@ def conciliar_partos_en_access(
 
     Devuelve la lista de registros conciliados con su crotal asignado.
     """
-    import pyodbc
+    try:
+        import pyodbc
+    except ImportError:
+        pyodbc = None
+
+    if pyodbc is None:
+        raise AccessReconciliationError("El controlador pyodbc no está disponible en este entorno.")
 
     conciliados: List[Dict[str, Any]] = []
     if not partos:

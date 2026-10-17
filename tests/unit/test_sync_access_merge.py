@@ -80,12 +80,12 @@ class TestSyncAccessMerge(unittest.TestCase):
         n = notificar_conciliacion("http://localhost:8010", "token-x", conciliados)
         self.assertEqual(n, 2)
 
-    @patch("pyodbc.connect")
-    def test_conciliar_partos_en_access_flujo_completo(self, mock_pyodbc):
+    def test_conciliar_partos_en_access_flujo_completo(self):
+        mock_pyodbc = MagicMock()
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.cursor.return_value = mock_cur
-        mock_pyodbc.return_value = mock_conn
+        mock_pyodbc.connect.return_value = mock_conn
 
         # Mock de consultas:
         # 1. Crotales libres
@@ -116,7 +116,8 @@ class TestSyncAccessMerge(unittest.TestCase):
             db_path = Path(tmpdir) / "bdlibro.mdb"
             db_path.write_text("test")
 
-            conciliados = conciliar_partos_en_access(db_path, "pwd", partos, dry_run=False)
+            with patch.dict("sys.modules", {"pyodbc": mock_pyodbc}):
+                conciliados = conciliar_partos_en_access(db_path, "pwd", partos, dry_run=False)
 
             self.assertEqual(len(conciliados), 1)
             self.assertEqual(conciliados[0]["uuid"], "uuid-parto-1")
@@ -127,12 +128,12 @@ class TestSyncAccessMerge(unittest.TestCase):
             mock_conn.commit.assert_called_once()
             mock_conn.rollback.assert_not_called()
 
-    @patch("pyodbc.connect")
-    def test_conciliar_partos_dry_run_hace_rollback(self, mock_pyodbc):
+    def test_conciliar_partos_dry_run_hace_rollback(self):
+        mock_pyodbc = MagicMock()
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.cursor.return_value = mock_cur
-        mock_pyodbc.return_value = mock_conn
+        mock_pyodbc.connect.return_value = mock_conn
 
         mock_cur.fetchall.side_effect = [
             [("ES220800857601", "ES371261100121")],
@@ -154,17 +155,19 @@ class TestSyncAccessMerge(unittest.TestCase):
             db_path = Path(tmpdir) / "bdlibro.mdb"
             db_path.write_text("test")
 
-            conciliados = conciliar_partos_en_access(db_path, "pwd", partos, dry_run=True)
+            with patch.dict("sys.modules", {"pyodbc": mock_pyodbc}):
+                conciliados = conciliar_partos_en_access(db_path, "pwd", partos, dry_run=True)
+
             self.assertEqual(len(conciliados), 1)
             mock_conn.commit.assert_not_called()
             mock_conn.rollback.assert_called_once()
 
-    @patch("pyodbc.connect")
-    def test_conciliar_partos_sin_crotales_lanza_error(self, mock_pyodbc):
+    def test_conciliar_partos_sin_crotales_lanza_error(self):
+        mock_pyodbc = MagicMock()
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.cursor.return_value = mock_cur
-        mock_pyodbc.return_value = mock_conn
+        mock_pyodbc.connect.return_value = mock_conn
 
         # Crotales libres VACÍO
         mock_cur.fetchall.side_effect = [
@@ -186,10 +189,21 @@ class TestSyncAccessMerge(unittest.TestCase):
             db_path = Path(tmpdir) / "bdlibro.mdb"
             db_path.write_text("test")
 
-            with self.assertRaises(AccessReconciliationError) as ctx:
-                conciliar_partos_en_access(db_path, "pwd", partos)
+            with patch.dict("sys.modules", {"pyodbc": mock_pyodbc}):
+                with self.assertRaises(AccessReconciliationError) as ctx:
+                    conciliar_partos_en_access(db_path, "pwd", partos)
             self.assertIn("No quedan crotales en la tabla Crotales", str(ctx.exception))
             mock_conn.rollback.assert_called_once()
+
+    def test_conciliar_partos_sin_pyodbc_lanza_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "bdlibro.mdb"
+            db_path.write_text("test")
+
+            with patch.dict("sys.modules", {"pyodbc": None}):
+                with self.assertRaises(AccessReconciliationError) as ctx:
+                    conciliar_partos_en_access(db_path, "pwd", [])
+            self.assertIn("pyodbc no está disponible", str(ctx.exception))
 
 
 if __name__ == "__main__":
