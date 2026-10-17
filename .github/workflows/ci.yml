@@ -47,6 +47,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Security Scanners (Bandit & Pip-Audit)
+        run: pip install bandit pip-audit
+
+      - name: Run Bandit SAST
+        run: bandit -c pyproject.toml -r src/ scripts/ -ll
+
+      - name: Run Pip-Audit Dependency Scanner
+        run: pip-audit .
+
   pwa-cache-check:
     name: PWA Cache Version Check
     runs-on: ubuntu-latest
