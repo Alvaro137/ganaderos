@@ -351,7 +351,7 @@ def exportar_y_subir_censo(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Conciliación bidireccional entre la PWA/Hub y Access bdlibro.mdb.")
     parser.add_argument("--source", type=Path, default=None, help="Ruta al fichero bdlibro.mdb")
-    parser.add_argument("--api-url", type=str, default=os.environ.get("GANADEROS_API_URL", "http://192.168.1.137:8010"), help="URL base del servidor hub")
+    parser.add_argument("--api-url", type=str, default=os.environ.get("GANADEROS_API_URL", "http://192.168.0.137:8010"), help="URL base del servidor hub")
     parser.add_argument("--password", type=str, default=os.environ.get("GANADEROS_DB_PASSWORD", "sggnetpy04"), help="Contraseña de bdlibro.mdb")
     parser.add_argument("--pwa-password", type=str, default=os.environ.get("PWA_PASSWORD", "ganaderos"), help="Contraseña compartida de la PWA")
     parser.add_argument("--dry-run", action="store_true", help="Simula la operación sin persistir en Access ni en el servidor")
