@@ -1,3 +1,4 @@
+import asyncio
 import collections
 import hashlib
 import hmac
@@ -440,6 +441,7 @@ TAGS_METADATA = [
     {"name": "Base de Datos", "description": "Distribución del archivo binario SQLite relacional."},
     {"name": "Censo Ganadero", "description": "Consultas del censo con entidades de dominio y validaciones."},
     {"name": "Sanidad y Retiradas", "description": "Recetas veterinarias y control de tiempos de espera en carne."},
+    {"name": "Mercados y Lonja", "description": "Cotizaciones oficiales de la Lonja Agropecuaria de Salamanca."},
     {"name": "Asistente IA", "description": "Intent Calling tipado, síntesis ganadera y transcripción Whisper."},
 ]
 
@@ -989,6 +991,32 @@ async def ingest_ventas_pdf(
         "total_kilos_canal": datos["total_kilos_canal"],
         "total_factura": datos["total_factura"],
         "message": f"Factura {datos['numero_factura']} procesada correctamente ({datos['total_cabezas']} canales).",
+    }
+
+
+@app.post("/api/lonja/sync", tags=["Mercados y Lonja"])
+async def sync_lonja_endpoint(
+    forzar: bool = False,
+    authorized: bool = Depends(verify_token),
+):
+    """Sincroniza en caliente las cotizaciones de la Lonja de Salamanca (vacuno de carne y materias primas)."""
+    db_file = _buscar_archivo_sqlite()
+    if not db_file:
+        raise HTTPException(status_code=503, detail="Base de datos no localizada para sincronizar la lonja.")
+
+    from scripts.sync_lonjas import sincronizar_cotizaciones_lonja
+
+    loop = asyncio.get_running_loop()
+    try:
+        registros = await loop.run_in_executor(None, sincronizar_cotizaciones_lonja, Path(db_file), forzar)
+    except Exception as e:
+        logger.error(f"[Lonja] Error sincronizando lonja: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al sincronizar lonja: {e}")
+
+    return {
+        "ok": True,
+        "registros": registros,
+        "message": f"Se han sincronizado {registros} cotizaciones oficiales de la Lonja de Salamanca.",
     }
 
 
