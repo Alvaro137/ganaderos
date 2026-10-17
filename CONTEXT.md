@@ -250,6 +250,10 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **Búsqueda Flexible por Crotal (1 a 4 dígitos):** Soporte en `db_client.js` para coincidencia incremental por prefijo, con ceros a la izquierda mediante `padStart(4, '0')` y por sufijo, priorizando coincidencias exactas y animales activos.
   - **Erradicación de `alert()`:** Sustitución de `alert()` en `birth_modal.js` y `detail_view.js` por validación visual inline (`#modal-parto-error`), resaltado en rojo de inputs obligatorios y notificaciones toasts Material 3 (`.pwa-toast--visible`).
   - **Service Worker:** Versión de caché actualizada a `ganaderos-campo-v30` en `pwa/sw.js`.
+- [x] **Seguridad y Calidad de Código Automatizada (Pre-Push & CI SAST):**
+  - **Git Hook Local Pre-Push (`.githooks/pre-push` + `scripts/pre_push_check.py`):** Ejecución secuencial y ultrarrápida (< 3s) de Gitleaks (si está en PATH), Ruff linter/style y Pip-Audit escaneando dependencias de `pyproject.toml` antes de permitir `git push`. Activado con `git config core.hooksPath .githooks`.
+  - **Bandit SAST en GitHub Actions CI:** Análisis estático de seguridad en `src/` y `scripts/` con severidad media/alta (`-ll`) y configuración `[tool.bandit]` en `pyproject.toml`.
+  - **Pip-Audit en CI:** Detección obligatoria de CVEs y vulnerabilidades en dependencias en cada PR y push.
 - [ ] **Roadmap Futuro (Pendiente de formato y especificaciones):**
   - Registro de pesaje (cuando se disponga del formato de datos de la báscula).
   *(Nota: Descartados explícitamente por el ganadero por SRP e innecesarios en campo: cambio de lote/corral móvil y recetas/tratamientos sanitarios en la PWA).*
