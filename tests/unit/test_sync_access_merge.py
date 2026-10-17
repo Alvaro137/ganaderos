@@ -243,6 +243,7 @@ class TestSyncAccessMerge(unittest.TestCase):
             llamadas_sql = [call[0][0] for call in mock_cur.execute.call_args_list]
             self.assertFalse(any("INSERT INTO Animal" in sql for sql in llamadas_sql))
 
+    @patch.dict("sys.modules", {"pyodbc": None})
     def test_conciliar_partos_fichero_ldb_bloqueado_lanza_error(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "bdlibro.mdb"
