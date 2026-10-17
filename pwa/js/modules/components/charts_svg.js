@@ -74,11 +74,11 @@ export function renderGraficoBarrasComparativas(datosMeses, opts = {}) {
 
     barsHtml += `
       <!-- Barra Ingreso Carne -->
-      <rect class="chart-bar bar-carne chart-bar-carne" x="${xIng.toFixed(1)}" y="${yIng.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${hIng.toFixed(1)}" rx="3" fill="var(--brand-primary, #1e3a2b)" style="cursor: pointer; transition: opacity 0.15s ease;">
+      <rect class="chart-bar bar-carne chart-bar-carne" x="${xIng.toFixed(1)}" y="${yIng.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${hIng.toFixed(1)}" rx="3" fill="var(--chart-carne, #15803d)" style="cursor: pointer; transition: opacity 0.15s ease;">
         <title>${d.mes} | Venta Carne: ${ingFmt} € (${d.cabezas || 0} cabezas)\nMargen neto mes: ${marFmt} €</title>
       </rect>
       <!-- Barra Gasto Pienso -->
-      <rect class="chart-bar bar-pienso chart-bar-pienso" x="${xGas.toFixed(1)}" y="${yGas.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${hGas.toFixed(1)}" rx="3" fill="var(--md-secondary, #b45309)" style="cursor: pointer; transition: opacity 0.15s ease;">
+      <rect class="chart-bar bar-pienso chart-bar-pienso" x="${xGas.toFixed(1)}" y="${yGas.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${hGas.toFixed(1)}" rx="3" fill="var(--chart-pienso, #ea580c)" style="cursor: pointer; transition: opacity 0.15s ease;">
         <title>${d.mes} | Compra Pienso: ${gasFmt} € (${Number(d.kg_pienso || 0).toLocaleString('es-ES')} kg)\nMargen neto mes: ${marFmt} €</title>
       </rect>
     `;
@@ -95,12 +95,12 @@ export function renderGraficoBarrasComparativas(datosMeses, opts = {}) {
           Balance Mensual: Ventas de Carne vs Compras de Pienso
         </div>
         <div style="display: flex; align-items: center; gap: 14px; font-size: 0.8rem; font-weight: 700;">
-          <span style="display: inline-flex; align-items: center; gap: 6px; color: var(--brand-primary, #1e3a2b);">
-            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--brand-primary, #1e3a2b);"></span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: var(--chart-carne, #15803d);">
+            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--chart-carne, #15803d);"></span>
             Venta Carne (€)
           </span>
-          <span style="display: inline-flex; align-items: center; gap: 6px; color: var(--md-secondary, #b45309);">
-            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--md-secondary, #b45309);"></span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: var(--chart-pienso, #ea580c);">
+            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--chart-pienso, #ea580c);"></span>
             Compra Pienso (€)
           </span>
         </div>

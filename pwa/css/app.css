@@ -24,6 +24,12 @@
   --md-error-container: #ffdad6;
   --md-on-error-container: #410002;
 
+  /* Tokens de Gráficos Financieros (Alto Contraste y Accesibilidad) */
+  --chart-carne: #15803d;
+  --chart-carne-hover: #166534;
+  --chart-pienso: #ea580c;
+  --chart-pienso-hover: #c2410c;
+
   /* Superficies y Contenedores M3 */
   --md-surface: #f8faf5;
   --md-surface-container-lowest: #ffffff;
