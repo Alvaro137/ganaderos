@@ -28,6 +28,9 @@ import {
   obtenerRadarMateriasPrimas,
   obtenerRadarLonjaCarne,
   obtenerEstacionalidadLonjaCarne,
+  obtenerSeriesTradingCarne,
+  obtenerSeriesTradingMateriasPrimas,
+  obtenerSeriesTradingTesoreria,
   calcularSimulacionTimingVenta,
   sincronizarBaseDatosAhora
 } from '../db.js';
@@ -39,6 +42,11 @@ import {
   renderGraficoLonjaCarne,
   renderGraficoEstacionalidadCarne
 } from '../components/charts_svg.js';
+import {
+  renderTradingChartContainer,
+  initTradingChart,
+  destruirTradingChart
+} from '../components/trading_chart.js';
 
 // Estado local de la vista financiera
 if (AppState.anioFinanciero === undefined) {
@@ -71,6 +79,12 @@ if (AppState.simulacionTiming === undefined) {
   };
 }
 
+let ultimasSeriesTrading = {
+  carne: [],
+  piensos: [],
+  tesoreria: []
+};
+
 export function renderVistaLiquidaciones() {
   const container = document.getElementById("app-container");
   if (!container) return;
@@ -78,6 +92,10 @@ export function renderVistaLiquidaciones() {
   AppState.tabActual = "ventas";
   AppState.crotalSeleccionado = null;
   AppState.corralSeleccionado = null;
+
+  destruirTradingChart("chart-carne-tv");
+  destruirTradingChart("chart-piensos-tv");
+  destruirTradingChart("chart-tesoreria-tv");
 
   // Si hay una factura seleccionada, renderizar su vista de profundidad (Nivel 3)
   if (AppState.facturaSeleccionada) {
@@ -130,6 +148,165 @@ export function renderVistaLiquidaciones() {
   const simulacionTiming = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "timing")
     ? calcularSimulacionTimingVenta(AppState.simulacionTiming)
     : null;
+
+  // Series para gráficos interactivos estilo TradingView
+  const tradingCarne = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "carne")
+    ? obtenerSeriesTradingCarne(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
+    : null;
+  const tradingPiensos = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "piensos")
+    ? obtenerSeriesTradingMateriasPrimas(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
+    : null;
+  const tradingTesoreria = (AppState.perspectivaFinanciera === "tesoreria" && AppState.graficosExpandidos)
+    ? obtenerSeriesTradingTesoreria(AppState.anioFinanciero)
+    : null;
+
+  const seriesCarneTrading = tradingCarne ? [
+    {
+      id: "anojo_extra",
+      label: "Añojo Extra (<350kg)",
+      shortLabel: "Añojo Extra",
+      color: "#15803d",
+      lineWidth: 2.5,
+      data: tradingCarne.anojo_extra,
+      defaultVisible: true,
+      unit: "€/kg",
+      decimales: 2
+    },
+    {
+      id: "granja",
+      label: "Cobrado Granja Real",
+      shortLabel: "Granja Real",
+      color: "#ea580c",
+      lineWidth: 3,
+      data: tradingCarne.precio_granja,
+      defaultVisible: true,
+      unit: "€/kg",
+      decimales: 2
+    },
+    {
+      id: "anojo_pesado",
+      label: "Añojo Pesado (>350kg)",
+      shortLabel: "Añojo Pesado",
+      color: "#2563eb",
+      lineWidth: 2,
+      data: tradingCarne.anojo_pesado,
+      defaultVisible: false,
+      unit: "€/kg",
+      decimales: 2
+    },
+    {
+      id: "ternera_extra",
+      label: "Ternera Extra",
+      shortLabel: "Ternera",
+      color: "#7c3aed",
+      lineWidth: 2,
+      data: tradingCarne.ternera_extra,
+      defaultVisible: false,
+      unit: "€/kg",
+      decimales: 2
+    },
+    {
+      id: "vaca_desvieje",
+      label: "Vaca Desvieje",
+      shortLabel: "Vaca Desvieje",
+      color: "#64748b",
+      lineWidth: 2,
+      data: tradingCarne.vaca_desvieje,
+      defaultVisible: false,
+      unit: "€/kg",
+      decimales: 2
+    }
+  ] : [];
+
+  const seriesPiensosTrading = tradingPiensos ? [
+    {
+      id: "pienso_granja",
+      label: "Pienso Comprado Granja",
+      shortLabel: "Pienso Granja",
+      color: "#15803d",
+      lineWidth: 3,
+      data: tradingPiensos.pienso_granja,
+      defaultVisible: true,
+      unit: "€/t",
+      decimales: 1
+    },
+    {
+      id: "pienso_lonja",
+      label: "Pienso Cebo Lonja",
+      shortLabel: "Pienso Lonja",
+      color: "#ea580c",
+      lineWidth: 2.5,
+      data: tradingPiensos.pienso_lonja,
+      defaultVisible: true,
+      unit: "€/t",
+      decimales: 1
+    },
+    {
+      id: "cebada_lonja",
+      label: "Cebada Salamanca",
+      shortLabel: "Cebada",
+      color: "#b45309",
+      lineWidth: 2,
+      data: tradingPiensos.cebada_lonja,
+      defaultVisible: false,
+      unit: "€/t",
+      decimales: 1
+    },
+    {
+      id: "maiz_lonja",
+      label: "Maíz Salamanca",
+      shortLabel: "Maíz",
+      color: "#d97706",
+      lineWidth: 2,
+      data: tradingPiensos.maiz_lonja,
+      defaultVisible: false,
+      unit: "€/t",
+      decimales: 1
+    }
+  ] : [];
+
+  const seriesTesoreriaTrading = tradingTesoreria ? [
+    {
+      id: "ingresos_carne",
+      label: "Facturación Carne (€)",
+      shortLabel: "Ventas Carne",
+      color: "#15803d",
+      lineWidth: 3,
+      type: "area",
+      topColor: "rgba(21, 128, 61, 0.25)",
+      bottomColor: "rgba(21, 128, 61, 0.02)",
+      data: tradingTesoreria.ingresos_carne,
+      defaultVisible: true,
+      unit: "€",
+      decimales: 0
+    },
+    {
+      id: "gastos_pienso",
+      label: "Compras Pienso (€)",
+      shortLabel: "Gasto Pienso",
+      color: "#ea580c",
+      lineWidth: 2.5,
+      data: tradingTesoreria.gastos_pienso,
+      defaultVisible: true,
+      unit: "€",
+      decimales: 0
+    },
+    {
+      id: "margen_neto",
+      label: "Margen Neto (€)",
+      shortLabel: "Margen Neto",
+      color: "#2563eb",
+      lineWidth: 2,
+      data: tradingTesoreria.margen_neto,
+      defaultVisible: false,
+      unit: "€",
+      decimales: 0
+    }
+  ] : [];
+
+  ultimasSeriesTrading.carne = seriesCarneTrading;
+  ultimasSeriesTrading.piensos = seriesPiensosTrading;
+  ultimasSeriesTrading.tesoreria = seriesTesoreriaTrading;
 
   const html = `
     <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 24px;">
@@ -272,10 +449,16 @@ export function renderVistaLiquidaciones() {
           <span style="font-size: 0.8rem; color: var(--text-muted);">${serieMensual.length} meses analizados</span>
         </button>
 
-        <!-- Bloque de Gráficos SVG (Colapsable con 1 toque) -->
+        <!-- Bloque de Gráficos Financieros Interactivos (Colapsable con 1 toque) -->
         ${AppState.graficosExpandidos ? `
           <div class="financial-charts-section" style="animation: fadeIn 0.2s ease;">
-            ${renderGraficoBarrasComparativas(serieMensual)}
+            ${renderTradingChartContainer({
+              id: "chart-tesoreria-tv",
+              titulo: "Balance Financiero: Facturación Carne vs Compras Pienso",
+              subtitulo: "Gráfico interactivo: pellizca para zoom, arrastra en el tiempo y marca capas.",
+              seriesDefs: seriesTesoreriaTrading,
+              altura: 320
+            })}
             ${renderGraficoCotizacionCanal(serieMensual)}
           </div>
         ` : ""}
@@ -581,9 +764,15 @@ export function renderVistaLiquidaciones() {
         </div>
 
         ${AppState.subseccionRadar === 'carne' ? `
-          <!-- Gráfico SVG Responsivo de Vacuno de Carne -->
+          <!-- Gráfico Interactivo TradingView de Vacuno de Carne -->
           <div style="margin-bottom: 24px;">
-            ${renderGraficoLonjaCarne(radarCarne)}
+            ${renderTradingChartContainer({
+              id: "chart-carne-tv",
+              titulo: "Cotización Vacuno de Carne: Lonja Salamanca vs Granja (€/kg Canal)",
+              subtitulo: "Pellizca o usa la rueda del ratón para ampliar. Activa o desactiva capas con las casillas.",
+              seriesDefs: seriesCarneTrading,
+              altura: 340
+            })}
           </div>
 
           <!-- Tabla de Evolución Mensual: Lonja Carne vs Liquidaciones Granja -->
@@ -643,9 +832,15 @@ export function renderVistaLiquidaciones() {
             </div>
           </div>
         ` : (AppState.subseccionRadar === 'piensos' ? `
-          <!-- Gráfico SVG Responsivo de Materias Primas -->
+          <!-- Gráfico Interactivo TradingView de Materias Primas y Concentrados -->
           <div style="margin-bottom: 24px;">
-            ${renderGraficoRadarMateriasPrimas(radarData || [])}
+            ${renderTradingChartContainer({
+              id: "chart-piensos-tv",
+              titulo: "Mercado de Piensos y Cereales: Lonja Salamanca vs Granja (€/t)",
+              subtitulo: "Pellizca para zoom, arrastra o pasa el dedo para consultar el precio exacto en cada fecha.",
+              seriesDefs: seriesPiensosTrading,
+              altura: 340
+            })}
           </div>
 
           <!-- Tabla de Evolución Mensual de Cotizaciones e Insumos -->
@@ -1271,6 +1466,33 @@ function adjuntarEventosLiquidaciones(container) {
       }
     });
   }
+
+  // Inicialización de Gráficos Interactivos TradingView (Lightweight Charts)
+  requestAnimationFrame(() => {
+    if (container.querySelector("#chart-carne-tv-canvas") && ultimasSeriesTrading.carne.length > 0) {
+      initTradingChart({
+        containerId: "chart-carne-tv",
+        seriesDefs: ultimasSeriesTrading.carne,
+        altura: 340
+      });
+    }
+
+    if (container.querySelector("#chart-piensos-tv-canvas") && ultimasSeriesTrading.piensos.length > 0) {
+      initTradingChart({
+        containerId: "chart-piensos-tv",
+        seriesDefs: ultimasSeriesTrading.piensos,
+        altura: 340
+      });
+    }
+
+    if (container.querySelector("#chart-tesoreria-tv-canvas") && ultimasSeriesTrading.tesoreria.length > 0) {
+      initTradingChart({
+        containerId: "chart-tesoreria-tv",
+        seriesDefs: ultimasSeriesTrading.tesoreria,
+        altura: 320
+      });
+    }
+  });
 }
 
 function adjuntarEventosDetalleFactura(container) {

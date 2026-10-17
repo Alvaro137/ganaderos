@@ -19,5 +19,8 @@
     "ganaderia"
   ],
   "author": "Alvaro <alvarogil137@gmail.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "lightweight-charts": "^5.2.1"
+  }
 }

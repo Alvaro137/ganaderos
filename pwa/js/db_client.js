@@ -1561,6 +1561,192 @@ class CampoDB {
     }
   }
 
+  obtenerSeriesTradingCarne(anio = null, usarEstimaciones = false) {
+    if (!this.tieneTablaLonja()) return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja: [] };
+    try {
+      let sqlLonja = "SELECT fecha as time, categoria, precio as value FROM cotizaciones_lonja WHERE mesa = 'CARNE'";
+      const paramsLonja = [];
+      if (anio && anio !== "TODOS") {
+        sqlLonja += " AND substr(fecha, 1, 4) = ?";
+        paramsLonja.push(String(anio));
+      }
+      sqlLonja += " ORDER BY fecha ASC";
+
+      const rowsLonja = this.ejecutarQuery(sqlLonja, paramsLonja);
+
+      const anojo_extra = [];
+      const anojo_pesado = [];
+      const ternera_extra = [];
+      const vaca_desvieje = [];
+
+      (rowsLonja || []).forEach(r => {
+        if (!r.time || r.value == null) return;
+        const pt = { time: String(r.time).slice(0, 10), value: Number(r.value) };
+        if (r.categoria === 'AÑOJO_EXTRA' || (r.categoria && r.categoria.endsWith('OJO_EXTRA'))) anojo_extra.push(pt);
+        else if (r.categoria === 'AÑOJO_PESADO' || (r.categoria && r.categoria.endsWith('OJO_PESADO'))) anojo_pesado.push(pt);
+        else if (r.categoria === 'TERNERA_EXTRA') ternera_extra.push(pt);
+        else if (r.categoria === 'VACA_DESVIEJE') vaca_desvieje.push(pt);
+      });
+
+      let sqlGranja = `
+        SELECT 
+          COALESCE(vc.fecha_salida_lote, vl.fecha_factura) as time,
+          ROUND(SUM(vc.importe_linea) / SUM(vc.peso_canal_kg), 3) as value,
+          ROUND(SUM(vc.peso_canal_kg), 1) as kg_total,
+          COUNT(vc.id) as canales_total
+        FROM ventas_canales vc
+        LEFT JOIN ventas_liquidaciones vl ON vc.factura_id = vl.id
+        WHERE vc.peso_canal_kg > 0 AND COALESCE(vc.fecha_salida_lote, vl.fecha_factura) IS NOT NULL
+      `;
+      const paramsGranja = [];
+      if (anio && anio !== "TODOS") {
+        sqlGranja += " AND substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 4) = ?";
+        paramsGranja.push(String(anio));
+      }
+      sqlGranja += " GROUP BY time ORDER BY time ASC";
+
+      const rowsGranja = this.ejecutarQuery(sqlGranja, paramsGranja);
+
+      const precio_granja = (rowsGranja || []).map(r => ({
+        time: String(r.time).slice(0, 10),
+        value: Number(r.value),
+        kg_total: Number(r.kg_total),
+        canales_total: Number(r.canales_total),
+        estimado: false
+      }));
+
+      if (usarEstimaciones && anojo_extra.length > 0) {
+        const fechasGranja = new Set(precio_granja.map(p => p.time));
+        anojo_extra.forEach(pt => {
+          if (!fechasGranja.has(pt.time)) {
+            precio_granja.push({
+              time: pt.time,
+              value: pt.value,
+              kg_total: 0,
+              canales_total: 0,
+              estimado: true
+            });
+          }
+        });
+        precio_granja.sort((a, b) => a.time.localeCompare(b.time));
+      }
+
+      return {
+        anojo_extra,
+        anojo_pesado,
+        ternera_extra,
+        vaca_desvieje,
+        precio_granja
+      };
+    } catch (e) {
+      console.error("[DB] Error en obtenerSeriesTradingCarne:", e);
+      return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja: [] };
+    }
+  }
+
+  obtenerSeriesTradingMateriasPrimas(anio = null, usarEstimaciones = false) {
+    if (!this.tieneTablaLonja()) return { pienso_lonja: [], pienso_granja: [], cebada_lonja: [], maiz_lonja: [] };
+    try {
+      let sqlLonja = "SELECT fecha as time, categoria, precio as value FROM cotizaciones_lonja WHERE mesa = 'CEREALES'";
+      const paramsLonja = [];
+      if (anio && anio !== "TODOS") {
+        sqlLonja += " AND substr(fecha, 1, 4) = ?";
+        paramsLonja.push(String(anio));
+      }
+      sqlLonja += " ORDER BY fecha ASC";
+
+      const rowsLonja = this.ejecutarQuery(sqlLonja, paramsLonja);
+
+      const cebada_lonja = [];
+      const maiz_lonja = [];
+      const pienso_lonja = [];
+
+      (rowsLonja || []).forEach(r => {
+        if (!r.time || r.value == null) return;
+        const pt = { time: String(r.time).slice(0, 10), value: Number(r.value) };
+        if (r.categoria === 'CEBADA') cebada_lonja.push(pt);
+        else if (r.categoria === 'MAIZ') maiz_lonja.push(pt);
+        else if (r.categoria === 'PIENSO_CEBO') pienso_lonja.push(pt);
+      });
+
+      let sqlGranja = `
+        SELECT 
+          fecha as time,
+          ROUND(AVG(CASE WHEN precio_kg > 0 THEN precio_kg * 1000 ELSE (importe / NULLIF(kg, 0)) * 1000 END), 1) as value,
+          SUM(kg) as kg_total
+        FROM compras_alimento
+        WHERE (lower(alimento) LIKE '%pienso%' OR lower(alimento) LIKE '%cebo%' OR lower(alimento) LIKE '%concentrado%')
+          AND (precio_kg > 0 OR (importe > 0 AND kg > 0))
+      `;
+      const paramsGranja = [];
+      if (anio && anio !== "TODOS") {
+        sqlGranja += " AND substr(fecha, 1, 4) = ?";
+        paramsGranja.push(String(anio));
+      }
+      sqlGranja += " GROUP BY time ORDER BY time ASC";
+
+      const rowsGranja = this.ejecutarQuery(sqlGranja, paramsGranja);
+
+      const pienso_granja = (rowsGranja || []).map(r => ({
+        time: String(r.time).slice(0, 10),
+        value: Number(r.value),
+        kg_total: Number(r.kg_total),
+        estimado: false
+      }));
+
+      if (usarEstimaciones && pienso_lonja.length > 0) {
+        const fechasPienso = new Set(pienso_granja.map(p => p.time));
+        pienso_lonja.forEach(pt => {
+          if (!fechasPienso.has(pt.time)) {
+            pienso_granja.push({
+              time: pt.time,
+              value: pt.value,
+              kg_total: 0,
+              estimado: true
+            });
+          }
+        });
+        pienso_granja.sort((a, b) => a.time.localeCompare(b.time));
+      }
+
+      return {
+        cebada_lonja,
+        maiz_lonja,
+        pienso_lonja,
+        pienso_granja
+      };
+    } catch (e) {
+      console.error("[DB] Error en obtenerSeriesTradingMateriasPrimas:", e);
+      return { pienso_lonja: [], pienso_granja: [], cebada_lonja: [], maiz_lonja: [] };
+    }
+  }
+
+  obtenerSeriesTradingTesoreria(anio = null) {
+    try {
+      const serie = this.obtenerSerieMensualFinanciera(anio);
+      const ingresos_carne = [];
+      const gastos_pienso = [];
+      const margen_neto = [];
+
+      (serie || []).forEach(s => {
+        if (!s.mes) return;
+        const t = `${s.mes}-01`;
+        ingresos_carne.push({ time: t, value: Number(s.ingresos_carne || 0) });
+        gastos_pienso.push({ time: t, value: Number(s.gasto_pienso || 0) });
+        margen_neto.push({ time: t, value: Number(s.margen_neto || 0) });
+      });
+
+      return {
+        ingresos_carne,
+        gastos_pienso,
+        margen_neto
+      };
+    } catch (e) {
+      console.error("[DB] Error en obtenerSeriesTradingTesoreria:", e);
+      return { ingresos_carne: [], gastos_pienso: [], margen_neto: [] };
+    }
+  }
+
   obtenerEstacionalidadLonjaCarne() {
     if (!this.tieneTablaLonja()) return [];
     try {

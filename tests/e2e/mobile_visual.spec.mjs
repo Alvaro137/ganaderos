@@ -274,7 +274,7 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     const seccionGraficos = page.locator('.financial-charts-section');
     await expect(seccionGraficos).toBeVisible({ timeout: 5000 });
-    await expect(seccionGraficos.locator('svg').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#chart-tesoreria-tv-card')).toBeVisible({ timeout: 5000 });
 
     await seccionGraficos.scrollIntoViewIfNeeded();
 
@@ -323,8 +323,12 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(bannerRadar).toBeVisible({ timeout: 5000 });
     await expect(bannerRadar).toContainText('Radar Analítico de Materias Primas');
 
-    const svgRadar = page.locator('.chart-scroll-box svg');
-    await expect(svgRadar).toBeVisible({ timeout: 5000 });
+    const chartPiensos = page.locator('#chart-piensos-tv-card');
+    await expect(chartPiensos).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#chart-piensos-tv-canvas')).toBeVisible({ timeout: 5000 });
+
+    await chartPiensos.scrollIntoViewIfNeeded();
+    await page.locator('#chart-piensos-tv-canvas').hover();
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v16_radar_materias_primas.png') });
   });
@@ -349,8 +353,18 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(chkEst).toBeVisible({ timeout: 5000 });
     await chkEst.check();
 
-    const svgCarne = page.locator('.chart-scroll-box svg').first();
-    await expect(svgCarne).toBeVisible({ timeout: 5000 });
+    const chartCarne = page.locator('#chart-carne-tv-card');
+    await expect(chartCarne).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#chart-carne-tv-canvas')).toBeVisible({ timeout: 5000 });
+
+    // Probar activación de capa opcional (Añojo Pesado)
+    const chkAnojoPesado = page.locator('#chart-carne-tv-chk-anojo_pesado');
+    if (await chkAnojoPesado.isVisible()) {
+      await chkAnojoPesado.check();
+    }
+
+    await chartCarne.scrollIntoViewIfNeeded();
+    await page.locator('#chart-carne-tv-canvas').hover();
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_radar_vacuno_carne.png') });
   });
