@@ -583,22 +583,48 @@ class CampoDB {
   }
 
   obtenerRecetas(filtro = "") {
+    let rows;
     if (!filtro || filtro.trim() === "") {
-      return this.ejecutarQuery(`
+      rows = this.ejecutarQuery(`
         SELECT id, fecha, receta, medicamento, unidades, dosis_unitaria, n_animales, veterinario, tiempo_carne, proveedor
         FROM recetas
         ORDER BY fecha DESC
         LIMIT 80
       `);
+    } else {
+      const f = `%${filtro.trim()}%`;
+      rows = this.ejecutarQuery(`
+        SELECT id, fecha, receta, medicamento, unidades, dosis_unitaria, n_animales, veterinario, tiempo_carne, proveedor
+        FROM recetas
+        WHERE receta LIKE ? OR medicamento LIKE ? OR veterinario LIKE ?
+        ORDER BY fecha DESC
+        LIMIT 80
+      `, [f, f, f]);
     }
-    const f = `%${filtro.trim()}%`;
-    return this.ejecutarQuery(`
-      SELECT id, fecha, receta, medicamento, unidades, dosis_unitaria, n_animales, veterinario, tiempo_carne, proveedor
-      FROM recetas
-      WHERE receta LIKE ? OR medicamento LIKE ? OR veterinario LIKE ?
-      ORDER BY fecha DESC
-      LIMIT 80
-    `, [f, f, f]);
+
+    return (rows || []).map((r) => {
+      let u = r.unidades != null ? Number(r.unidades) : 0;
+      let d = r.dosis_unitaria != null ? Number(r.dosis_unitaria) : 0;
+      // Blindaje contra artefactos de escalado Jet Currency (x10.000)
+      if (u >= 10000 && (u % 5000 === 0 || u % 10000 === 0)) {
+        u = Math.round((u / 10000) * 100) / 100;
+      }
+      if (d >= 10000 && (d % 5000 === 0 || d % 10000 === 0)) {
+        d = Math.round((d / 10000) * 100) / 100;
+      }
+      let nAnim = r.n_animales != null ? Number(r.n_animales) : null;
+      if (d > 0 && u > 0) {
+        nAnim = Math.max(1, Math.round(u / d));
+      } else if (nAnim == null || nAnim > 500 || d === 0) {
+        nAnim = null; // No inventar cabezas de ganado si no hay dosis individual
+      }
+      return {
+        ...r,
+        unidades: u,
+        dosis_unitaria: d,
+        n_animales: nAnim
+      };
+    });
   }
 
   obtenerComprasAlimento(filtro = "") {
@@ -637,24 +663,24 @@ class CampoDB {
     if (tipo === "VENTA") {
       // Regla de dominio: Ventas comerciales a terceros + salidas de cebadero (122) y vida (121/671/591) a matadero
       condiciones.push(`(
-        (m.tipo = 'VENTA' AND NOT (${condInterno} AND m.origen <> m.destino) AND m.destino NOT LIKE '%122')
-        OR (m.tipo = 'SACRIFICIO' AND (${condMatadero} OR m.origen LIKE '%122'))
+        (m.tipo IN ('VENTA', 'V') AND NOT (${condInterno} AND m.origen <> m.destino) AND m.destino NOT LIKE '%122')
+        OR (m.tipo IN ('SACRIFICIO', 'S') AND (${condMatadero} OR m.origen LIKE '%122' OR m.origen LIKE '%121' OR m.origen LIKE '%671' OR m.origen LIKE '%591'))
         OR (m.origen LIKE '%122' AND m.destino NOT LIKE '%121' AND m.destino NOT LIKE '%671' AND m.destino NOT LIKE '%591' AND m.destino IS NOT NULL AND m.destino <> '')
       )`);
     } else if (tipo === "TRASPASO_CEBADERO" || tipo === "TRASPASO") {
       // Entradas a cebadero 122 procedentes de vida o registradas como traspaso
-      condiciones.push(`(m.destino LIKE '%122' AND (m.origen LIKE '%121' OR m.origen LIKE '%671' OR m.origen LIKE '%591' OR m.tipo = 'TRASPASO'))`);
+      condiciones.push(`(m.destino LIKE '%122' AND (m.origen LIKE '%121' OR m.origen LIKE '%671' OR m.origen LIKE '%591' OR m.tipo IN ('TRASPASO', 'T')))`);
     } else if (tipo === "MOVIMIENTO_INTERNO" || tipo === "INTERNO") {
       // Movimientos entre 121, 671 y 591, o cambios de ubicación dentro de la misma finca
-      condiciones.push(`(${condInterno} AND m.tipo <> 'NACIMIENTO' AND (m.origen <> m.destino OR m.tipo LIKE 'UBICACI%'))`);
+      condiciones.push(`((${condInterno} AND m.tipo NOT IN ('NACIMIENTO', 'N') AND (m.origen <> m.destino OR m.tipo LIKE 'UBICACI%' OR m.tipo = 'U')) OR m.tipo = 'U')`);
     } else if (tipo === "NACIMIENTO") {
-      condiciones.push("m.tipo = 'NACIMIENTO'");
+      condiciones.push("m.tipo IN ('NACIMIENTO', 'N')");
     } else if (tipo === "MUERTE") {
-      condiciones.push("m.tipo = 'MUERTE'");
+      condiciones.push("m.tipo IN ('MUERTE', 'M')");
     } else if (tipo === "COMPRA") {
-      condiciones.push(`(m.tipo = 'COMPRA' AND NOT ${condInterno} AND NOT (m.destino LIKE '%122' AND (m.origen LIKE '%121' OR m.origen LIKE '%671' OR m.origen LIKE '%591')))`);
+      condiciones.push(`(m.tipo IN ('COMPRA', 'C') AND NOT ${condInterno} AND NOT (m.destino LIKE '%122' AND (m.origen LIKE '%121' OR m.origen LIKE '%671' OR m.origen LIKE '%591')))`);
     } else if (tipo === "SACRIFICIO") {
-      condiciones.push(`(m.tipo = 'SACRIFICIO' AND NOT (${condMatadero} OR m.origen LIKE '%122'))`);
+      condiciones.push(`(m.tipo IN ('SACRIFICIO', 'S') AND NOT (${condMatadero} OR m.origen LIKE '%122'))`);
     } else if (tipo && tipo !== "TODOS") {
       condiciones.push("m.tipo = ?");
       valores.push(tipo);
@@ -673,12 +699,10 @@ class CampoDB {
       condiciones.push("(m.origen LIKE '%122' AND m.destino NOT LIKE '%121' AND m.destino NOT LIKE '%671' AND m.destino NOT LIKE '%591' AND m.destino IS NOT NULL AND m.destino <> '')");
     } else if (destino === "HISTORICO") {
       condiciones.push("(m.origen LIKE '%671' OR m.origen LIKE '%591' OR m.destino LIKE '%671' OR m.destino LIKE '%591')");
-    } else if (tipo === "MOVIMIENTO_INTERNO" || tipo === "INTERNO") {
-      condiciones.push("(m.origen LIKE '%121' OR m.origen LIKE '%671' OR m.origen LIKE '%591' OR m.destino LIKE '%121' OR m.destino LIKE '%671' OR m.destino LIKE '%591')");
-    } else {
-      // TODOS: Por defecto mostrar las explotaciones activas (121 y 122), omitiendo registros puramente internos de 671 y 591
+    } else if (destino === "ACTIVAS") {
       condiciones.push("(m.origen LIKE '%121' OR m.origen LIKE '%122' OR m.destino LIKE '%121' OR m.destino LIKE '%122')");
     }
+    // Si destino es "TODOS", no añade restricción artificial y muestra todos los movimientos
 
     const whereClause = condiciones.length > 0 ? `WHERE ${condiciones.join(" AND ")}` : "";
 
@@ -734,7 +758,7 @@ class CampoDB {
         code.startsWith("ES47086") ||
         code.startsWith("ES28129");
 
-      if (tipoOrig === "NACIMIENTO") {
+      if (tipoOrig === "NACIMIENTO" || tipoOrig === "N") {
         row.tipo_display = "NACIMIENTO";
         row.label_display = "Nacimiento";
         row.badge_class = "nacimiento";
@@ -742,11 +766,11 @@ class CampoDB {
         row.tipo_display = "MOVIMIENTO_INTERNO";
         row.label_display = "Movimiento Interno";
         row.badge_class = "interno";
-      } else if (tipoOrig.startsWith("UBICACI")) {
+      } else if (tipoOrig.startsWith("UBICACI") || tipoOrig === "U") {
         row.tipo_display = "MOVIMIENTO_INTERNO";
         row.label_display = "Movimiento Interno";
         row.badge_class = "interno";
-      } else if (dest.endsWith("122") && (esInterna(orig) || tipoOrig === "TRASPASO")) {
+      } else if (dest.endsWith("122") && (esInterna(orig) || tipoOrig === "TRASPASO" || tipoOrig === "T")) {
         row.tipo_display = "TRASPASO_CEBADERO";
         row.label_display = "Traspaso Cebadero";
         row.badge_class = "traspaso";
@@ -758,28 +782,33 @@ class CampoDB {
         row.tipo_display = "VENTA";
         row.label_display = "Venta";
         row.badge_class = "venta";
-      } else if (tipoOrig === "VENTA") {
+      } else if (tipoOrig === "VENTA" || tipoOrig === "V") {
         row.tipo_display = "VENTA";
         row.label_display = "Venta";
         row.badge_class = "venta";
-      } else if (tipoOrig === "COMPRA") {
+      } else if (tipoOrig === "COMPRA" || tipoOrig === "C") {
         row.tipo_display = "COMPRA";
         row.label_display = "Compra";
         row.badge_class = "compra";
-      } else if (tipoOrig === "MUERTE") {
+      } else if (tipoOrig === "MUERTE" || tipoOrig === "M") {
         row.tipo_display = "MUERTE";
         row.label_display = "Baja en campo";
         row.badge_class = "muerte";
-      } else if (tipoOrig === "SACRIFICIO") {
+      } else if (tipoOrig === "SACRIFICIO" || tipoOrig === "S") {
         row.tipo_display = "SACRIFICIO";
         row.label_display = "Sacrificio";
         row.badge_class = "sacrificio";
+      } else if (tipoOrig === "TRASPASO" || tipoOrig === "T") {
+        row.tipo_display = "TRASPASO";
+        row.label_display = "Traspaso";
+        row.badge_class = "traspaso";
       } else {
         row.tipo_display = tipoOrig || "MOVIMIENTO";
         row.label_display = row.tipo || "Movimiento";
         row.badge_class = "otro";
       }
     }
+
 
     rows.total = totalCount;
     return rows;

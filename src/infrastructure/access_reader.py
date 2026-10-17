@@ -389,12 +389,19 @@ def leer_recetas_y_tratamientos(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     for f in filas:
         unidades = float(f[4]) if f[4] is not None else 0.0
         dosis = float(f[8]) if f[8] is not None else 0.0
+
+        # Blindaje contra artefactos de escalado Jet Currency (x10.000)
+        if unidades >= 10000 and (unidades % 5000 == 0 or unidades % 10000 == 0):
+            unidades = round(unidades / 10000.0, 2)
+        if dosis >= 10000 and (dosis % 5000 == 0 or dosis % 10000 == 0):
+            dosis = round(dosis / 10000.0, 2)
+
+        # Solo calcular n_animales si existe una dosis unitaria por cabeza definida
         if dosis > 0 and unidades > 0:
             n_anim = max(1, round(unidades / dosis))
-        elif unidades > 0:
-            n_anim = max(1, int(unidades))
         else:
-            n_anim = 0
+            n_anim = None
+
 
         recetas.append({
             "id": f[0],
