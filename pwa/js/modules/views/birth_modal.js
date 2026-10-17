@@ -53,13 +53,16 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
             <span style="font-size: 0.78rem; opacity: 0.85;">Captura directa en campo (Offline)</span>
           </div>
         </div>
-        <button id="btn-cerrar-modal-parto" aria-label="Cerrar modal" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <button id="btn-cerrar-modal-parto" aria-label="Cerrar modal" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; min-width: 48px; min-height: 48px; width: 48px; height: 48px; border-radius: 50%; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
           ✕
         </button>
       </div>
 
       <!-- Formulario -->
       <form id="form-registro-parto" style="padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: 80vh;">
+        
+        <!-- Mensaje de error/validación inline sin alert() -->
+        <div id="modal-parto-error" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; border: 1px solid #fecaca;"></div>
         
         <!-- Selección de Madre -->
         <div>
@@ -212,6 +215,27 @@ function setupEventListeners(modal) {
     modal.innerHTML = "";
   };
 
+  const errorBox = modal.querySelector("#modal-parto-error");
+  const inputBuscar = modal.querySelector("#input-buscar-madre");
+
+  const mostrarError = (msg) => {
+    if (errorBox) {
+      errorBox.textContent = msg;
+      errorBox.style.display = "block";
+      errorBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  };
+
+  const ocultarError = () => {
+    if (errorBox) {
+      errorBox.textContent = "";
+      errorBox.style.display = "none";
+    }
+    if (inputBuscar) {
+      inputBuscar.style.borderColor = "var(--border-color, #ccc)";
+    }
+  };
+
   const btnCerrar = modal.querySelector("#btn-cerrar-modal-parto");
   const btnCancelar = modal.querySelector("#btn-cancelar-parto");
   if (btnCerrar) btnCerrar.addEventListener("click", cerrar);
@@ -247,7 +271,6 @@ function setupEventListeners(modal) {
   });
 
   // Búsqueda de madre
-  const inputBuscar = modal.querySelector("#input-buscar-madre");
   const dropdown = modal.querySelector("#dropdown-sugerencias-madre");
   const contMadreSel = modal.querySelector("#contenedor-madre-seleccionada");
   const contBusqueda = modal.querySelector("#contenedor-busqueda-madre");
@@ -257,6 +280,7 @@ function setupEventListeners(modal) {
 
   if (btnCambiarMadre) {
     btnCambiarMadre.addEventListener("click", () => {
+      ocultarError();
       seleccionMadreActual = null;
       contMadreSel.style.display = "none";
       contBusqueda.style.display = "block";
@@ -270,6 +294,7 @@ function setupEventListeners(modal) {
   if (inputBuscar && dropdown) {
     let debounceTimer;
     inputBuscar.addEventListener("input", (e) => {
+      ocultarError();
       clearTimeout(debounceTimer);
       const query = e.target.value.trim();
       if (!query || query.length < 1) {
@@ -306,6 +331,7 @@ function setupEventListeners(modal) {
 
         dropdown.querySelectorAll(".opcion-madre").forEach((el) => {
           el.addEventListener("click", () => {
+            ocultarError();
             seleccionMadreActual = {
               crotal: el.dataset.crotal,
               crotal_4: el.dataset.c4,
@@ -332,8 +358,14 @@ function setupEventListeners(modal) {
   const form = modal.querySelector("#form-registro-parto");
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    ocultarError();
+
     if (!seleccionMadreActual || !seleccionMadreActual.crotal) {
-      alert("Por favor selecciona la vaca madre antes de guardar.");
+      mostrarError("⚠️ Por favor selecciona la vaca madre antes de guardar.");
+      if (inputBuscar) {
+        inputBuscar.style.borderColor = "#dc2626";
+        inputBuscar.focus();
+      }
       return;
     }
 
@@ -395,38 +427,27 @@ function setupEventListeners(modal) {
 
     } catch (err) {
       console.error("[Parto] Error al registrar parto:", err);
-      alert(`Error guardando el parto: ${err.message}`);
+      mostrarError(`❌ Error al guardar el parto: ${err.message}`);
+      dispararToast(`Error: ${err.message}`, true);
       btnGuardar.disabled = false;
       btnGuardar.textContent = "💾 Guardar Parto";
     }
   });
 }
 
-function dispararToast(msg) {
+function dispararToast(msg, esError = false) {
   let toast = document.getElementById("pwa-toast");
   if (!toast) {
     toast = document.createElement("div");
     toast.id = "pwa-toast";
-    toast.style.position = "fixed";
-    toast.style.bottom = "80px";
-    toast.style.left = "50%";
-    toast.style.transform = "translateX(-50%)";
-    toast.style.backgroundColor = "#1b5e20";
-    toast.style.color = "#ffffff";
-    toast.style.padding = "12px 20px";
-    toast.style.borderRadius = "8px";
-    toast.style.fontSize = "0.9rem";
-    toast.style.fontWeight = "700";
-    toast.style.boxShadow = "0 4px 12px rgba(0,0,0,0.25)";
-    toast.style.zIndex = "99999";
-    toast.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+    toast.className = "pwa-toast";
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
-  toast.style.opacity = "1";
-  toast.style.transform = "translateX(-50%) translateY(0)";
+  toast.style.backgroundColor = esError ? "var(--md-error, #ba1a1a)" : "var(--md-primary, #1b5e20)";
+  toast.style.color = "#ffffff";
+  toast.classList.add("pwa-toast--visible");
   setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transform = "translateX(-50%) translateY(10px)";
+    toast.classList.remove("pwa-toast--visible");
   }, 3500);
 }

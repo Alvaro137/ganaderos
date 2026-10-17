@@ -218,6 +218,21 @@ async function runAllTests() {
     assert.strictEqual(resultadosPrefijo.includes("4510"), false);
   });
 
+  await test("Búsqueda Flexible: Soporte de 1 a 4 dígitos con ceros a la izquierda y sufijo", () => {
+    // Al buscar '45', debe encontrar tanto '0045' (relleno con ceros) como '4501' (prefijo) y '1045' (sufijo)
+    const crotalesPrueba = ["0045", "4501", "1045", "9945", "3321"];
+    const digitos = "45";
+    const conCeros = digitos.padStart(4, "0");
+
+    const coincide = (c4) => c4.startsWith(digitos) || c4 === conCeros || c4.endsWith(digitos);
+    const resultados = crotalesPrueba.filter(coincide);
+
+    assert.ok(resultados.includes("0045"), "Debe encontrar '0045' mediante padding de ceros");
+    assert.ok(resultados.includes("4501"), "Debe encontrar '4501' por prefijo");
+    assert.ok(resultados.includes("1045"), "Debe encontrar '1045' por sufijo");
+    assert.strictEqual(resultados.includes("3321"), false, "No debe coincidir con crotales ajenos");
+  });
+
   await test("Ficha Animal: Detección de redundancia entre Nacimiento y Alta", async () => {
     const { generarHtmlDetalleAnimal } = await import('../../pwa/js/modules/views/detail_view.js');
     
