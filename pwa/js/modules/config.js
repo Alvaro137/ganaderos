@@ -112,6 +112,12 @@ export function formatearExplotacionAmigable(codigo) {
 }
 
 export function registrarPasoHistorial(tipo, id, titulo, meta = {}) {
+  if (AppState.historial.length > 0) {
+    const ultimo = AppState.historial[AppState.historial.length - 1];
+    if (ultimo.tipo === tipo && String(ultimo.id) === String(id)) {
+      return;
+    }
+  }
   AppState.historial.push({ tipo, id, titulo, meta });
 }
 
@@ -125,6 +131,12 @@ export function obtenerTextoBotonVolver() {
   }
   if (prev.tipo === "corral") {
     return `Volver a Lote ${prev.id}`;
+  }
+  if (prev.tipo === "liquidaciones") {
+    return prev.id ? `Volver a Factura ${prev.meta?.numero_factura || prev.id}` : "Volver a Liquidaciones";
+  }
+  if (prev.tipo === "movimientos") {
+    return "Volver a Movimientos";
   }
   return "Volver a la búsqueda";
 }

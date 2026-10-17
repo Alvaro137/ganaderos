@@ -543,8 +543,24 @@ class CampoDB {
       animal.madre_info = madreRows.length > 0 ? madreRows[0] : null;
     }
 
+    // Liquidación y rendimiento de canal (si el animal fue vendido a matadero / GANAVAEX)
+    try {
+      const canalRows = this.ejecutarQuery(`
+        SELECT c.*, f.numero_factura, f.fecha_factura, f.fecha_pago, f.cliente_cooperativa
+        FROM ventas_canales c
+        JOIN ventas_liquidaciones f ON c.factura_id = f.id
+        WHERE c.crotal_asignado = ?
+        ORDER BY f.fecha_factura DESC
+        LIMIT 1
+      `, [crotal]);
+      animal.liquidacion_canal = (canalRows && canalRows.length > 0) ? canalRows[0] : null;
+    } catch (_) {
+      animal.liquidacion_canal = null;
+    }
+
     return animal;
   }
+
 
   obtenerLotes() {
     return this.ejecutarQuery(`
@@ -646,7 +662,116 @@ class CampoDB {
     `, [f, f, f]);
   }
 
+  tieneTablaVentas() {
+    if (this._tieneVentas !== undefined) return this._tieneVentas;
+    try {
+      const res = this.ejecutarQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ventas_canales'");
+      this._tieneVentas = !!(res && res.length > 0);
+    } catch (_) {
+      this._tieneVentas = false;
+    }
+    return this._tieneVentas;
+  }
+
+  obtenerLiquidaciones(filtro = "") {
+    try {
+      if (!filtro || filtro.trim() === "") {
+        return this.ejecutarQuery(`
+          SELECT id, numero_factura, fecha_factura, fecha_pago, cliente_cooperativa,
+                 total_cabezas, total_kilos_canal, base_imponible, porcentaje_iva, cuota_iva,
+                 gastos_total, total_factura, archivo_origen
+          FROM ventas_liquidaciones
+          ORDER BY fecha_factura DESC, id DESC
+        `) || [];
+      }
+      const f = `%${filtro.trim()}%`;
+      return this.ejecutarQuery(`
+        SELECT id, numero_factura, fecha_factura, fecha_pago, cliente_cooperativa,
+               total_cabezas, total_kilos_canal, base_imponible, porcentaje_iva, cuota_iva,
+               gastos_total, total_factura, archivo_origen
+        FROM ventas_liquidaciones
+        WHERE COALESCE(numero_factura, '') LIKE ? 
+           OR COALESCE(cliente_cooperativa, '') LIKE ? 
+           OR COALESCE(fecha_factura, '') LIKE ?
+        ORDER BY fecha_factura DESC, id DESC
+      `, [f, f, f]) || [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  obtenerDetalleLiquidacion(facturaId) {
+    try {
+      const facts = this.ejecutarQuery(
+        "SELECT * FROM ventas_liquidaciones WHERE id = ?",
+        [facturaId]
+      );
+      if (!facts || facts.length === 0) return null;
+      const factura = facts[0];
+
+      factura.canales = this.ejecutarQuery(`
+        SELECT c.*, a.crotal_4, a.raza, a.sexo as sexo_animal
+        FROM ventas_canales c
+        LEFT JOIN animales a ON c.crotal_asignado = a.crotal
+        WHERE c.factura_id = ?
+        ORDER BY c.linea_numero ASC
+      `, [facturaId]) || [];
+
+      factura.gastos = this.ejecutarQuery(
+        "SELECT * FROM ventas_gastos WHERE factura_id = ? ORDER BY id ASC",
+        [facturaId]
+      ) || [];
+
+      return factura;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  obtenerResumenKpisLiquidaciones() {
+    try {
+      const row = this.ejecutarQuery(`
+        SELECT 
+          COUNT(DISTINCT id) as total_facturas,
+          COALESCE(SUM(total_factura), 0) as total_importe,
+          COALESCE(SUM(total_cabezas), 0) as total_cabezas,
+          COALESCE(SUM(total_kilos_canal), 0) as total_kilos
+        FROM ventas_liquidaciones
+      `);
+      const canalStats = this.ejecutarQuery(`
+        SELECT 
+          ROUND(AVG(peso_canal_kg), 1) as peso_medio,
+          ROUND(AVG(precio_unitario), 2) as precio_medio,
+          COUNT(*) as total_canales_pesadas
+        FROM ventas_canales
+        WHERE peso_canal_kg > 1
+      `);
+      const base = (row && row.length > 0) ? row[0] : {};
+      const stats = (canalStats && canalStats.length > 0) ? canalStats[0] : {};
+      return {
+        total_facturas: Number(base.total_facturas || 0),
+        total_importe: Number(base.total_importe || 0),
+        total_cabezas: Number(base.total_cabezas || 0),
+        total_kilos: Number(base.total_kilos || 0),
+        peso_medio: Number(stats.peso_medio || 0),
+        precio_medio: Number(stats.precio_medio || 0),
+        total_canales_pesadas: Number(stats.total_canales_pesadas || 0)
+      };
+    } catch (_) {
+      return {
+        total_facturas: 0,
+        total_importe: 0,
+        total_cabezas: 0,
+        total_kilos: 0,
+        peso_medio: 0,
+        precio_medio: 0,
+        total_canales_pesadas: 0
+      };
+    }
+  }
+
   obtenerMovimientos(params = {}) {
+
     const { filtro = "", tipo = "TODOS", anio = "TODOS", destino = "TODOS", limite = 100, offset = 0 } = params;
     const condiciones = [];
     const valores = [];
@@ -719,6 +844,31 @@ class CampoDB {
       : 0;
 
     // 2. Obtener lote de filas paginadas
+    const tieneVentas = this.tieneTablaVentas();
+    const joinVentas = tieneVentas
+      ? `LEFT JOIN (
+           SELECT crotal_asignado,
+                  MAX(peso_canal_kg) as peso_canal_kg,
+                  MAX(precio_unitario) as canal_precio,
+                  MAX(importe_linea) as canal_importe,
+                  MAX(factura_id) as canal_factura_id
+           FROM ventas_canales
+           WHERE crotal_asignado IS NOT NULL
+           GROUP BY crotal_asignado
+         ) vc ON (
+           m.crotal = vc.crotal_asignado 
+           AND (
+             UPPER(COALESCE(m.tipo, '')) IN ('VENTA', 'SACRIFICIO', 'V', 'S')
+             OR m.destino LIKE '%081'
+             OR (m.origen LIKE '%122' AND m.destino NOT LIKE '%121')
+           )
+         )
+         LEFT JOIN ventas_liquidaciones vl ON vc.canal_factura_id = vl.id`
+      : "";
+    const selectVentasCols = tieneVentas
+      ? `, vc.peso_canal_kg, vc.canal_precio, vc.canal_importe, vl.numero_factura as canal_factura, vc.canal_factura_id`
+      : "";
+
     const sql = `
       SELECT 
         m.id, 
@@ -732,12 +882,15 @@ class CampoDB {
         a.sexo,
         a.estado,
         a.corral as corral_actual
+        ${selectVentasCols}
       FROM movimientos m
       LEFT JOIN animales a ON m.crotal = a.crotal
+      ${joinVentas}
       ${whereClause}
       ORDER BY m.fecha DESC, m.id DESC
       LIMIT ? OFFSET ?
     `;
+
     const valoresPaginados = [...valores, limite, offset];
     const rows = this.ejecutarQuery(sql, valoresPaginados) || [];
 
