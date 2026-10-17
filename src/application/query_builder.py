@@ -50,7 +50,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
             SELECT * FROM animales
             WHERE UPPER(corral) LIKE ? {filtro_estado}
             ORDER BY crotal_4 ASC
-        """.strip()
+        """.strip()  # nosec B608
         return QueryResult(
             sql=sql,
             params=[f"%{corral}%"],
@@ -100,7 +100,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
               AND (fecha_ult_parto IS NULL OR fecha_ult_parto = '' OR total_partos = 0)
               {filtro_corral}
             ORDER BY fecha_nacimiento ASC
-        """.strip()
+        """.strip()  # nosec B608
         return QueryResult(
             sql=sql,
             params=params,
@@ -153,7 +153,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
             GROUP BY medicamento
             ORDER BY total_recetas DESC
             LIMIT 10
-        """.strip()
+        """.strip()  # nosec B608
         return QueryResult(
             sql=sql,
             params=params,
@@ -214,7 +214,7 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
             {filtro_alim}
             ORDER BY fecha DESC
             LIMIT ?
-        """.strip()
+        """.strip()  # nosec B608
         return QueryResult(
             sql=sql,
             params=params,

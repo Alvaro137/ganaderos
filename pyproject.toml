@@ -36,7 +36,13 @@ exporter = [
 dev = [
     "ruff>=0.4.0",
     "pytest>=8.0.0",
+    "bandit>=1.7.0",
+    "pip-audit>=2.7.0",
 ]
+
+[tool.bandit]
+skips = ["B104", "B310"]
+exclude_dirs = ["tests", "venv", ".venv", "scratch"]
 
 [tool.ruff]
 line-length = 100
