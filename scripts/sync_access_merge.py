@@ -384,6 +384,7 @@ def main() -> int:
     parser.add_argument("--pwa-password", type=str, default=os.environ.get("PWA_PASSWORD", "ganaderos"), help="Contraseña compartida de la PWA")
     parser.add_argument("--dry-run", action="store_true", help="Simula la operación sin persistir en Access ni en el servidor")
     parser.add_argument("--skip-export", action="store_true", help="Omite la re-exportación y subida del censo consolidado")
+    parser.add_argument("--force-export", action="store_true", help="Fuerza la exportación y subida del censo al hub y Git Vault aunque no haya partos pendientes")
     parser.add_argument("--vault-dir", type=Path, default=None, help="Directorio del repositorio vault de backups")
     parser.add_argument("--vault-remote", type=str, default=DEFAULT_VAULT_REMOTE, help="URL del remoto Git para la bóveda de datos")
     parser.add_argument("--no-vault", action="store_true", help="Desactiva el versionado automático en la bóveda de Git")
@@ -410,6 +411,8 @@ def main() -> int:
                 cmd.append("--dry-run")
             if args.skip_export:
                 cmd.append("--skip-export")
+            if args.force_export:
+                cmd.append("--force-export")
             if args.vault_dir:
                 cmd.extend(["--vault-dir", str(args.vault_dir)])
             if args.vault_remote:
@@ -447,7 +450,35 @@ def main() -> int:
         print(f"    Partos pendientes de conciliar: {len(partos_pendientes)}")
 
         if not partos_pendientes:
-            print("\n[+] Todo al día: no hay partos pendientes de conciliar.")
+            if not args.force_export:
+                print("\n[+] Todo al día: no hay partos pendientes de conciliar.")
+                print("    (Para forzar la subida del censo local/recetas al hub, ejecute con --force-export)")
+                return 0
+
+            print("\n[*] No hay partos pendientes de conciliar, pero se solicitó exportación forzada (--force-export).")
+            if not args.dry_run:
+                if not args.skip_export:
+                    print("[*] Re-exportando y subiendo censo actualizado desde Access al hub...")
+                    resultado_import = exportar_y_subir_censo(source, args.api_url, token, args.password)
+                    print(f"    Nuevo censo activo en el hub. Epoch: {resultado_import.get('epoch')}")
+                if not args.no_vault:
+                    print("[*] Guardando snapshot inmutable en Git Vault...")
+                    try:
+                        censo_sqlite = ROOT_DIR / "pwa" / "ganaderos_campo.sqlite"
+                        res_vault = guardar_snapshot_en_vault(
+                            vault_dir=args.vault_dir,
+                            access_path=source,
+                            sqlite_path=censo_sqlite if censo_sqlite.exists() else None,
+                            mensaje="backup: sincronizacion forzada de censo / recetas desde PC a hub",
+                            remote_url=args.vault_remote,
+                            push=not args.no_vault_push,
+                        )
+                        c_hash = res_vault.get("commit") or "Sin cambios"
+                        print(f"    Vault snapshot: {c_hash} ({res_vault.get('message')})")
+                    except Exception as e_vault:
+                        logger.warning(f"Advertencia guardando en Git Vault: {e_vault}")
+                        print(f"    [!] Advertencia en Git Vault: {e_vault}")
+            print("\n[+] Sincronización forzada completada con éxito.")
             return 0
 
         # 3. Backup

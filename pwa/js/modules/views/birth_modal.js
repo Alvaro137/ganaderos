@@ -42,10 +42,10 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
   const hoyStr = new Date().toISOString().split("T")[0];
 
   const html = `
-    <div class="modal-dialog birth-modal-dialog" style="max-width: 480px; width: 92%; margin: 20px auto; background: var(--bg-surface, #ffffff); border-radius: var(--radius-lg, 16px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column;">
+    <div class="modal-dialog birth-modal-dialog" style="max-width: 480px; width: 92%; margin: 16px auto; max-height: 90vh; background: var(--bg-surface, #ffffff); border-radius: var(--radius-lg, 16px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column;">
       
       <!-- Cabecera -->
-      <div style="background: var(--brand-primary, #1e3a2b); color: #ffffff; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;">
+      <div style="background: var(--brand-primary, #1e3a2b); color: #ffffff; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 1.5rem;">🐮</span>
           <div>
@@ -58,11 +58,13 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
         </button>
       </div>
 
-      <!-- Formulario -->
-      <form id="form-registro-parto" style="padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: 80vh;">
+      <!-- Formulario con Sticky Footer -->
+      <form id="form-registro-parto" style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; margin: 0;">
         
-        <!-- Mensaje de error/validación inline sin alert() -->
-        <div id="modal-parto-error" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; border: 1px solid #fecaca;"></div>
+        <!-- Contenido scrolleable -->
+        <div class="modal-body-scroll" style="padding: 20px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; flex: 1; min-height: 0;">
+          <!-- Mensaje de error/validación inline sin alert() -->
+          <div id="modal-parto-error" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; border: 1px solid #fecaca;"></div>
         
         <!-- Selección de Madre -->
         <div>
@@ -181,8 +183,10 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
           />
         </div>
 
-        <!-- Botones de Acción -->
-        <div style="display: flex; gap: 12px; margin-top: 8px;">
+        </div><!-- Fin .modal-body-scroll -->
+
+        <!-- Sticky Footer con Botones de Acción -->
+        <div class="modal-footer-sticky" style="padding: 12px 20px; background: var(--bg-surface, #ffffff); border-top: 1px solid var(--border-color, #e5e7eb); display: flex; gap: 12px; flex-shrink: 0; box-shadow: 0 -4px 12px rgba(0,0,0,0.06); z-index: 10;">
           <button 
             type="button" 
             id="btn-cancelar-parto" 

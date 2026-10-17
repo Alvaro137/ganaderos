@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import List, Optional
@@ -296,6 +297,7 @@ from src.server.schemas import (
     AuthTokenResponse,
     ChangePasswordRequest,
     ChangePasswordResponse,
+    DatabaseMetaResponse,
     HealthResponse,
     IntentRequest,
     IntentResponse,
@@ -759,6 +761,43 @@ async def get_database(authorized: bool = Depends(verify_token)):
     if not sqlite_file or not sqlite_file.exists():
         raise HTTPException(status_code=404, detail="Base de datos no encontrada.")
     return FileResponse(sqlite_file, media_type="application/octet-stream", filename="ganaderos_campo.sqlite")
+
+
+@app.get("/api/database/meta", tags=["Base de Datos"], response_model=DatabaseMetaResponse)
+async def get_database_meta(authorized: bool = Depends(verify_token)):
+    """Devuelve metadatos del binario SQLite servido para verificar si hay actualizaciones disponibles desde el PC."""
+    sqlite_file = _buscar_archivo_sqlite()
+    if not sqlite_file or not sqlite_file.exists():
+        raise HTTPException(status_code=404, detail="Base de datos no encontrada.")
+
+    stat = sqlite_file.stat()
+    mtime = int(stat.st_mtime)
+    mtime_iso = datetime.fromtimestamp(stat.st_mtime).isoformat()
+    size_bytes = stat.st_size
+
+    total_animales = 0
+    total_activos = 0
+    try:
+        with sqlite3.connect(f"file:{sqlite_file.resolve()}?mode=ro", uri=True) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM Animales")
+            row = cur.fetchone()
+            total_animales = row[0] if row else 0
+            cur.execute("SELECT COUNT(*) FROM Animales WHERE Estado = 'Alta' OR Baja = 0 OR Estado IS NULL")
+            row_act = cur.fetchone()
+            total_activos = row_act[0] if row_act else 0
+    except Exception as e:
+        logger.warning(f"Error consultando conteo de animales en BD SQLite: {e}")
+
+    return DatabaseMetaResponse(
+        ok=True,
+        mtime=mtime,
+        mtime_iso=mtime_iso,
+        size_bytes=size_bytes,
+        filename=sqlite_file.name,
+        total_animales=total_animales,
+        total_activos=total_activos,
+    )
 
 
 # ============================================================

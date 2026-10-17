@@ -51,3 +51,10 @@ export async function fetchDatabase() {
   });
   return resp;
 }
+
+export async function fetchDatabaseMeta() {
+  const resp = await fetch("./api/database/meta", {
+    headers: obtenerAuthHeaders()
+  });
+  return resp;
+}
