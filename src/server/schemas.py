@@ -103,3 +103,26 @@ class ChangePasswordResponse(BaseModel):
     ok: bool = True
     message: Optional[str] = None
     cookie_invalidated: Optional[bool] = None
+
+class LogEntry(BaseModel):
+    timestamp: str
+    level: str
+    logger: str
+    message: str
+
+class AdminLogsResponse(BaseModel):
+    ok: bool = True
+    log_dir: str
+    log_file: Optional[str] = None
+    current_level: str
+    total_buffered: int
+    logs: List[LogEntry]
+
+class SetLogLevelRequest(BaseModel):
+    level: str = Field(pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+
+class SetLogLevelResponse(BaseModel):
+    ok: bool = True
+    previous_level: str
+    new_level: str
+

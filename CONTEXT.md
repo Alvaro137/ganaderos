@@ -215,6 +215,13 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **Pipeline en GitHub Actions optimizado**: pytest unificado como runner de CI, escaneo de secretos con Gitleaks, comprobación de versión de `CACHE_NAME` en `sw.js` y subida de trazas de Playwright en caso de fallo (`upload-artifact`).
   - **Extracción de Docker**: retirada del build obligatorio en cada push; movido a workflow manual `.github/workflows/docker.yml` (`workflow_dispatch`).
   - **Blindaje en `.gitignore`**: carpetas de scratch, decompiled y archivos de trabajo temporal permanentemente excluidos.
+- [x] **PR #28 — Permisos pull-requests: read en CI:**
+  - Concedidos permisos explícitos `pull-requests: read` y `contents: read` en CI para que Gitleaks no falle con HTTP 403 en PRs.
+- [x] **PR #29 — Observabilidad (Logs en Pen USB), Buffer en RAM y Node 22 en CI:**
+  - **Rotación de logs a Pen USB:** `_resolver_directorio_logs()` para escribir en `/mnt/usb/ganaderos_logs`, protegiendo la tarjeta SD de la Orange Pi de desgaste por escrituras continuas.
+  - **Buffer circular en memoria:** Los últimos 1000 logs retenidos en RAM con timestamp y severidad.
+  - **Endpoints administrativos protegidos:** `GET /api/admin/logs` y `POST /api/admin/logs/level` (solo admin, 403 para operadores normales).
+  - **CI en Node 22:** Actualizados los jobs de GitHub Actions a Node 22 para evitar deprecaciones.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
 - [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
   - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
