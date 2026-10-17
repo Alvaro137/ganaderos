@@ -1112,7 +1112,7 @@ class CampoDB {
     }
   }
 
-  obtenerMargenTecnicoCebo(anio = null, categoria = null) {
+  obtenerMargenTecnicoCebo(anio = null, categoria = null, usarEstimaciones = false) {
     try {
       let whereCanales = "c.peso_canal_kg > 1";
       const params = [];
@@ -1155,9 +1155,23 @@ class CampoDB {
           coste_pienso_medio_cabeza: 0,
           estancia_media_dias: 0,
           prima_media_lonja_kg: 0,
+          usar_estimaciones: usarEstimaciones,
           animales: []
         };
       }
+
+      // Obtener precio medio real de piensos de cebo en la explotación si existen albaranes
+      let precioPiensoRealExplotacion = null;
+      try {
+        const resAlim = this.ejecutarQuery(`
+          SELECT ROUND(COALESCE(SUM(importe) / NULLIF(SUM(kg), 0), 0), 3) as precio_medio
+          FROM compras_alimento
+          WHERE alimento LIKE '%CEBO%' AND importe > 0 AND kg > 0
+        `);
+        if (resAlim && resAlim.length > 0 && resAlim[0].precio_medio > 0) {
+          precioPiensoRealExplotacion = Number(resAlim[0].precio_medio);
+        }
+      } catch (_) {}
 
       let sumaMargen = 0;
       let sumaPienso = 0;
@@ -1169,8 +1183,9 @@ class CampoDB {
         const crot = r.crotal_asignado;
         const fSacrificio = r.fecha_sacrificio || new Date().toISOString().slice(0, 10);
         const pCanal = Number(r.peso_canal_kg || 0);
-        const precioUnit = Number(r.precio_unitario || 0);
-        const importeLinea = Number(r.importe_linea || 0);
+        let precioUnit = Number(r.precio_unitario || 0);
+        let importeLinea = Number(r.importe_linea || 0);
+        let precioCarneEstimado = false;
 
         // 1. Obtener fecha de entrada a cebadero
         let diasCebo = 210; // Estándar de campo si no hay registro histórico
@@ -1198,12 +1213,29 @@ class CampoDB {
         const pesoVivoEst = pCanal > 0 ? Number((pCanal / rendimiento).toFixed(1)) : 0;
         const gananciaPv = Math.max(0, Number((pesoVivoEst - pesoDestete).toFixed(1)));
         const kgPienso = Math.round(gananciaPv * fcr);
-        const precioPiensoKg = 0.315; // Media ponderada T-3 cebo
+
+        // 3. Determinación de precio de pienso (€/kg)
+        let precioPiensoKg = precioPiensoRealExplotacion || 0.315;
+        let precioPiensoEstimado = !precioPiensoRealExplotacion;
+
+        if (usarEstimaciones) {
+          try {
+            const resLonjaPienso = this.ejecutarQuery(`
+              SELECT ROUND(precio / 1000, 3) as precio_kg FROM cotizaciones_lonja
+              WHERE categoria = 'PIENSO_CEBO' AND fecha <= ?
+              ORDER BY fecha DESC LIMIT 1
+            `, [fSacrificio]);
+            if (resLonjaPienso && resLonjaPienso.length > 0 && resLonjaPienso[0].precio_kg > 0) {
+              precioPiensoKg = Number(resLonjaPienso[0].precio_kg);
+              precioPiensoEstimado = true;
+            }
+          } catch (_) {}
+        }
+
         const costePiensoImputado = Number((kgPienso * precioPiensoKg).toFixed(2));
-        const margenAnimal = Number((importeLinea - costePiensoImputado).toFixed(2));
         const gmdEst = diasCebo > 0 ? Number((gananciaPv / diasCebo).toFixed(2)) : 0;
 
-        // 3. Cruce con Lonja de Salamanca
+        // 4. Cruce con Lonja de Salamanca
         const catLonja = esHembra ? "TERNERA_EXTRA" : (pCanal > 350 ? "AÑOJO_PESADO" : "AÑOJO_EXTRA");
         let precioLonja = null;
         let primaKg = null;
@@ -1218,11 +1250,25 @@ class CampoDB {
 
           if (resLonja && resLonja.length > 0) {
             precioLonja = Number(resLonja[0].precio);
-            primaKg = Number((precioUnit - precioLonja).toFixed(3));
-            sumaPrimas += primaKg;
-            totalPrimasContadas++;
           }
         } catch (_) {}
+
+        // Reconstrucción de precio de carne si faltaba en la liquidación y las estimaciones están activas
+        if ((precioUnit === 0 || isNaN(precioUnit) || importeLinea === 0) && precioLonja != null) {
+          if (usarEstimaciones) {
+            precioUnit = precioLonja;
+            importeLinea = Number((pCanal * precioLonja).toFixed(2));
+            precioCarneEstimado = true;
+          }
+        }
+
+        if (precioLonja != null && precioUnit > 0) {
+          primaKg = Number((precioUnit - precioLonja).toFixed(3));
+          sumaPrimas += primaKg;
+          totalPrimasContadas++;
+        }
+
+        const margenAnimal = Number((importeLinea - costePiensoImputado).toFixed(2));
 
         if (!esHembra && pCanal > 350.0) {
           penalizacionSobrepeso = {
@@ -1254,7 +1300,11 @@ class CampoDB {
           margen_tecnico: margenAnimal,
           precio_lonja_salamanca: precioLonja,
           prima_sobre_lonja_kg: primaKg,
-          penalizacion_sobrepeso: penalizacionSobrepeso
+          penalizacion_sobrepeso: penalizacionSobrepeso,
+          es_estimado: Boolean(precioCarneEstimado || (usarEstimaciones && precioPiensoEstimado)),
+          precio_carne_estimado: precioCarneEstimado,
+          precio_pienso_estimado: precioPiensoEstimado,
+          precio_pienso_kg: precioPiensoKg
         };
       });
 
@@ -1266,6 +1316,7 @@ class CampoDB {
         coste_pienso_medio_cabeza: n > 0 ? Number((sumaPienso / n).toFixed(2)) : 0,
         estancia_media_dias: n > 0 ? Math.round(sumaDias / n) : 0,
         prima_media_lonja_kg: totalPrimasContadas > 0 ? Number((sumaPrimas / totalPrimasContadas).toFixed(3)) : null,
+        usar_estimaciones: usarEstimaciones,
         animales: animalesDetalle
       };
     } catch (e) {
@@ -1277,12 +1328,13 @@ class CampoDB {
         coste_pienso_medio_cabeza: 0,
         estancia_media_dias: 0,
         prima_media_lonja_kg: null,
+        usar_estimaciones: usarEstimaciones,
         animales: []
       };
     }
   }
 
-  obtenerRadarMateriasPrimas(anio = null) {
+  obtenerRadarMateriasPrimas(anio = null, usarEstimaciones = false) {
     try {
       let whereLonja = "1=1";
       let whereAlim = "1=1";
@@ -1328,7 +1380,15 @@ class CampoDB {
       (rowsLonja || []).forEach(r => {
         if (!r.mes) return;
         if (!mapaMeses.has(r.mes)) {
-          mapaMeses.set(r.mes, { mes: r.mes, cebada_lonja_t: null, maiz_lonja_t: null, pienso_lonja_t: null, pienso_real_t: null, kg_comprados: 0 });
+          mapaMeses.set(r.mes, {
+            mes: r.mes,
+            cebada_lonja_t: null,
+            maiz_lonja_t: null,
+            pienso_lonja_t: null,
+            pienso_real_t: null,
+            pienso_estimado: false,
+            kg_comprados: 0
+          });
         }
         const item = mapaMeses.get(r.mes);
         if (r.categoria === "CEBADA") item.cebada_lonja_t = Number(r.precio_medio_t);
@@ -1339,12 +1399,35 @@ class CampoDB {
       (rowsPienso || []).forEach(p => {
         if (!p.mes) return;
         if (!mapaMeses.has(p.mes)) {
-          mapaMeses.set(p.mes, { mes: p.mes, cebada_lonja_t: null, maiz_lonja_t: null, pienso_lonja_t: null, pienso_real_t: null, kg_comprados: 0 });
+          mapaMeses.set(p.mes, {
+            mes: p.mes,
+            cebada_lonja_t: null,
+            maiz_lonja_t: null,
+            pienso_lonja_t: null,
+            pienso_real_t: null,
+            pienso_estimado: false,
+            kg_comprados: 0
+          });
         }
         const item = mapaMeses.get(p.mes);
         item.pienso_real_t = Number(p.precio_pienso_real_t);
         item.kg_comprados = Number(p.kg_comprados);
       });
+
+      // Si las estimaciones están activas, imputar precio de Lonja en meses sin compras
+      if (usarEstimaciones) {
+        mapaMeses.forEach(item => {
+          if (item.pienso_real_t == null || item.pienso_real_t === 0) {
+            if (item.pienso_lonja_t != null) {
+              item.pienso_real_t = item.pienso_lonja_t;
+              item.pienso_estimado = true;
+            } else if (item.cebada_lonja_t != null) {
+              item.pienso_real_t = Math.round(item.cebada_lonja_t * 1.45);
+              item.pienso_estimado = true;
+            }
+          }
+        });
+      }
 
       return Array.from(mapaMeses.values()).sort((a, b) => a.mes.localeCompare(b.mes));
     } catch (e) {
@@ -1362,7 +1445,7 @@ class CampoDB {
     }
   }
 
-  obtenerRadarLonjaCarne(anio = null) {
+  obtenerRadarLonjaCarne(anio = null, usarEstimaciones = false) {
     if (!this.tieneTablaLonja()) return [];
     try {
       let whereLonja = "1=1";
@@ -1424,6 +1507,7 @@ class CampoDB {
             vaca_desvieje_lonja: null,
             precio_medio_granja: null,
             peso_medio_granja: null,
+            precio_estimado: false,
             canales_vendidas: 0,
             total_kg_canal: 0
           });
@@ -1446,6 +1530,7 @@ class CampoDB {
             vaca_desvieje_lonja: null,
             precio_medio_granja: null,
             peso_medio_granja: null,
+            precio_estimado: false,
             canales_vendidas: 0,
             total_kg_canal: 0
           });
@@ -1457,11 +1542,123 @@ class CampoDB {
         item.total_kg_canal = Number(v.total_kg_canal);
       });
 
+      // Si las estimaciones están activas, imputar precio Lonja en meses sin liquidaciones de venta
+      if (usarEstimaciones) {
+        mapaMeses.forEach(item => {
+          if (item.precio_medio_granja == null || item.precio_medio_granja === 0) {
+            if (item.anojo_extra_lonja != null) {
+              item.precio_medio_granja = item.anojo_extra_lonja;
+              item.precio_estimado = true;
+            }
+          }
+        });
+      }
+
       return Array.from(mapaMeses.values()).sort((a, b) => a.mes.localeCompare(b.mes));
     } catch (e) {
       console.error("[DB] Error en obtenerRadarLonjaCarne:", e);
       return [];
     }
+  }
+
+  obtenerEstacionalidadLonjaCarne() {
+    if (!this.tieneTablaLonja()) return [];
+    try {
+      const rows = this.ejecutarQuery(`
+        SELECT 
+          strftime('%m', fecha) as mes_num,
+          categoria,
+          ROUND(AVG(precio), 3) as precio_medio
+        FROM cotizaciones_lonja
+        WHERE mesa = 'CARNE' AND categoria IN ('AÑOJO_EXTRA', 'AÑOJO_PESADO', 'TERNERA_EXTRA', 'VACA_DESVIEJE')
+        GROUP BY mes_num, categoria
+        ORDER BY mes_num ASC
+      `);
+
+      const NOMBRES_MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+      const mapa = new Map();
+      for (let i = 1; i <= 12; i++) {
+        const mStr = String(i).padStart(2, "0");
+        mapa.set(mStr, {
+          mes_num: mStr,
+          nombre_mes: NOMBRES_MESES[i - 1],
+          anojo_extra: null,
+          anojo_pesado: null,
+          ternera_extra: null,
+          vaca_desvieje: null
+        });
+      }
+
+      (rows || []).forEach(r => {
+        if (!r.mes_num || !mapa.has(r.mes_num)) return;
+        const item = mapa.get(r.mes_num);
+        if (r.categoria === "AÑOJO_EXTRA") item.anojo_extra = Number(r.precio_medio);
+        if (r.categoria === "AÑOJO_PESADO") item.anojo_pesado = Number(r.precio_medio);
+        if (r.categoria === "TERNERA_EXTRA") item.ternera_extra = Number(r.precio_medio);
+        if (r.categoria === "VACA_DESVIEJE") item.vaca_desvieje = Number(r.precio_medio);
+      });
+
+      return Array.from(mapa.values());
+    } catch (e) {
+      console.error("[DB] Error en obtenerEstacionalidadLonjaCarne:", e);
+      return [];
+    }
+  }
+
+  calcularSimulacionTimingVenta(params = {}) {
+    const {
+      pesoCanalActual = 330.0,
+      diasRetraso = 21,
+      gmdVivo = 1.35,
+      costeDiarioPienso = 2.65,
+      precioActualKg = 7.15,
+      precioEsperadoKg = 7.20,
+      esMacho = true
+    } = params;
+
+    const rendimiento = esMacho ? 0.58 : 0.56;
+    const pesoVivoActual = pesoCanalActual / rendimiento;
+    const gananciaVivo = diasRetraso * gmdVivo;
+    const pesoVivoNuevo = pesoVivoActual + gananciaVivo;
+    const pesoCanalNuevo = Number((pesoVivoNuevo * rendimiento).toFixed(1));
+    const gananciaCanal = Number((pesoCanalNuevo - pesoCanalActual).toFixed(1));
+
+    let penalizacionSobrepeso = 0;
+    let precioFinalEfectivo = precioEsperadoKg;
+    let saltaSobrepeso = false;
+
+    if (esMacho && pesoCanalActual <= 350.0 && pesoCanalNuevo > 350.0) {
+      saltaSobrepeso = true;
+      precioFinalEfectivo = Math.max(0, Number((precioEsperadoKg - 0.25).toFixed(3)));
+      penalizacionSobrepeso = Number(((precioEsperadoKg - precioFinalEfectivo) * pesoCanalNuevo).toFixed(2));
+    }
+
+    const ingresoActual = Number((pesoCanalActual * precioActualKg).toFixed(2));
+    const ingresoNuevo = Number((pesoCanalNuevo * precioFinalEfectivo).toFixed(2));
+    const ingresoMarginal = Number((ingresoNuevo - ingresoActual).toFixed(2));
+
+    const costePiensoAcumulado = Number((diasRetraso * costeDiarioPienso).toFixed(2));
+    const margenNetoRetraso = Number((ingresoMarginal - costePiensoAcumulado).toFixed(2));
+
+    const precioUmbralEquilibrio = pesoCanalNuevo > 0 
+      ? Number(((ingresoActual + costePiensoAcumulado) / pesoCanalNuevo).toFixed(3))
+      : precioActualKg;
+
+    return {
+      pesoCanalActual,
+      pesoCanalNuevo,
+      gananciaCanal,
+      saltaSobrepeso,
+      penalizacionSobrepeso,
+      ingresoActual,
+      ingresoNuevo,
+      ingresoMarginal,
+      costePiensoAcumulado,
+      margenNetoRetraso,
+      esRentable: margenNetoRetraso > 0,
+      precioFinalEfectivo,
+      precioUmbralEquilibrio
+    };
   }
 
   obtenerMovimientos(params = {}) {
@@ -1737,5 +1934,10 @@ class CampoDB {
   }
 }
 
-window.campoDB = new CampoDB();
+if (typeof window !== "undefined") {
+  window.campoDB = new CampoDB();
+}
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { CampoDB };
+}
 
