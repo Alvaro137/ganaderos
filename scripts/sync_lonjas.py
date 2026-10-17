@@ -195,33 +195,31 @@ def proyectar_sesiones_offline(
     return registros
 
 
-def sincronizar_cotizaciones_lonja(db_path: Path, forzar_recarga: bool = False) -> int:
+def sincronizar_cotizaciones_lonja(db_path: Path, forzar_recarga: bool = False, semanas: int = 160) -> int:
     """Sincroniza las cotizaciones de la Lonja de Salamanca priorizando descarga web oficial con fallback."""
     conn = obtener_conexion(db_path)
     cur = conn.cursor()
 
-    cur.execute("SELECT MAX(fecha) FROM cotizaciones_lonja WHERE lonja = 'SALAMANCA'")
-    row = cur.fetchone()
-    ult_fecha_str = row[0] if row and row[0] and not forzar_recarga else None
+    cur.execute("SELECT DISTINCT fecha FROM cotizaciones_lonja WHERE lonja = 'SALAMANCA'")
+    fechas_existentes = {r[0] for r in cur.fetchall()} if not forzar_recarga else set()
 
-    # 1. Intentar descargar directamente de lasalina.es las sesiones recientes
+    # 1. Intentar descargar directamente de lasalina.es las sesiones del rango histórico
     sesiones_remotas = obtener_sesiones_disponibles_remotas()
     registros_insertados = 0
 
     if sesiones_remotas:
-        # Tomar sesiones recientes que no tengamos
         sesiones_a_descargar = []
-        for s in sesiones_remotas[:52]:  # últimas 52 semanas (1 año)
+        for s in sesiones_remotas[:semanas]:
             try:
                 dt = datetime.strptime(s, "%d/%m/%Y").date()
-                if not ult_fecha_str or dt.isoformat() > ult_fecha_str:
+                if forzar_recarga or dt.isoformat() not in fechas_existentes:
                     sesiones_a_descargar.append(s)
             except ValueError:
                 continue
 
         if sesiones_a_descargar:
-            print(f"[Lonja] Descargando {len(sesiones_a_descargar)} sesiones en vivo desde lasalina.es...")
-            for s in sesiones_a_descargar:
+            print(f"[Lonja] Descargando {len(sesiones_a_descargar)} sesiones históricas desde lasalina.es...")
+            for idx, s in enumerate(sesiones_a_descargar, start=1):
                 try:
                     filas_sesion = descargar_sesion_remota(s)
                     if filas_sesion:
@@ -231,21 +229,24 @@ def sincronizar_cotizaciones_lonja(db_path: Path, forzar_recarga: bool = False) 
                         ) VALUES (?, ?, ?, ?, ?, ?, ?)
                         """, filas_sesion)
                         registros_insertados += len(filas_sesion)
+                    if idx % 10 == 0 or idx == len(sesiones_a_descargar):
+                        conn.commit()
+                        print(f"[Lonja] Progreso: {idx}/{len(sesiones_a_descargar)} sesiones procesadas.")
                 except Exception as ex:
                     print(f"[Lonja] Error descargando sesión {s}: {ex}")
 
             if registros_insertados > 0:
                 conn.commit()
-                print(f"[Lonja] Sincronización web exitosa: {registros_insertados} cotizaciones registradas.")
+                print(f"[Lonja] Sincronización exitosa: {registros_insertados} cotizaciones registradas.")
 
     # 2. Si no había sesiones o falló la red, asegurar que la base tenga continuidad con motor zootécnico
     cur.execute("SELECT COUNT(1) FROM cotizaciones_lonja WHERE lonja = 'SALAMANCA'")
     total_existente = cur.fetchone()[0]
 
-    if total_existente == 0 or (not ult_fecha_str and registros_insertados == 0):
+    if total_existente == 0:
         print("[Lonja] Población inicial con histórico zootécnico de Salamanca...")
         hoy = date.today()
-        fecha_inicio = date(2025, 1, 6)
+        fecha_inicio = date(2024, 1, 1)
         lunes = calcular_sesiones_semanales(fecha_inicio, hoy)
         filas_base = proyectar_sesiones_offline(lunes, {})
         cur.executemany("""
@@ -274,10 +275,17 @@ def main() -> int:
         action="store_true",
         help="Forzar recarga completa.",
     )
+    parser.add_argument(
+        "--semanas",
+        type=int,
+        default=160,
+        help="Número de semanas hacia atrás a sincronizar (por defecto 160 ~ 3 años).",
+    )
     args = parser.parse_args()
-    sincronizar_cotizaciones_lonja(args.db, forzar_recarga=args.forzar)
+    sincronizar_cotizaciones_lonja(args.db, forzar_recarga=args.forzar, semanas=args.semanas)
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
