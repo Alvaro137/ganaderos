@@ -229,4 +229,16 @@ class TestFastAPI(unittest.TestCase):
         resp_bad = self.client.post("/api/admin/logs/level", json={"level": "NIVEL_INVALIDO"}, headers={"Authorization": f"Bearer {token_admin}"})
         self.assertEqual(resp_bad.status_code, 422)
 
+    def test_database_meta_endpoint(self):
+        resp = self.client.get("/api/database/meta")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        self.assertIn("mtime", data)
+        self.assertIn("mtime_iso", data)
+        self.assertIn("size_bytes", data)
+        self.assertIn("filename", data)
+        self.assertIsInstance(data["mtime"], int)
+        self.assertGreater(data["size_bytes"], 0)
+
 
