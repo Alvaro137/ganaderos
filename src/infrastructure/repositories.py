@@ -2,10 +2,19 @@ import sqlite3
 from datetime import date, datetime
 from typing import List, Optional
 
-from src.domain.models import Animal, Parto, Pesaje, RecetaSanitaria, TratamientoIndividual, Usuario
+from src.domain.models import (
+    Animal,
+    CotizacionLonja,
+    Parto,
+    Pesaje,
+    RecetaSanitaria,
+    TratamientoIndividual,
+    Usuario,
+)
 from src.domain.repositories import (
     AnimalRepository,
     ExplotacionRepository,
+    LonjaRepository,
     PartoRepository,
     PesajeRepository,
     RecetaRepository,
@@ -403,4 +412,93 @@ class SQLiteTratamientoRepository(TratamientoRepository):
             fecha_fin_retirada=ff_ret,
             id=row['id']
         )
+
+
+class SQLiteLonjaRepository(LonjaRepository):
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self.conn.row_factory = sqlite3.Row
+
+    def list_cotizaciones(
+        self, categoria: Optional[str] = None, fecha_desde: Optional[date] = None
+    ) -> List[CotizacionLonja]:
+        cur = self.conn.cursor()
+        query = "SELECT * FROM cotizaciones_lonja WHERE 1=1"
+        params = []
+        if categoria:
+            query += " AND categoria = ?"
+            params.append(categoria)
+        if fecha_desde:
+            query += " AND fecha >= ?"
+            params.append(fecha_desde.isoformat())
+        query += " ORDER BY fecha DESC"
+        cur.execute(query, params)
+        return [self._map_to_domain(row) for row in cur.fetchall()]
+
+    def get_cotizacion_cercana(
+        self, fecha_referencia: date, categoria: str
+    ) -> Optional[CotizacionLonja]:
+        """Obtiene la cotización oficial de la semana más cercana (por ejemplo el lunes previo o simultáneo)."""
+        ref_str = fecha_referencia.isoformat()
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM cotizaciones_lonja
+            WHERE categoria = ? AND fecha <= ?
+            ORDER BY fecha DESC
+            LIMIT 1
+            """,
+            (categoria, ref_str),
+        )
+        row = cur.fetchone()
+        if not row:
+            # Fallback a la más cercana posterior si la fecha es muy temprana
+            cur.execute(
+                """
+                SELECT * FROM cotizaciones_lonja
+                WHERE categoria = ?
+                ORDER BY fecha ASC
+                LIMIT 1
+                """,
+                (categoria,),
+            )
+            row = cur.fetchone()
+        return self._map_to_domain(row) if row else None
+
+    def save(self, cotizacion: CotizacionLonja) -> CotizacionLonja:
+        cur = self.conn.cursor()
+        f_str = cotizacion.fecha.isoformat()
+        cur.execute(
+            """
+            INSERT INTO cotizaciones_lonja (fecha, lonja, mesa, categoria, unidad, precio, variacion)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f_str,
+                cotizacion.lonja,
+                cotizacion.mesa,
+                cotizacion.categoria,
+                cotizacion.unidad,
+                cotizacion.precio,
+                cotizacion.variacion or 0.0,
+            ),
+        )
+        cotizacion.id = cur.lastrowid
+        self.conn.commit()
+        return cotizacion
+
+    def _map_to_domain(self, row: sqlite3.Row) -> CotizacionLonja:
+        f = _parse_fecha_segura(row["fecha"]) or date.today()
+        keys = row.keys()
+        return CotizacionLonja(
+            fecha=f,
+            mesa=row["mesa"],
+            categoria=row["categoria"],
+            unidad=row["unidad"],
+            precio=float(row["precio"]),
+            variacion=float(row["variacion"]) if "variacion" in keys and row["variacion"] is not None else 0.0,
+            lonja=row["lonja"] if "lonja" in keys else "SALAMANCA",
+            id=row["id"] if "id" in keys else None,
+        )
+
 

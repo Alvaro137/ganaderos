@@ -280,4 +280,49 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v14_graficos_rentabilidad.png') });
   });
+
+  test('V15. Perspectiva de Margen Técnico de Cebo: Devengo Real y Auditoría vs Lonja Salamanca', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnDevengo = page.locator('.perspective-pill-btn[data-perspectiva="devengo"]');
+    await expect(btnDevengo).toBeVisible({ timeout: 10000 });
+    await btnDevengo.click();
+
+    const bannerDevengo = page.locator('.info-banner-devengo');
+    await expect(bannerDevengo).toBeVisible({ timeout: 5000 });
+    await expect(bannerDevengo).toContainText('Perspectiva Técnica de Cebo');
+
+    const tablaAnimales = page.locator('.canales-table');
+    await expect(tablaAnimales).toBeVisible({ timeout: 5000 });
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v15_margen_tecnico_cebo.png') });
+  });
+
+  test('V16. Perspectiva de Radar de Materias Primas: Curvas Lonja vs Concentrado Granja', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnRadar = page.locator('.perspective-pill-btn[data-perspectiva="radar"]');
+    await expect(btnRadar).toBeVisible({ timeout: 10000 });
+    await btnRadar.click();
+
+    const bannerRadar = page.locator('.info-banner-devengo');
+    await expect(bannerRadar).toBeVisible({ timeout: 5000 });
+    await expect(bannerRadar).toContainText('Radar Analítico de Materias Primas');
+
+    const svgRadar = page.locator('.chart-scroll-box svg');
+    await expect(svgRadar).toBeVisible({ timeout: 5000 });
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v16_radar_materias_primas.png') });
+  });
 });
+
