@@ -367,6 +367,12 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await page.locator('#chart-carne-tv-canvas').hover();
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_radar_vacuno_carne.png') });
+
+    const tablaCarne = page.locator('.canales-table-wrapper');
+    if (await tablaCarne.isVisible()) {
+      await tablaCarne.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_tabla_lonja_carne.png') });
+    }
   });
 
   test('V18. Perspectiva de Timing y Estacionalidad de Venta con Simulador Interactivo', async ({ page }) => {

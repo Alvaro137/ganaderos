@@ -113,15 +113,31 @@ def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nom
                 importe_str = imp_uds
                 uds_str = None
 
+            cabezas_val = _parse_float(cab_str) or 1.0
+            peso_val = _parse_float(uds_str)
+            precio_val = _parse_float(precio_str)
+            importe_val = _parse_float(importe_str)
+
+            # En facturas oficiales de vacuno, 'uds' indica los kg de la canal individual
+            # (normalmente entre 150 y 550 kg por cabeza).
+            # Si 'uds' es 1.0 o el peso promedio por cabeza es inferior a 50 kg (ej. lote de 16 terneros
+            # facturado como '1.000 uds' o ajustes globales), NO es peso canal en kg sino unidad de lote.
+            if peso_val is not None:
+                if peso_val < 50.0 or (cabezas_val > 1 and (peso_val / cabezas_val) < 50.0):
+                    peso_val = None
+                    if precio_val is not None and precio_val > 50.0 and cabezas_val > 0:
+                        # Si no hay peso canal, el precio unitario corresponde al precio por cabeza
+                        precio_val = round(importe_val / cabezas_val, 2) if importe_val else None
+
             lineas_animales.append(
                 {
                     "linea_numero": linea_idx,
                     "articulo": art.strip(),
-                    "importe_linea": _parse_float(importe_str),
-                    "peso_canal_kg": _parse_float(uds_str),
-                    "precio_unitario": _parse_float(precio_str),
+                    "importe_linea": importe_val,
+                    "peso_canal_kg": peso_val,
+                    "precio_unitario": precio_val,
                     "referencia": ref,
-                    "cabezas": _parse_float(cab_str) or 1.0,
+                    "cabezas": cabezas_val,
                 }
             )
             linea_idx += 1
