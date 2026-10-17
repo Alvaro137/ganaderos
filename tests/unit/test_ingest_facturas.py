@@ -2,6 +2,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from scripts.ingest_facturas_ganavaex import (
     SCHEMA_SQL,
     extraer_datos_pdf,
@@ -29,9 +31,11 @@ def test_normalizar_fecha_iso():
 
 def test_extraer_datos_pdf():
     pdf_ejemplo = Path(__file__).resolve().parents[2] / "Example-data" / "Factura G015-3 08-04-2026.pdf"
-    assert pdf_ejemplo.exists(), f"No se encontró {pdf_ejemplo}"
+    if not pdf_ejemplo.exists():
+        pytest.skip("PDF de prueba no presente (archivo de datos real excluido en CI)")
 
     datos = extraer_datos_pdf(pdf_ejemplo)
+
     assert datos["numero_factura"] == "G015 / 3"
     assert datos["fecha_factura"] == "2026-04-08"
     assert datos["cliente_cooperativa"] == "GANAVAEX, S.COOP"
