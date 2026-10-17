@@ -1,5 +1,5 @@
 // Service Worker para Ganaderos Campo (Offline-First)
-const CACHE_NAME = "ganaderos-campo-v28";
+const CACHE_NAME = "ganaderos-campo-v29";
 
 const ASSETS = [
   "./",
@@ -59,7 +59,7 @@ self.addEventListener("fetch", (event) => {
 
   // Estrategia: Cache First, fallback a Network
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
+    caches.match(event.request, { ignoreSearch: true }).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }

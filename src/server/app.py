@@ -329,6 +329,9 @@ def _buscar_archivo_sqlite() -> Optional[Path]:
 
 
 def _asegurar_esquema_usuarios(db_path: Path) -> None:
+    # La BD demo versionada en Git es inmutable; nunca debe mutarse en disco
+    if db_path.name == "ganaderos_demo.sqlite":
+        return
     try:
         w_conn = sqlite3.connect(str(db_path))
         repo = SQLiteUsuarioRepository(w_conn)
@@ -338,48 +341,65 @@ def _asegurar_esquema_usuarios(db_path: Path) -> None:
         logger.warning(f"No se pudo inicializar tabla usuarios en {db_path}: {e}")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Inicializa la conexión SQLite de lectura y repositorios de dominio."""
-    db_file = _buscar_archivo_sqlite()
-    conn = None
-    if db_file:
-        _asegurar_esquema_usuarios(db_file)
+def recargar_servicios_dominio(app: FastAPI, db_path: Optional[Path] = None) -> None:
+    """Recarga en caliente la conexión SQLite de lectura y servicios de dominio."""
+    db_file = db_path or _buscar_archivo_sqlite()
+
+    old_conn = getattr(app.state, "db_conn", None)
+    if old_conn is not None:
+        try:
+            old_conn.close()
+        except Exception:
+            pass
+        app.state.db_conn = None
+
+    if db_file and db_file.exists():
+        if os.environ.get("APP_ENV") != "test" or db_file.name != "ganaderos_demo.sqlite":
+            _asegurar_esquema_usuarios(db_file)
         try:
             conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
             animal_repo = SQLiteAnimalRepository(conn)
             parto_repo = SQLitePartoRepository(conn)
             receta_repo = SQLiteRecetaRepository(conn)
-            usuario_repo = SQLiteUsuarioRepository(conn)
+
+            # Comprobar si la tabla usuarios existe en la BD
+            has_usuarios = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='usuarios'"
+            ).fetchone()
+            if has_usuarios:
+                usuario_repo = SQLiteUsuarioRepository(conn)
+            else:
+                mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+                usuario_repo = SQLiteUsuarioRepository(mem_conn)
+                usuario_repo.ensure_table_and_defaults()
 
             app.state.db_conn = conn
             app.state.censo_service = CensoService(animal_repo)
             app.state.sanidad_service = SanidadService(receta_repo)
             app.state.genealogia_service = GenealogiaService(animal_repo, parto_repo)
             app.state.usuario_service = UsuarioService(usuario_repo)
+            logger.info(f"[Servicios] Conexión y repositorios cargados desde {db_file}")
+            return
         except Exception as e:
-            logger.error(f"[Lifespan] Error al abrir base de datos en {db_file}: {e}", exc_info=True)
+            logger.error(f"[Servicios] Error al abrir base de datos en {db_file}: {e}", exc_info=True)
             if os.environ.get("APP_ENV") not in ("test", "e2e"):
                 raise RuntimeError(f"Fallo crítico al abrir base de datos de producción: {e}") from e
-            app.state.db_conn = None
-            app.state.censo_service = None
-            app.state.sanidad_service = None
-            app.state.genealogia_service = None
-            mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
-            mem_repo = SQLiteUsuarioRepository(mem_conn)
-            mem_repo.ensure_table_and_defaults()
-            app.state.usuario_service = UsuarioService(mem_repo)
-    else:
-        if os.environ.get("APP_ENV") not in ("test", "e2e"):
-            logger.error("[Lifespan] No se encontró ninguna base de datos SQLite (finca ni demo).")
-        app.state.db_conn = None
-        app.state.censo_service = None
-        app.state.sanidad_service = None
-        app.state.genealogia_service = None
-        mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
-        mem_repo = SQLiteUsuarioRepository(mem_conn)
-        mem_repo.ensure_table_and_defaults()
-        app.state.usuario_service = UsuarioService(mem_repo)
+
+    # Fallback en memoria si no hay base o falló
+    app.state.db_conn = None
+    app.state.censo_service = None
+    app.state.sanidad_service = None
+    app.state.genealogia_service = None
+    mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    mem_repo = SQLiteUsuarioRepository(mem_conn)
+    mem_repo.ensure_table_and_defaults()
+    app.state.usuario_service = UsuarioService(mem_repo)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Inicializa la conexión SQLite de lectura y repositorios de dominio."""
+    recargar_servicios_dominio(app)
 
     # Asistente IA está disponible tanto con BD local como en modo edge
     app.state.asistente_service = AsistenteService(
@@ -389,8 +409,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    conn = getattr(app.state, "db_conn", None)
     if conn:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 TAGS_METADATA = [
@@ -488,8 +512,17 @@ def get_usuario_service() -> UsuarioService:
             _asegurar_esquema_usuarios(db_file)
             try:
                 conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
-                repo = SQLiteUsuarioRepository(conn)
-                service = UsuarioService(repo)
+                has_usuarios = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='usuarios'"
+                ).fetchone()
+                if has_usuarios:
+                    repo = SQLiteUsuarioRepository(conn)
+                    service = UsuarioService(repo)
+                else:
+                    mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
+                    repo = SQLiteUsuarioRepository(mem_conn)
+                    repo.ensure_table_and_defaults()
+                    service = UsuarioService(repo)
             except Exception:
                 mem_conn = sqlite3.connect(":memory:", check_same_thread=False)
                 repo = SQLiteUsuarioRepository(mem_conn)
@@ -1050,6 +1083,7 @@ async def sync_import(
             raise HTTPException(status_code=400, detail="Fichero vacío.")
         try:
             resumen = service.importar_bd_actualizada(destino_tmp)
+            recargar_servicios_dominio(request.app, service.db_path)
         finally:
             if destino_tmp.exists():
                 destino_tmp.unlink()

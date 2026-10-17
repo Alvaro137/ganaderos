@@ -238,7 +238,17 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - Módulo `src/infrastructure/backup_vault.py` y CLI `scripts/backup_vault.py`.
   - Guarda snapshots atómicos de: `access/bdlibro.mdb`, `sqlite/ganaderos_campo.sqlite` y volcado de texto determinista `dumps/censo_dump.sql` (para `git diff` auditables entre versiones).
   - Integrado automáticamente como paso 6/6 en `scripts/sync_access_merge.py` tras cada conciliación con Access.
+- [x] **Fase 1: Blindaje Inmediato de Integridad de Datos y Concurrencia:**
+  - **Concurrencia en `SyncService`:** Bloqueo con `threading.RLock()` (`_mutation_lock`), SQLite configurado en **WAL mode** (`PRAGMA journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 10000`) para lecturas concurrentes sin bloqueo y menor desgaste de MicroSD. Captura de `sqlite3.IntegrityError` deduplicando reintentos paralelos sin HTTP 500. `os.fsync` previo a `os.replace` atómico en `/api/sync/import`.
+  - **Idempotencia y 2PC en Access:** Detección de procesos muertos (`_pid_sigue_vivo` vía `os.kill`) y desalojo de locks obsoletos (>10m) en `FileLock`. Detección preventiva de Access abierto mediante `bdlibro.ldb`. Asignación no repetitiva de crotales (`crotales_libres.pop(0)`) e idempotencia estricta antes de insertar terneros ya registrados en Access.
+  - **Protección de Outbox en PWA (`db_client.js`):** `_verificarYVaciarOutbox()` envía mutaciones pendientes antes de descargar cualquier nuevo censo remoto, evitando sobrescrituras que oculten partos no sincronizados.
+  - **Hot-Reload en FastAPI y Aislamiento de Tests:** `recargar_servicios_dominio()` refresca la conexión de FastAPI y repositorios tras cada importación de BD sin reiniciar systemd. Aislamiento estricto de `ganaderos_demo.sqlite` (modo solo lectura y usuarios en `:memory:` si falta la tabla).
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
+- [ ] **Fase 2: Ergonomía de Campo y Reparación UX de la PWA (En progreso):**
+  - Teclado táctil en móviles solo visible bajo demanda (`.touch-keypad.visible`).
+  - Touch targets WCAG ≥48px en botones de parto y limpieza de filtros.
+  - Búsqueda flexible por crotal de 1 a 4 dígitos con autocompletado de ceros.
+  - Sustitución de `alert()` por validación inline y toasts amigables.
 - [ ] **Roadmap Futuro (Pendiente de formato y especificaciones):**
   - Registro de pesaje (cuando se disponga del formato de datos de la báscula).
   *(Nota: Descartados explícitamente por el ganadero por SRP e innecesarios en campo: cambio de lote/corral móvil y recetas/tratamientos sanitarios en la PWA).*

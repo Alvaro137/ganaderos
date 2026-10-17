@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -59,6 +60,9 @@ class SyncError(Exception):
 class SyncService:
     """Consolida el censo importado del PC con los registros de campo de los móviles."""
 
+    # Lock reentrante para serializar mutaciones concurrentes e importaciones
+    _mutation_lock = threading.RLock()
+
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
 
@@ -67,14 +71,14 @@ class SyncService:
     # ------------------------------------------------------------------ #
 
     def _conectar(self, db_path: Optional[Path] = None) -> sqlite3.Connection:
-        """Abre la BD. Durabilidad ante corte de luz: synchronous=FULL, journal DELETE
-        (pocas escrituras, pero cada commit está garantizado en disco)."""
+        """Abre la BD configurada en WAL mode (lecturas concurrentes + escrituras crash-safe)."""
         ruta = Path(db_path or self.db_path)
         ruta.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(ruta), timeout=15)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode = DELETE")
-        conn.execute("PRAGMA synchronous = FULL")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA busy_timeout = 10000")
         cur = conn.cursor()
         cur.executescript(SQL_TABLAS_SYNC)
 
@@ -156,69 +160,75 @@ class SyncService:
         if len(changes) > MAX_CAMPOS:
             raise SyncError(f"Demasiados cambios en un push ({len(changes)} > {MAX_CAMPOS}).")
 
-        conn = self._conectar()
-        try:
-            aceptados: List[str] = []
-            duplicados: List[str] = []
-            rechazados: List[Dict[str, str]] = []
+        with self._mutation_lock:
+            conn = self._conectar()
+            try:
+                aceptados: List[str] = []
+                duplicados: List[str] = []
+                rechazados: List[Dict[str, str]] = []
 
-            for ch in changes:
-                uuid = str(ch.get("uuid") or "").strip()
-                tipo = str(ch.get("tipo") or "").strip().lower()
-                crotal = str(ch.get("crotal") or "").strip() or None
-                ts_dispositivo = str(ch.get("ts_dispositivo") or "").strip() or None
-                payload = ch.get("payload")
+                for ch in changes:
+                    uuid = str(ch.get("uuid") or "").strip()
+                    tipo = str(ch.get("tipo") or "").strip().lower()
+                    crotal = str(ch.get("crotal") or "").strip() or None
+                    ts_dispositivo = str(ch.get("ts_dispositivo") or "").strip() or None
+                    payload = ch.get("payload")
 
-                if not uuid or len(uuid) > 64:
-                    rechazados.append({"uuid": uuid[:64], "motivo": "uuid ausente o inválido"})
-                    continue
-                if tipo not in TIPOS_PERMITIDOS:
-                    rechazados.append({"uuid": uuid, "motivo": f"tipo no permitido: {tipo!r}"})
-                    continue
-                if crotal and len(crotal) > 32:
-                    rechazados.append({"uuid": uuid, "motivo": "crotal demasiado largo"})
-                    continue
+                    if not uuid or len(uuid) > 64:
+                        rechazados.append({"uuid": uuid[:64], "motivo": "uuid ausente o inválido"})
+                        continue
+                    if tipo not in TIPOS_PERMITIDOS:
+                        rechazados.append({"uuid": uuid, "motivo": f"tipo no permitido: {tipo!r}"})
+                        continue
+                    if crotal and len(crotal) > 32:
+                        rechazados.append({"uuid": uuid, "motivo": "crotal demasiado largo"})
+                        continue
 
-                try:
-                    payload_txt = json.dumps(payload, ensure_ascii=False) if payload else None
-                except (TypeError, ValueError):
-                    rechazados.append({"uuid": uuid, "motivo": "payload no serializable a JSON"})
-                    continue
-                if payload_txt and len(payload_txt.encode("utf-8")) > MAX_PAYLOAD_BYTES:
-                    rechazados.append({"uuid": uuid, "motivo": "payload demasiado grande"})
-                    continue
+                    try:
+                        payload_txt = json.dumps(payload, ensure_ascii=False) if payload else None
+                    except (TypeError, ValueError):
+                        rechazados.append({"uuid": uuid, "motivo": "payload no serializable a JSON"})
+                        continue
+                    if payload_txt and len(payload_txt.encode("utf-8")) > MAX_PAYLOAD_BYTES:
+                        rechazados.append({"uuid": uuid, "motivo": "payload demasiado grande"})
+                        continue
 
-                ya_estaba = conn.execute(
-                    "SELECT 1 FROM campo_registros WHERE uuid = ?", (uuid,)
-                ).fetchone()
-                if ya_estaba:
-                    # Idempotencia: reintento del dispositivo, ya integrado antes.
-                    duplicados.append(uuid)
-                    aceptados.append(uuid)
-                    continue
+                    ya_estaba = conn.execute(
+                        "SELECT 1 FROM campo_registros WHERE uuid = ?", (uuid,)
+                    ).fetchone()
+                    if ya_estaba:
+                        # Idempotencia: reintento del dispositivo, ya integrado antes.
+                        duplicados.append(uuid)
+                        aceptados.append(uuid)
+                        continue
 
-                conn.execute(
-                    "INSERT INTO campo_registros "
-                    "(uuid, tipo, crotal, operador, device_id, ts_dispositivo, payload) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (uuid, tipo, crotal, operador, device_id, ts_dispositivo, payload_txt),
-                )
-                aceptados.append(uuid)
+                    try:
+                        conn.execute(
+                            "INSERT INTO campo_registros "
+                            "(uuid, tipo, crotal, operador, device_id, ts_dispositivo, payload) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (uuid, tipo, crotal, operador, device_id, ts_dispositivo, payload_txt),
+                        )
+                        aceptados.append(uuid)
+                    except sqlite3.IntegrityError:
+                        # Idempotencia defensiva ante reintentos concurrentes de red
+                        duplicados.append(uuid)
+                        aceptados.append(uuid)
 
-            nuevos = len(aceptados) - len(duplicados)
-            epoch = self._leer_estado(conn)["epoch"]
-            if nuevos > 0:
-                epoch = self._epoch_sube(conn)
+                nuevos = len(aceptados) - len(duplicados)
+                epoch = self._leer_estado(conn)["epoch"]
+                if nuevos > 0:
+                    epoch = self._epoch_sube(conn)
 
-            conn.commit()  # transacción atómica: o se integra todo o nada
-            return {
-                "aceptados": aceptados,
-                "rechazados": rechazados,
-                "duplicados": duplicados,
-                "epoch": epoch,
-            }
-        finally:
-            conn.close()
+                conn.commit()  # transacción atómica: o se integra todo o nada
+                return {
+                    "aceptados": aceptados,
+                    "rechazados": rechazados,
+                    "duplicados": duplicados,
+                    "epoch": epoch,
+                }
+            finally:
+                conn.close()
 
 # === PARTE 3 ===
 
@@ -264,62 +274,80 @@ class SyncService:
         finally:
             chequeo.close()
 
-        # 2. Rescatar el histórico de registros de campo de la maestra actual
-        historico: List[Dict[str, Any]] = []
-        epoch_previo = 0
-        if self.db_path.exists():
-            vieja = self._conectar()
-            try:
-                historico = [dict(r) for r in vieja.execute(
-                    "SELECT uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
-                    "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado "
-                    "FROM campo_registros"
-                ).fetchall()]
-                epoch_previo = self._leer_estado(vieja)["epoch"]
-            finally:
-                vieja.close()
+        # 2. Rescatar el histórico de registros de campo de la maestra actual bajo lock exclusivo
+        with self._mutation_lock:
+            historico: List[Dict[str, Any]] = []
+            epoch_previo = 0
+            if self.db_path.exists():
+                vieja = self._conectar()
+                try:
+                    historico = [dict(r) for r in vieja.execute(
+                        "SELECT uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
+                        "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado "
+                        "FROM campo_registros"
+                    ).fetchall()]
+                    epoch_previo = self._leer_estado(vieja)["epoch"]
+                finally:
+                    vieja.close()
 
-        # 3. Construir la nueva maestra en fichero temporal (mismo disco → rename atómico)
-        tmp_path = self.db_path.with_suffix(".import_tmp.sqlite")
-        try:
-            shutil.copyfile(nueva_bd, tmp_path)
-            conn = self._conectar(tmp_path)
+            # 3. Construir la nueva maestra en fichero temporal (mismo disco → rename atómico)
+            tmp_path = self.db_path.with_suffix(".import_tmp.sqlite")
             try:
-                for r in historico:
+                shutil.copyfile(nueva_bd, tmp_path)
+                conn = self._conectar(tmp_path)
+                try:
+                    for r in historico:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO campo_registros "
+                            "(uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
+                            "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (r["uuid"], r["tipo"], r["crotal"], r["operador"], r["device_id"],
+                             r["ts_dispositivo"], r["ts_servidor"], r["payload"],
+                             r.get("conciliado_en_access", 0), r.get("ts_conciliado"), r.get("crotal_asignado")),
+                        )
+                    nuevo_epoch = epoch_previo + 1
                     conn.execute(
-                        "INSERT OR IGNORE INTO campo_registros "
-                        "(uuid, tipo, crotal, operador, device_id, ts_dispositivo, "
-                        "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (r["uuid"], r["tipo"], r["crotal"], r["operador"], r["device_id"],
-                         r["ts_dispositivo"], r["ts_servidor"], r["payload"],
-                         r.get("conciliado_en_access", 0), r.get("ts_conciliado"), r.get("crotal_asignado")),
+                        "INSERT OR REPLACE INTO _sync_estado (id, epoch, actualizado_en) "
+                        "VALUES (1, ?, datetime('now'))",
+                        (nuevo_epoch,),
                     )
-                nuevo_epoch = epoch_previo + 1
-                conn.execute(
-                    "INSERT OR REPLACE INTO _sync_estado (id, epoch, actualizado_en) "
-                    "VALUES (1, ?, datetime('now'))",
-                    (nuevo_epoch,),
-                )
-                conn.commit()
-            finally:
-                conn.close()
+                    conn.commit()
+                finally:
+                    conn.close()
 
-            # 4. Promoción atómica (con reintento si un lector retiene el fichero)
-            for intento in range(3):
+                # Asegurar persistencia física en disco (fsync) antes de promover
                 try:
-                    os.replace(tmp_path, self.db_path)
-                    break
-                except PermissionError:
-                    if intento == 2:
-                        raise
-                    time.sleep(0.3)
-        finally:
-            if tmp_path.exists():
-                try:
-                    tmp_path.unlink()
+                    with open(tmp_path, "a") as f_sync:
+                        f_sync.flush()
+                        os.fsync(f_sync.fileno())
                 except OSError:
                     pass
+
+                # 4. Promoción atómica (con reintento si un lector retiene el fichero)
+                for intento in range(3):
+                    try:
+                        os.replace(tmp_path, self.db_path)
+                        break
+                    except PermissionError:
+                        if intento == 2:
+                            raise
+                        time.sleep(0.3)
+
+                # En sistemas POSIX, asegurar el directorio contenedor para durabilidad del renombrado
+                if hasattr(os, "O_DIRECTORY"):
+                    try:
+                        dir_fd = os.open(str(self.db_path.parent), os.O_RDONLY | os.O_DIRECTORY)
+                        os.fsync(dir_fd)
+                        os.close(dir_fd)
+                    except OSError:
+                        pass
+            finally:
+                if tmp_path.exists():
+                    try:
+                        tmp_path.unlink()
+                    except OSError:
+                        pass
 
         resumen = self.estado()
         resumen["importado"] = {
