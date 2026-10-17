@@ -514,4 +514,139 @@ export function renderGraficoLonjaCarne(datosMeses, opts = {}) {
   `;
 }
 
+/**
+ * Renderiza el gráfico SVG de Estacionalidad Histórica Anual de la Lonja de Salamanca (12 meses).
+ * Muestra el ciclo estacional de precios (€/kg canal) para apoyar decisiones de timing de venta.
+ */
+export function renderGraficoEstacionalidadCarne(datosMeses, opts = {}) {
+  if (!datosMeses || datosMeses.length === 0) {
+    return `
+      <div class="chart-empty-notice" style="padding: 24px; text-align: center; color: var(--text-dim, #777); font-size: 0.9rem;">
+        No hay datos suficientes de estacionalidad histórica.
+      </div>
+    `;
+  }
+
+  const ancho = opts.ancho || 640;
+  const alto = opts.alto || 230;
+  const margen = { top: 32, right: 30, bottom: 40, left: 55 };
+  const anchoPlot = ancho - margen.left - margen.right;
+  const altoPlot = alto - margen.top - margen.bottom;
+
+  const valoresTodos = [];
+  datosMeses.forEach(d => {
+    if (d.anojo_extra) valoresTodos.push(d.anojo_extra);
+    if (d.anojo_pesado) valoresTodos.push(d.anojo_pesado);
+    if (d.ternera_extra) valoresTodos.push(d.ternera_extra);
+  });
+
+  const minV = valoresTodos.length > 0 ? Math.floor(Math.min(...valoresTodos) * 0.94 * 10) / 10 : 5.0;
+  const maxV = valoresTodos.length > 0 ? Math.ceil(Math.max(...valoresTodos) * 1.05 * 10) / 10 : 8.0;
+  const rango = Math.max(1.0, maxV - minV);
+
+  let gridLines = "";
+  for (let i = 0; i <= 4; i++) {
+    const yVal = minV + (rango / 4) * i;
+    const yPos = margen.top + altoPlot - ((yVal - minV) / rango) * altoPlot;
+    gridLines += `
+      <line x1="${margen.left}" y1="${yPos.toFixed(1)}" x2="${ancho - margen.right}" y2="${yPos.toFixed(1)}" stroke="var(--md-outline-variant, #e5e7eb)" stroke-dasharray="3,3" stroke-width="1"/>
+      <text x="${margen.left - 8}" y="${(yPos + 4).toFixed(1)}" font-size="10" font-family="system-ui, sans-serif" fill="var(--text-muted, #6b7280)" text-anchor="end">${yVal.toFixed(2)}€</text>
+    `;
+  }
+
+  const stepX = anchoPlot / Math.max(1, datosMeses.length);
+
+  let ptsAnojo = [];
+  let ptsAnojoPes = [];
+  let ptsTernera = [];
+  let labelsX = "";
+  let shadePeak = "";
+
+  datosMeses.forEach((d, idx) => {
+    const xCentro = margen.left + idx * stepX + (stepX / 2);
+    labelsX += `
+      <text x="${xCentro.toFixed(1)}" y="${(alto - 14).toFixed(1)}" font-size="11" font-weight="600" font-family="system-ui, sans-serif" fill="var(--text-main, #374151)" text-anchor="middle">${d.nombre_mes || d.mes_num}</text>
+    `;
+
+    // Sombra para meses pico típicos (Nov-Ene: 11, 12, 01)
+    const mNum = parseInt(d.mes_num, 10);
+    if (mNum === 11 || mNum === 12 || mNum === 1) {
+      shadePeak += `
+        <rect x="${(xCentro - stepX/2).toFixed(1)}" y="${margen.top}" width="${stepX.toFixed(1)}" height="${altoPlot}" fill="#15803d" fill-opacity="0.06">
+          <title>${d.nombre_mes}: Periodo histórico de alta demanda</title>
+        </rect>
+      `;
+    }
+
+    if (d.anojo_extra && d.anojo_extra > 0) {
+      const yA = margen.top + altoPlot - ((d.anojo_extra - minV) / rango) * altoPlot;
+      ptsAnojo.push({ x: xCentro, y: yA, val: d.anojo_extra, mes: d.nombre_mes });
+    }
+    if (d.anojo_pesado && d.anojo_pesado > 0) {
+      const yAP = margen.top + altoPlot - ((d.anojo_pesado - minV) / rango) * altoPlot;
+      ptsAnojoPes.push({ x: xCentro, y: yAP, val: d.anojo_pesado, mes: d.nombre_mes });
+    }
+    if (d.ternera_extra && d.ternera_extra > 0) {
+      const yT = margen.top + altoPlot - ((d.ternera_extra - minV) / rango) * altoPlot;
+      ptsTernera.push({ x: xCentro, y: yT, val: d.ternera_extra, mes: d.nombre_mes });
+    }
+  });
+
+  const pathAnojo = ptsAnojo.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+  const pathAnojoPes = ptsAnojoPes.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+  const pathTernera = ptsTernera.reduce((acc, p, i) => i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `${acc} L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
+
+  let dotsHtml = "";
+  ptsAnojo.forEach(p => {
+    dotsHtml += `
+      <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#15803d" stroke="#ffffff" stroke-width="1.5">
+        <title>${p.mes} | Añojo Extra: ${p.val.toFixed(2)} €/kg</title>
+      </circle>
+    `;
+  });
+
+  return `
+    <div class="chart-container-card" style="background: var(--md-surface-container-low, #ffffff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: var(--md-shape-lg, 16px); padding: 16px; margin-bottom: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;">
+        <div style="font-weight: 800; font-size: 0.98rem; color: var(--brand-primary, #1e3a2b);">
+          🧭 Estacionalidad Anual del Vacuno (€/kg Canal): Patrón Enero a Diciembre
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; font-size: 0.8rem; font-weight: 700; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #15803d;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #15803d;"></span>
+            Añojo Extra (&lt;350kg)
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #2563eb;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #2563eb;"></span>
+            Añojo Pesado (&gt;350kg)
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #7c3aed;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #7c3aed;"></span>
+            Ternera Extra
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; color: #15803d;">
+            <span style="display: inline-block; width: 12px; height: 10px; background: rgba(21, 128, 61, 0.15); border: 1px dashed #15803d;"></span>
+            Meses Pico Demanda
+          </span>
+        </div>
+      </div>
+
+      <div class="chart-scroll-box" style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+        <svg viewBox="0 0 ${ancho} ${alto}" style="width: 100%; min-width: 440px; height: auto; display: block;" preserveAspectRatio="xMidYMid meet">
+          <g class="chart-shades">${shadePeak}</g>
+          <g class="chart-grid">${gridLines}</g>
+          ${pathAnojo ? `<path d="${pathAnojo}" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${pathAnojoPes ? `<path d="${pathAnojoPes}" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="4,3" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          ${pathTernera ? `<path d="${pathTernera}" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />` : ""}
+          <g class="chart-dots">${dotsHtml}</g>
+          <g class="chart-labels-x">${labelsX}</g>
+        </svg>
+      </div>
+      <div style="font-size: 0.76rem; color: var(--text-dim, #777); margin-top: 6px; text-align: right;">
+        Media histórica mensual por categoría de carne en las sesiones de la Lonja de Salamanca.
+      </div>
+    </div>
+  `;
+}
+
 
