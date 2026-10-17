@@ -96,6 +96,28 @@ class TestAccessReader(unittest.TestCase):
                 self.assertIn("ganaderos-campo", contenido)
             self.assertFalse(lock_file.exists())
 
+    def test_leer_recetas_y_tratamientos_desescala_y_no_inventa_animales(self):
+        from src.infrastructure.access_reader import leer_recetas_y_tratamientos
+
+        mock_cur = MagicMock()
+        mock_cur.fetchall.return_value = [
+            # Caso 1: 10 frascos escalados a 100000.0 por Jet Currency, sin dosis unitaria
+            (146, datetime(2024, 3, 25), "REC-01", "VOREN SUSP", 100000.0, "VET1", 28, "PROV1", 0.0, "ES371261100121"),
+            # Caso 2: 50 unidades con dosis unitaria de 10.0 (5 cabezas)
+            (147, datetime(2024, 4, 1), "REC-02", "RECOCAM", 50.0, "VET1", 15, "PROV1", 10.0, "ES371261100121"),
+        ]
+        recetas = leer_recetas_y_tratamientos(mock_cur)
+        self.assertEqual(len(recetas), 2)
+
+        # Caso 1: Se des-escala a 10.0 y no se inventan 100.000 animales
+        self.assertEqual(recetas[0]["unidades"], 10.0)
+        self.assertIsNone(recetas[0]["n_animales"])
+
+        # Caso 2: 50 / 10 = 5 animales
+        self.assertEqual(recetas[1]["unidades"], 50.0)
+        self.assertEqual(recetas[1]["n_animales"], 5)
+
+
 
 if __name__ == "__main__":
     unittest.main()

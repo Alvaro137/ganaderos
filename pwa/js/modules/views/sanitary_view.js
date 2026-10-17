@@ -96,17 +96,48 @@ export function ejecutarBusquedaRecetas() {
 
   listContainer.innerHTML = recetas
     .map((r) => {
-      const nAnim = r.n_animales ? parseInt(r.n_animales, 10) : (r.unidades > 0 ? Math.max(1, Math.round(r.unidades)) : 1);
+      let unidades = Number(r.unidades || 0);
+      let dosisUnitaria = Number(r.dosis_unitaria || 0);
+
+      // Blindaje adicional ante posibles escalas residuales
+      if (unidades >= 10000 && (unidades % 5000 === 0 || unidades % 10000 === 0)) {
+        unidades = Math.round((unidades / 10000) * 100) / 100;
+      }
+      if (dosisUnitaria >= 10000 && (dosisUnitaria % 5000 === 0 || dosisUnitaria % 10000 === 0)) {
+        dosisUnitaria = Math.round((dosisUnitaria / 10000) * 100) / 100;
+      }
+
+      let nAnim = r.n_animales != null ? parseInt(r.n_animales, 10) : null;
+      if (dosisUnitaria > 0 && unidades > 0) {
+        nAnim = Math.max(1, Math.round(unidades / dosisUnitaria));
+      } else if (nAnim == null || nAnim > 500 || dosisUnitaria === 0) {
+        nAnim = null;
+      }
+
       const diasCarne = r.tiempo_carne != null ? parseInt(r.tiempo_carne, 10) : null;
       let textoSupresion = diasCarne != null ? `Espera carne: ${diasCarne} d` : "";
 
       let detalleDosis = "";
-      if (r.unidades > 0) {
-        detalleDosis = `<strong>Dosis total:</strong> ${formatearMoneda(r.unidades, 1)} ml/unid.`;
-        if (r.dosis_unitaria > 0) {
-          detalleDosis += ` • <span style="color: var(--text-dim);">(${formatearMoneda(r.dosis_unitaria, 2)} / cabeza)</span>`;
+      if (unidades > 0) {
+        detalleDosis = `<strong>Cantidad total:</strong> ${formatearMoneda(unidades, 1)} unid./ml`;
+        if (dosisUnitaria > 0) {
+          detalleDosis += ` • <span style="color: var(--text-dim);">(${formatearMoneda(dosisUnitaria, 2)} / cabeza)</span>`;
         }
       }
+
+      const badgeAnimalesHtml = (nAnim != null && nAnim > 0) ? `
+        <span class="badge-animales-tratados destacado">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="4"></circle>
+            <path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>
+          </svg>
+          ${nAnim} ${nAnim === 1 ? "animal" : "animales"}
+        </span>
+      ` : `
+        <span class="badge-animales-tratados" style="background: rgba(100, 116, 139, 0.12); color: var(--text-muted); border-color: rgba(100, 116, 139, 0.25);">
+          Tratamiento de lote / Explotación
+        </span>
+      `;
 
       return `
         <article class="receta-card">
@@ -117,16 +148,11 @@ export function ejecutarBusquedaRecetas() {
 
           <div class="receta-title-row">
             <div class="receta-medicamento">${escapeHtml(r.medicamento || "Medicamento no especificado")}</div>
-            <span class="badge-animales-tratados destacado">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="8" r="4"></circle>
-                <path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>
-              </svg>
-              ${nAnim} ${nAnim === 1 ? "animal" : "animales"}
-            </span>
+            ${badgeAnimalesHtml}
           </div>
 
           ${detalleDosis ? `<div class="receta-dosis-info">${detalleDosis}</div>` : ""}
+
 
           <div class="receta-footer">
             <div>

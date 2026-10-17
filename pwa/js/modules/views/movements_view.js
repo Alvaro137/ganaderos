@@ -82,12 +82,14 @@ export function renderVistaMovimientos() {
 
         <div class="movimientos-filtros-secundarios">
           <select id="select-mov-destino" class="mov-select">
-            <option value="TODOS" ${AppState.destinoMovimiento === "TODOS" ? "selected" : ""}>Todos los destinos (Activos)</option>
+            <option value="TODOS" ${AppState.destinoMovimiento === "TODOS" ? "selected" : ""}>Todos los destinos</option>
+            <option value="ACTIVAS" ${AppState.destinoMovimiento === "ACTIVAS" ? "selected" : ""}>Solo fincas activas (121 y 122)</option>
             <option value="122" ${AppState.destinoMovimiento === "122" ? "selected" : ""}>Hacia 122 (Cebadero)</option>
             <option value="121" ${AppState.destinoMovimiento === "121" ? "selected" : ""}>En 121 (Vida / Nodrizas)</option>
             <option value="EXTERNO" ${AppState.destinoMovimiento === "EXTERNO" ? "selected" : ""}>Salidas a Ventas / Matadero</option>
             <option value="HISTORICO" ${AppState.destinoMovimiento === "HISTORICO" ? "selected" : ""}>Histórico antiguo (671 / 591)</option>
           </select>
+
 
           <select id="select-mov-anio" class="mov-select">
             <option value="TODOS" ${AppState.anioMovimiento === "TODOS" ? "selected" : ""}>Todos los años</option>

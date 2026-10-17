@@ -84,6 +84,42 @@ class TestDomainEntities(unittest.TestCase):
         self.assertTrue(vaca.es_reproductora)
         self.assertGreater(vaca.edad_anios(fecha_referencia=date(2026, 9, 20)), 6.0)
 
+    def test_ternero_cebo_activo_y_no_reproductor(self):
+        ternero = Animal(
+            crotal=Crotal("ES083710109999"),
+            nombre=None,
+            sexo="Macho",
+            raza="CONJUNTO MESTIZO",
+            fecha_nacimiento=date(2026, 1, 10),
+            madre_crotal="ES083710104599",
+            padre_crotal=None,
+            estado="A",
+            vida=0,  # 0 = Ganado para cebo
+            corral="CEBADERO",
+            fecha_alta=date(2026, 1, 10),
+        )
+        # Ternero de cebo vivo en la finca: debe ser activo en el censo
+        self.assertTrue(ternero.es_activo)
+        self.assertFalse(ternero.es_reproductora)
+
+    def test_vaca_baja_no_es_activa_aunque_tenga_vida_1(self):
+        vaca_muerta = Animal(
+            crotal=Crotal("ES083710101111"),
+            nombre="Antigua",
+            sexo="Hembra",
+            raza="MORUCHA",
+            fecha_nacimiento=date(2015, 3, 15),
+            madre_crotal=None,
+            padre_crotal=None,
+            estado="B",  # Baja oficial
+            vida=1,      # Históricamente clasificada como aptitud de vida
+            corral="",
+            fecha_alta=date(2015, 3, 20),
+        )
+        self.assertFalse(vaca_muerta.es_activo)
+        self.assertFalse(vaca_muerta.es_reproductora)
+
+
     def test_movimiento_traspaso_interno_vs_externo(self):
         m_interno = Movimiento(
             crotal="ES083710104599",
