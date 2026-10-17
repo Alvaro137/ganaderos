@@ -1,31 +1,34 @@
-# ADR 0004: Estrategia de Resiliencia Offline y Caché del Service Worker
+# ADR 0004: Estrategia de resiliencia sin conexión y caché del service worker
 
-* **Estado:** Aceptado
-* **Fecha:** 2026-09-22
-* **Decisores:** Equipo de Arquitectura Frontend Ganaderos Campo
+- **Estado:** Aceptado
+- **Fecha:** 2026-09-22
+- **Decisores:** Equipo de arquitectura frontend Ganaderos Campo
 
-## Contexto y Planteamiento del Problema
-Una aplicación para el campo agropecuario debe comportarse como software de misión crítica: si el ganadero abre el teléfono en medio del pasto sin conexión, la interfaz debe cargar en < 1 segundo, acceder a los datos locales y no mostrar ninguna pantalla en blanco ni errores de carga de recursos.
+## Contexto y planteamiento del problema
 
-## Alternativas Consideradas
-1. **Network First con fallback a caché:** Inadecuado para campo. Provoca que el navegador espere tiempos de timeout de red (10 a 30 segundos) antes de recurrir a la caché, causando frustración y sensación de bloqueo.
-2. **Cache Only sin actualización en caliente:** Riesgoso porque los usuarios pueden quedar atrapados en versiones antiguas del software sin posibilidad de recibir parches.
-3. **Cache First para Assets Estáticos + Bypass Dinámico para APIs + Precaching Modular:** Seleccionado.
+En entornos ganaderos sin cobertura móvil, la aplicación debe cargar en menos de un segundo, acceder a los datos locales y evitar pantallas en blanco o errores de red en la carga de recursos estáticos.
+
+## Alternativas consideradas
+
+1. Estrategia con prioridad a la red (network first) con recuperación desde caché: Descartada. Obliga al navegador a esperar los tiempos de expiración de la red (entre 10 y 30 segundos) antes de consultar la caché local, lo que degrada la respuesta de la interfaz.
+2. Solo caché (cache only) sin recarga de versiones: Descartada. Impide que los clientes reciban actualizaciones y correcciones de código cuando hay conexión disponible.
+3. Prioridad a la caché (cache first) para recursos estáticos, envío directo a red para la API y precarga modular: Seleccionada. Garantiza disponibilidad inmediata de los archivos del cliente y mantiene dinámicas las llamadas al servidor.
 
 ## Decisión
-1. **Estrategia Cache First para Recursos de la Aplicación:**
-   - HTML, CSS, fuentes, binarios WebAssembly (`sql-wasm.wasm`, `sql-wasm.js`) y módulos JavaScript (`pwa/js/modules/*.js`) se precachean durante el evento `install` del Service Worker.
-   - En peticiones posteriores, los archivos se entregan instantáneamente desde la caché local sin tocar la red.
-2. **Bypass para la API:**
-   - Cualquier petición `POST` o ruta que contenga `/api/` se envía directamente a la red (o activa el fallback local si la red falla).
-3. **Versionado Explícito:**
-   - La constante `CACHE_NAME` (ej: `ganaderos-campo-v12`) se incrementa con cada release, purgando automáticamente caches obsoletas en el evento `activate`.
+
+1. Estrategia de prioridad a la caché para recursos estáticos:
+   - Los documentos HTML, hojas de estilo CSS, fuentes tipográficas, binarios WebAssembly (`sql-wasm.wasm`, `sql-wasm.js`) y módulos JavaScript (`pwa/js/modules/*.js`) se precargan durante el evento `install` del Service Worker.
+   - En peticiones sucesivas, estos archivos se entregan desde la caché local sin realizar peticiones de red.
+2. Desvío directo para llamadas a la API:
+   - Cualquier petición HTTP con método POST o cuya ruta contenga `/api/` se envía directamente a la red. Si la conexión falla, se activa la respuesta de degradación local.
+3. Versionado explícito del almacenamiento en caché:
+   - La constante `CACHE_NAME` (por ejemplo, `ganaderos-campo-v13`) se actualiza con cada versión del software. El evento `activate` del Service Worker elimina automáticamente las cachés de versiones previas.
 
 ## Consecuencias
 
 ### Positivas
-- **Arranque Instantáneo:** Carga de la aplicación en menos de 300 ms incluso con el dispositivo en modo avión.
-- **Tolerancia Total a Zonas de Sombra:** El ganadero puede desplazarse entre zonas con cobertura y zonas sin señal sin que la interfaz sufra reinicios ni pérdidas de estado.
+- Tiempo de carga reducido: la interfaz carga en menos de 300 ms incluso con el dispositivo en modo avión.
+- Continuidad operativa sin señal: los operarios pueden desplazarse entre zonas con y sin cobertura sin que la interfaz se reinicie ni pierda el estado en memoria.
 
-### Negativas / Desafíos
-- **Control de Invalidez de Caché:** Cualquier cambio en los scripts o módulos debe ir acompañado de un incremento en la versión de caché del Service Worker para forzar la actualización en los clientes instalados.
+### Negativas y limitaciones
+- Gestión de invalidación de caché: cualquier modificación en archivos JavaScript o CSS requiere incrementar la constante `CACHE_NAME` del Service Worker para forzar la actualización en los clientes instalados.
