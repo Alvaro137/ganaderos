@@ -20,6 +20,10 @@ import {
   obtenerTextoBotonVolver,
   clasificarMovimientoUnificado
 } from '../../pwa/js/modules/config.js';
+import {
+  renderGraficoBarrasComparativas,
+  renderGraficoCotizacionCanal
+} from '../../pwa/js/modules/components/charts_svg.js';
 
 console.log("==================================================");
 console.log("EJECUTANDO SUITE DE TESTS FRONTEND (NODE.JS)");
@@ -557,6 +561,37 @@ async function runAllTests() {
     const hist = await obtenerHistorialMutaciones();
     assert.strictEqual(hist.length, 1);
     assert.strictEqual(hist[0].status, "synced");
+  });
+
+  // 12. Tests del Generador de Gráficos SVG Nativos (Offline-First)
+  await test("Gráfico SVG Comparativo Mensual: Manejo de array vacío", () => {
+    const htmlVacio = renderGraficoBarrasComparativas([]);
+    assert.ok(htmlVacio.includes("No hay transacciones"), "Debe informar de ausencia de transacciones");
+  });
+
+  await test("Gráfico SVG Comparativo Mensual: Renderizado correcto de barras e indicadores", () => {
+    const datosMock = [
+      { mes: "2026-01", ingresos_carne: 15400, gasto_pienso: 4200, cabezas: 12, kg_pienso: 11000, margen_mes: 11200 },
+      { mes: "2026-02", ingresos_carne: 8900, gasto_pienso: 3100, cabezas: 7, kg_pienso: 8200, margen_mes: 5800 }
+    ];
+    const htmlSvg = renderGraficoBarrasComparativas(datosMock, { ancho: 600, alto: 220 });
+    assert.ok(htmlSvg.includes("<svg"), "Debe generar elemento <svg>");
+    assert.ok(htmlSvg.includes("viewBox=\"0 0 600 220\""), "Debe tener el viewBox correcto");
+    assert.ok(htmlSvg.includes("Ene"), "Debe incluir etiqueta del mes");
+    assert.ok(htmlSvg.includes("Feb"), "Debe incluir etiqueta del segundo mes");
+    assert.ok(htmlSvg.includes("chart-bar-carne"), "Debe renderizar barras de carne");
+    assert.ok(htmlSvg.includes("chart-bar-pienso"), "Debe renderizar barras de pienso");
+  });
+
+  await test("Gráfico SVG Cotización Canal: Renderizado de polilínea y puntos", () => {
+    const datosCotizacion = [
+      { mes: "2026-01", precio_medio_kg: 5.42, cabezas: 12 },
+      { mes: "2026-02", precio_medio_kg: 5.55, cabezas: 7 }
+    ];
+    const htmlCot = renderGraficoCotizacionCanal(datosCotizacion);
+    assert.ok(htmlCot.includes("<svg"), "Debe generar elemento <svg>");
+    assert.ok(htmlCot.includes("<path d=\"M "), "Debe generar línea de tendencia con path SVG");
+    assert.ok(htmlCot.includes("5.42€"), "Debe mostrar precio medio en tooltips/etiquetas");
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);
