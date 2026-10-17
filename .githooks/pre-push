@@ -2,13 +2,31 @@
 # Git Hook: pre-push (Ganaderos Campo)
 # Verificaciones rápidas de Gitleaks, Ruff y Pip-Audit antes de enviar commits al remoto.
 
-if command -v python3 >/dev/null 2>&1; then
-    python3 scripts/pre_push_check.py
+PY_BIN=""
+# 1. Virtualenv activo
+if [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/Scripts/python.exe" ]; then
+    PY_BIN="$VIRTUAL_ENV/Scripts/python.exe"
+elif [ -n "$VIRTUAL_ENV" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
+    PY_BIN="$VIRTUAL_ENV/bin/python"
+# 2. Python Launcher de Windows (py.exe)
+elif command -v py >/dev/null 2>&1; then
+    PY_BIN="py"
+# 3. Instalación estándar en Windows AppData
+elif [ -n "$LOCALAPPDATA" ] && [ -x "$LOCALAPPDATA/Programs/Python/Python314/python.exe" ]; then
+    PY_BIN="$LOCALAPPDATA/Programs/Python/Python314/python.exe"
+elif [ -n "$LOCALAPPDATA" ] && [ -x "$LOCALAPPDATA/Programs/Python/Python312/python.exe" ]; then
+    PY_BIN="$LOCALAPPDATA/Programs/Python/Python312/python.exe"
+# 4. Fallback estándar POSIX
+elif command -v python3 >/dev/null 2>&1; then
+    PY_BIN="python3"
 elif command -v python >/dev/null 2>&1; then
-    python scripts/pre_push_check.py
-else
-    echo "[ERROR] Python no encontrado en PATH. No se pueden ejecutar los chequeos de pre-push."
+    PY_BIN="python"
+fi
+
+if [ -z "$PY_BIN" ]; then
+    echo "[ERROR] Python no encontrado en PATH ni AppData. No se pueden ejecutar los chequeos de pre-push."
     exit 1
 fi
 
+"$PY_BIN" scripts/pre_push_check.py
 exit $?
