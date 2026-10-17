@@ -423,6 +423,83 @@ async function runAllTests() {
     assert.strictEqual(html.includes('data-factura-id="1"'), true);
   });
 
+  await test("Pesajes y GMD: Visualización de historial, cálculo GMD y Rendimiento en Canal", async () => {
+    const { generarHtmlDetalleAnimal } = await import('../../pwa/js/modules/views/detail_view.js');
+    const animalConPesajes = {
+      crotal: "ES091008679094",
+      crotal_4: "9094",
+      raza: "Charolesa",
+      sexo: "M",
+      estado: "B",
+      fecha_nacimiento: "2023-02-01",
+      fecha_alta: "2023-02-01",
+      corral: "CEBADERO",
+      partos: [],
+      movimientos: [],
+      pesajes: [
+        { fecha: "2024-01-01", peso_kg: 240.0, tipo: "Destete", gmd: null, operador: "Paco" },
+        { fecha: "2024-03-01", peso_kg: 320.0, tipo: "Control", gmd: 1.333, operador: "Álvaro" },
+        { fecha: "2024-05-01", peso_kg: 485.0, tipo: "Salida", gmd: 1.625, operador: "Álvaro" }
+      ],
+      rendimiento_canal_pct: 58.7,
+      ultimo_peso_vivo: 485.0,
+      liquidacion_canal: {
+        factura_id: 2,
+        numero_factura: "F-2024-002",
+        fecha_factura: "2024-05-05",
+        peso_canal_kg: 284.7,
+        precio_unitario: 7.20,
+        importe_linea: 2049.84
+      }
+    };
+
+    const html = generarHtmlDetalleAnimal(animalConPesajes);
+    assert.strictEqual(html.includes("Control de Pesajes y Crecimiento"), true);
+    assert.strictEqual(html.includes("data-action=\"registrar-pesaje\""), true);
+    assert.strictEqual(html.includes("485 kg"), true);
+    assert.strictEqual(html.includes("GMD: +1.33 kg/d"), true);
+    assert.strictEqual(html.includes("Rendimiento en Canal"), true);
+    assert.strictEqual(html.includes("58.7%"), true);
+  });
+
+  await test("Alerta Sanitaria: Detección y banner en Ficha de Animal", async () => {
+    const { generarHtmlDetalleAnimal } = await import('../../pwa/js/modules/views/detail_view.js');
+    const animalEnRetirada = {
+      crotal: "ES091008679095",
+      crotal_4: "9095",
+      raza: "Limusina",
+      sexo: "H",
+      estado: "A",
+      fecha_nacimiento: "2022-05-10",
+      fecha_alta: "2022-05-10",
+      corral: "DUEÑA",
+      partos: [],
+      movimientos: [],
+      pesajes: [],
+      alerta_retirada: {
+        medicamento: "DRAXXIN 100 MG/ML",
+        fecha_inicio: "2026-10-10",
+        fecha_fin_retirada: "2026-11-28",
+        dias_retirada: 49
+      },
+      tratamientos: [
+        {
+          medicamento: "DRAXXIN 100 MG/ML",
+          fecha_inicio: "2026-10-10",
+          fecha_fin_retirada: "2026-11-28",
+          dias_retirada: 49,
+          veterinario: "DR. CARLOS SÁNCHEZ"
+        }
+      ]
+    };
+
+    const html = generarHtmlDetalleAnimal(animalEnRetirada);
+    assert.strictEqual(html.includes("banner-alerta-retirada"), true);
+    assert.strictEqual(html.includes("EN PERIODO DE RETIRADA SANITARIA"), true);
+    assert.strictEqual(html.includes("DRAXXIN 100 MG/ML"), true);
+    assert.strictEqual(html.includes("Tratamientos Veterinarios"), true);
+  });
+
   // 17. Tests de Motor Local-First Outbox
   await test("Motor Outbox: Creación, validación de tipos y almacenamiento de mutaciones", async () => {
     const {

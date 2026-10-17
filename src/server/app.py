@@ -10,7 +10,7 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import List, Optional
@@ -268,7 +268,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 
+from src.application.moga_conciliator import conciliar_censo_con_moga, procesar_csv_moga
 from src.application.query_builder import construir_consulta_intent
+from src.application.sales_ingestion_service import guardar_liquidacion_en_bd, parsear_factura_pdf
 from src.application.services import (
     AsistenteService,
     CensoService,
@@ -287,7 +289,9 @@ from src.infrastructure.llm_gateway import (
 from src.infrastructure.repositories import (
     SQLiteAnimalRepository,
     SQLitePartoRepository,
+    SQLitePesajeRepository,
     SQLiteRecetaRepository,
+    SQLiteTratamientoRepository,
     SQLiteUsuarioRepository,
 )
 from src.server.schemas import (
@@ -303,6 +307,9 @@ from src.server.schemas import (
     IntentResponse,
     LogEntry,
     LoginRequest,
+    MogaConciliacionResponse,
+    PesajeCreateRequest,
+    PesajeItemResponse,
     SetLogLevelRequest,
     SetLogLevelResponse,
     SyncConciliarRequest,
@@ -313,6 +320,7 @@ from src.server.schemas import (
     SyncStatusResponse,
     SynthesizeRequest,
     SynthesizeResponse,
+    TratamientoItemResponse,
     UsersListResponse,
     UserSummary,
 )
@@ -321,6 +329,11 @@ PWA_DIR = Path(__file__).resolve().parents[2] / "pwa"
 
 
 def _buscar_archivo_sqlite() -> Optional[Path]:
+    custom_db = os.environ.get("GANADEROS_DB_PATH")
+    if custom_db:
+        p = Path(custom_db)
+        if p.exists():
+            return p
     finca_db = PWA_DIR / "ganaderos_campo.sqlite"
     if finca_db.exists():
         return finca_db
@@ -363,6 +376,8 @@ def recargar_servicios_dominio(app: FastAPI, db_path: Optional[Path] = None) -> 
             animal_repo = SQLiteAnimalRepository(conn)
             parto_repo = SQLitePartoRepository(conn)
             receta_repo = SQLiteRecetaRepository(conn)
+            pesaje_repo = SQLitePesajeRepository(conn)
+            tratamiento_repo = SQLiteTratamientoRepository(conn)
 
             # Comprobar si la tabla usuarios existe en la BD
             has_usuarios = conn.execute(
@@ -376,8 +391,8 @@ def recargar_servicios_dominio(app: FastAPI, db_path: Optional[Path] = None) -> 
                 usuario_repo.ensure_table_and_defaults()
 
             app.state.db_conn = conn
-            app.state.censo_service = CensoService(animal_repo)
-            app.state.sanidad_service = SanidadService(receta_repo)
+            app.state.censo_service = CensoService(animal_repo, pesaje_repo, tratamiento_repo)
+            app.state.sanidad_service = SanidadService(receta_repo, tratamiento_repo)
             app.state.genealogia_service = GenealogiaService(animal_repo, parto_repo)
             app.state.usuario_service = UsuarioService(usuario_repo)
             logger.info(f"[Servicios] Conexión y repositorios cargados desde {db_file}")
@@ -484,7 +499,9 @@ def get_censo_service() -> Optional[CensoService]:
             try:
                 conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
                 animal_repo = SQLiteAnimalRepository(conn)
-                service = CensoService(animal_repo)
+                pesaje_repo = SQLitePesajeRepository(conn)
+                tratamiento_repo = SQLiteTratamientoRepository(conn)
+                service = CensoService(animal_repo, pesaje_repo, tratamiento_repo)
                 app.state.censo_service = service
             except Exception:
                 pass
@@ -852,6 +869,164 @@ async def get_animal_por_crotal(
         corral=animal.corral,
         edad_anios=animal.edad_anios(),
     )
+
+
+@app.get("/api/censo/pesajes", tags=["Censo Ganadero"], response_model=List[PesajeItemResponse])
+async def list_pesajes_animal(
+    crotal: str,
+    censo: Optional[CensoService] = Depends(get_censo_service),
+    authorized: bool = Depends(verify_token),
+):
+    """Devuelve el historial cronológico de pesajes de un animal con cálculo de GMD."""
+    if not censo:
+        return []
+    return censo.get_pesajes_con_gmd(crotal)
+
+
+@app.post("/api/censo/pesajes", tags=["Censo Ganadero"], response_model=PesajeItemResponse)
+async def registrar_pesaje_animal(
+    req: PesajeCreateRequest,
+    censo: Optional[CensoService] = Depends(get_censo_service),
+    authorized: bool = Depends(verify_token),
+):
+    """Registra un nuevo pesaje en manga o tolva."""
+    if not censo:
+        raise HTTPException(status_code=503, detail="Servicio de censo no disponible.")
+    try:
+        f_dt = datetime.strptime(req.fecha[:10], "%Y-%m-%d").date()
+    except ValueError:
+        f_dt = date.today()
+    pesaje = censo.registrar_pesaje(
+        crotal=req.crotal,
+        fecha=f_dt,
+        peso_kg=req.peso_kg,
+        tipo=req.tipo,
+        notas=req.notas,
+        operador=req.operador,
+    )
+    if not pesaje:
+        raise HTTPException(status_code=500, detail="No se pudo registrar el pesaje.")
+    return PesajeItemResponse(
+        id=pesaje.id,
+        crotal=pesaje.crotal,
+        fecha=pesaje.fecha.isoformat(),
+        peso_kg=pesaje.peso_kg,
+        tipo=pesaje.tipo,
+        notas=pesaje.notas,
+        operador=pesaje.operador,
+        gmd_kg_dia=None,
+    )
+
+
+@app.get("/api/censo/tratamientos", tags=["Sanidad y Retiradas"], response_model=List[TratamientoItemResponse])
+async def list_tratamientos_animal(
+    crotal: str,
+    censo: Optional[CensoService] = Depends(get_censo_service),
+    authorized: bool = Depends(verify_token),
+):
+    """Devuelve los tratamientos veterinarios aplicados a un animal con verificación de periodo de retirada."""
+    if not censo:
+        return []
+    return censo.get_tratamientos_animal(crotal)
+
+
+@app.get("/api/censo/alerta-retirada/{crotal}", tags=["Sanidad y Retiradas"])
+async def check_alerta_retirada(
+    crotal: str,
+    censo: Optional[CensoService] = Depends(get_censo_service),
+    authorized: bool = Depends(verify_token),
+):
+    """Verifica si un animal específico se encuentra actualmente en periodo de supresión/retirada sanitaria."""
+    if not censo:
+        return {"en_retirada": False, "alerta": None}
+    alerta = censo.verificar_alerta_retirada(crotal)
+    return {"en_retirada": bool(alerta), "alerta": alerta}
+
+
+@app.post("/api/ventas/ingest-pdf", tags=["Censo Ganadero"])
+async def ingest_ventas_pdf(
+    file: UploadFile = File(...),
+    authorized: bool = Depends(verify_token),
+):
+    """Procesa y almacena de forma atómica una factura de liquidación en PDF (GANAVAEX)."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un documento PDF válido.")
+
+    MAX_PDF_SIZE = 10 * 1024 * 1024  # 10 MB
+    contenido = await file.read()
+    if len(contenido) == 0:
+        raise HTTPException(status_code=400, detail="El archivo PDF está vacío.")
+    if len(contenido) > MAX_PDF_SIZE:
+        raise HTTPException(status_code=413, detail="El archivo excede el tamaño máximo permitido (10 MB).")
+    if not contenido.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="El contenido del archivo no corresponde a un documento PDF válido.")
+
+    try:
+        datos = parsear_factura_pdf(contenido, nombre_archivo=file.filename)
+    except Exception as e:
+        logger.error(f"[Ventas] Error parseando PDF {file.filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=422, detail=f"No se pudieron extraer datos de la factura PDF: {e}")
+
+    db_file = _buscar_archivo_sqlite()
+    if not db_file:
+        raise HTTPException(status_code=503, detail="Base de datos no localizada para guardar la factura.")
+
+    w_conn = sqlite3.connect(str(db_file))
+    try:
+        factura_id = guardar_liquidacion_en_bd(w_conn, datos)
+    except Exception as e:
+        logger.error(f"[Ventas] Error guardando liquidación en BD: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error guardando liquidación: {e}")
+    finally:
+        w_conn.close()
+
+    return {
+        "ok": True,
+        "factura_id": factura_id,
+        "numero_factura": datos["numero_factura"],
+        "fecha_factura": datos["fecha_factura"],
+        "total_cabezas": datos["total_cabezas"],
+        "total_kilos_canal": datos["total_kilos_canal"],
+        "total_factura": datos["total_factura"],
+        "message": f"Factura {datos['numero_factura']} procesada correctamente ({datos['total_cabezas']} canales).",
+    }
+
+
+@app.post("/api/censo/conciliar-moga", tags=["Censo Ganadero"], response_model=MogaConciliacionResponse)
+async def conciliar_censo_moga(
+    file: UploadFile = File(...),
+    censo: Optional[CensoService] = Depends(get_censo_service),
+    authorized: bool = Depends(verify_token),
+):
+    """Concilia un archivo CSV oficial de MoGa / ITACyL contra el censo físico local."""
+    if not censo:
+        raise HTTPException(status_code=503, detail="Servicio de censo no disponible.")
+
+    MAX_CSV_SIZE = 10 * 1024 * 1024  # 10 MB
+    contenido = await file.read()
+    if len(contenido) == 0:
+        raise HTTPException(status_code=400, detail="El archivo CSV está vacío.")
+    if len(contenido) > MAX_CSV_SIZE:
+        raise HTTPException(status_code=413, detail="El archivo CSV excede el tamaño máximo permitido (10 MB).")
+
+    registros_moga = procesar_csv_moga(contenido)
+    if not registros_moga:
+        raise HTTPException(status_code=422, detail="No se encontraron registros de animales válidos en el archivo MoGa.")
+
+    # Incluir todos los animales del censo (activos e históricos/bajas) para detección precisa
+    todos_locales = censo.animal_repo.list_all() if hasattr(censo.animal_repo, "list_all") else censo.list_activos()
+    animales_locales = [
+        {
+            "crotal": str(a.crotal),
+            "crotal_4": str(a.crotal)[-4:],
+            "estado": a.estado,
+            "corral": a.corral,
+        }
+        for a in todos_locales
+    ]
+
+    resultado = conciliar_censo_con_moga(animales_locales, registros_moga)
+    return MogaConciliacionResponse(ok=True, **resultado)
 
 
 # ============================================================

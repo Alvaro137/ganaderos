@@ -86,12 +86,29 @@ def crear_esquema(conn: sqlite3.Connection) -> None:
     CREATE TABLE tratamientos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         crotal TEXT NOT NULL,
-        fecha_inicio TEXT,
+        fecha_inicio TEXT NOT NULL,
         fecha_fin TEXT,
-        medicamento TEXT,
+        medicamento TEXT NOT NULL,
         veterinario TEXT,
-        causa TEXT
+        causa TEXT,
+        dias_retirada INTEGER DEFAULT 0,
+        fecha_fin_retirada TEXT
     );
+    CREATE INDEX IF NOT EXISTS idx_tratamientos_crotal ON tratamientos(crotal);
+
+    DROP TABLE IF EXISTS pesajes;
+    CREATE TABLE pesajes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        crotal TEXT NOT NULL,
+        fecha TEXT NOT NULL,
+        peso_kg REAL NOT NULL,
+        tipo TEXT DEFAULT 'Control',
+        notas TEXT,
+        operador TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_pesajes_crotal ON pesajes(crotal);
+    CREATE INDEX IF NOT EXISTS idx_pesajes_fecha ON pesajes(fecha);
 
     DROP TABLE IF EXISTS explotaciones;
     CREATE TABLE explotaciones (
@@ -403,7 +420,89 @@ def poblar_datos(conn: sqlite3.Connection, num_animales: int = 150) -> None:
         VALUES (1, 'Portes y cuota cooperativa GANAVAEX', ?)
         """, (gastos1,))
 
-    # 7. Metadatos de la base de datos
+    # 7. Pesajes en Manga y Crecimiento (GMD)
+    pesajes_datos = []
+    # 7a. Pesajes de animales liquidados en canal (para cálculo de rendimiento)
+    for c in canales1:
+        crot = c[9]
+        p_canal = c[4] or 280.0
+        # Peso vivo de salida estimado para rendimiento ~58%
+        peso_salida = round(p_canal / 0.582, 1)
+        f_salida = f_fac1 - timedelta(days=2)
+        f_control = f_salida - timedelta(days=90)
+        f_destete = f_control - timedelta(days=120)
+
+        peso_destete = round(peso_salida - (210 * 1.35), 1)
+        peso_destete = max(180.0, peso_destete)
+        peso_control = round(peso_destete + (120 * 1.32), 1)
+
+        pesajes_datos.append((crot, f_destete.isoformat(), peso_destete, "Destete", "Entrada a cebadero", "Álvaro"))
+        pesajes_datos.append((crot, f_control.isoformat(), peso_control, "Control", "Control intermedio báscula manga", "Paco"))
+        pesajes_datos.append((crot, f_salida.isoformat(), peso_salida, "Salida", "Pesaje previo a carga para matadero", "Álvaro"))
+
+    # 7b. Pesajes de animales activos en cebadero
+    animales_cebo_activos = [a for a in animales if a[8] == "A" and a[10] == "CEBADERO"]
+    for anim in animales_cebo_activos[:15]:
+        crot = anim[0]
+        f_dest = hoy - timedelta(days=rnd.randint(120, 200))
+        p_dest = round(rnd.uniform(190.0, 230.0), 1)
+        pesajes_datos.append((crot, f_dest.isoformat(), p_dest, "Destete", "Pesaje al destete", "Paco"))
+
+        dias_inter = rnd.randint(50, 90)
+        f_ctrl = f_dest + timedelta(days=dias_inter)
+        p_ctrl = round(p_dest + (dias_inter * rnd.uniform(1.20, 1.48)), 1)
+        pesajes_datos.append((crot, f_ctrl.isoformat(), p_ctrl, "Control", "Control báscula", "Álvaro"))
+
+    cur.executemany("""
+    INSERT INTO pesajes (crotal, fecha, peso_kg, tipo, notas, operador)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, pesajes_datos)
+
+    # 8. Tratamientos Individuales y Periodos de Retirada
+    tratamientos_datos = []
+    # Dos animales activos con tratamiento vigente (alerta de retirada)
+    animales_activos = [a for a in animales if a[8] == "A"]
+    if len(animales_activos) >= 2:
+        # Animal 1: Draxxin (49 días de retirada, tratado hace 4 días)
+        a1 = animales_activos[0]
+        f_ini1 = hoy - timedelta(days=4)
+        f_fin_ret1 = f_ini1 + timedelta(days=49)
+        tratamientos_datos.append((
+            a1[0], f_ini1.isoformat(), (f_ini1 + timedelta(days=1)).isoformat(),
+            "DRAXXIN 100 MG/ML", "DR. CARLOS SÁNCHEZ (COL. 37/1042)",
+            "Proceso respiratorio bovino (neumonía)", 49, f_fin_ret1.isoformat()
+        ))
+
+        # Animal 2: Betamox (28 días de retirada, tratado hace 2 días)
+        a2 = animales_activos[1]
+        f_ini2 = hoy - timedelta(days=2)
+        f_fin_ret2 = f_ini2 + timedelta(days=28)
+        tratamientos_datos.append((
+            a2[0], f_ini2.isoformat(), (f_ini2 + timedelta(days=2)).isoformat(),
+            "BETAMOX L.A.", "DRA. MARTA HERNÁNDEZ (COL. 37/0891)",
+            "Infección podal / panadizo", 28, f_fin_ret2.isoformat()
+        ))
+
+    # Varios tratamientos históricos ya finalizados
+    for anim in animales_activos[2:12]:
+        dias_atras = rnd.randint(60, 350)
+        f_ini = hoy - timedelta(days=dias_atras)
+        med_nombre, t_ret, _ = rnd.choice(MEDICAMENTOS)
+        f_fin_ret = f_ini + timedelta(days=t_ret)
+        tratamientos_datos.append((
+            anim[0], f_ini.isoformat(), (f_ini + timedelta(days=2)).isoformat(),
+            med_nombre, rnd.choice(VETERINARIOS),
+            "Tratamiento preventivo o cura rutinaria", t_ret, f_fin_ret.isoformat()
+        ))
+
+    cur.executemany("""
+    INSERT INTO tratamientos (
+        crotal, fecha_inicio, fecha_fin, medicamento,
+        veterinario, causa, dias_retirada, fecha_fin_retirada
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, tratamientos_datos)
+
+    # 9. Metadatos de la base de datos
     cur.executemany("""
     INSERT INTO meta (clave, valor) VALUES (?, ?)
     """, [

@@ -1,6 +1,6 @@
 """Entidades del modelo de dominio de ganadería extensiva."""
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from src.domain.value_objects import Crotal, ExplotacionCEA, PeriodoSupresion
@@ -149,5 +149,61 @@ class VentaCanal:
     fecha_salida_lote: Optional[date] = None
     crotal_asignado: Optional[str] = None
     id: Optional[int] = None
+
+
+@dataclass
+class Pesaje:
+    """Registro de peso vivo de un animal en báscula de manga o tolva."""
+    crotal: str
+    fecha: date
+    peso_kg: float
+    tipo: str = "Control"  # Destete, Control, Salida, Entrada
+    notas: Optional[str] = None
+    operador: Optional[str] = None
+    id: Optional[int] = None
+
+    @staticmethod
+    def calcular_gmd(p_anterior: "Pesaje", p_actual: "Pesaje") -> Optional[float]:
+        """Calcula la Ganancia Media Diaria en kg/día entre dos pesajes consecutivos."""
+        dias = (p_actual.fecha - p_anterior.fecha).days
+        if dias <= 0:
+            return None
+        delta_kg = p_actual.peso_kg - p_anterior.peso_kg
+        return round(delta_kg / dias, 3)
+
+    @staticmethod
+    def calcular_rendimiento_canal(peso_canal_kg: float, peso_vivo_kg: float) -> Optional[float]:
+        """Calcula el porcentaje de rendimiento a la canal: (peso canal / peso vivo) * 100."""
+        if peso_vivo_kg <= 0:
+            return None
+        return round((peso_canal_kg / peso_vivo_kg) * 100, 2)
+
+
+@dataclass
+class TratamientoIndividual:
+    """Tratamiento veterinario aplicado individualmente a un animal con periodo de retirada."""
+    crotal: str
+    fecha_inicio: date
+    medicamento: str
+    fecha_fin: Optional[date] = None
+    veterinario: Optional[str] = None
+    causa: Optional[str] = None
+    dias_retirada: int = 0
+    fecha_fin_retirada: Optional[date] = None
+    id: Optional[int] = None
+
+    def esta_en_retirada(self, fecha_ref: Optional[date] = None) -> bool:
+        """Determina si en la fecha de referencia el animal se encuentra en periodo de retirada."""
+        ref = fecha_ref or date.today()
+        fin_retirada = self.fecha_fin_retirada
+        if not fin_retirada and self.dias_retirada > 0:
+            base = self.fecha_fin or self.fecha_inicio
+            fin_retirada = base + timedelta(days=self.dias_retirada)
+        elif not fin_retirada:
+            fin_retirada = self.fecha_fin
+
+        if not fin_retirada:
+            return False
+        return self.fecha_inicio <= ref <= fin_retirada
 
 
