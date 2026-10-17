@@ -17,7 +17,12 @@ import {
   registrarPasoHistorial,
   obtenerTextoBotonVolver
 } from '../config.js';
-import { obtenerLiquidaciones, obtenerDetalleLiquidacion, obtenerResumenKpisLiquidaciones } from '../db.js';
+import {
+  obtenerLiquidaciones,
+  obtenerDetalleLiquidacion,
+  obtenerResumenKpisLiquidaciones,
+  sincronizarBaseDatosAhora
+} from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
 
 export function renderVistaLiquidaciones() {
@@ -58,6 +63,17 @@ export function renderVistaLiquidaciones() {
           <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 2px;">
             Rendimiento en matadero, canales pesadas y facturas de venta (GANAVAEX, S.COOP).
           </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn-action-small" id="btn-subir-factura-pdf" style="min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--brand-primary); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Subir Factura PDF</span>
+          </button>
+          <input type="file" id="input-subir-pdf-factura" accept=".pdf,application/pdf" style="display: none;" />
         </div>
       </div>
 
@@ -371,6 +387,77 @@ function adjuntarEventosLiquidaciones(container) {
     btnClear.addEventListener("click", () => {
       AppState.filtroLiquidaciones = "";
       renderVistaLiquidaciones();
+    });
+  }
+
+  // Subir factura PDF
+  const btnSubirPdf = container.querySelector("#btn-subir-factura-pdf");
+  const inputPdf = container.querySelector("#input-subir-pdf-factura");
+  if (btnSubirPdf && inputPdf) {
+    btnSubirPdf.addEventListener("click", () => inputPdf.click());
+    inputPdf.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        alert("Por favor selecciona un archivo PDF válido.");
+        inputPdf.value = "";
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        alert("El archivo excede el tamaño máximo permitido (10 MB).");
+        inputPdf.value = "";
+        return;
+      }
+
+      let toast = document.getElementById("pwa-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "pwa-toast";
+        toast.className = "pwa-toast";
+        document.body.appendChild(toast);
+      }
+      toast.textContent = `📄 Procesando factura ${file.name}...`;
+      toast.style.backgroundColor = "var(--brand-primary)";
+      toast.style.color = "#ffffff";
+      toast.classList.add("pwa-toast--visible");
+
+      const fd = new FormData();
+      fd.append("file", file);
+
+      try {
+        const token = localStorage.getItem("campo_pwa_token") || "";
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch("./api/ventas/ingest-pdf", {
+          method: "POST",
+          headers,
+          body: fd,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Error del servidor (${res.status})`);
+        }
+
+        const data = await res.json();
+        toast.textContent = `✓ Factura ${data.numero_factura} subida (${data.total_cabezas} canales). Actualizando...`;
+
+        await sincronizarBaseDatosAhora(token).catch(() => {});
+        setTimeout(() => {
+          toast.classList.remove("pwa-toast--visible");
+          renderVistaLiquidaciones();
+        }, 1500);
+      } catch (err) {
+        console.error("[Ventas] Error subiendo factura PDF:", err);
+        toast.textContent = `⚠️ Error subiendo factura: ${err.message}`;
+        toast.style.backgroundColor = "var(--md-error, #ba1a1a)";
+        setTimeout(() => toast.classList.remove("pwa-toast--visible"), 4000);
+      } finally {
+        inputPdf.value = "";
+      }
     });
   }
 }

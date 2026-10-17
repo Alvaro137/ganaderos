@@ -23,6 +23,7 @@ import { renderVistaAnimales } from './cattle_view.js';
 import { abrirModalRegistroParto } from './birth_modal.js';
 import { renderVistaLiquidaciones, verDetalleLiquidacion } from './sales_view.js';
 import { renderVistaMovimientos } from './movements_view.js';
+import { abrirModalRegistroPesaje } from './weighing_modal.js';
 
 
 function adjuntarEventosDetalle(contenedor) {
@@ -50,6 +51,15 @@ function adjuntarEventosDetalle(contenedor) {
       const c4 = btn.getAttribute("data-madre-4") || btn.dataset.madre4;
       const raza = btn.getAttribute("data-madre-raza") || btn.dataset.madreRaza;
       abrirModalRegistroParto({ madreCrotal: crotal, madre4: c4, madreRaza: raza });
+    });
+  });
+  contenedor.querySelectorAll('[data-action="registrar-pesaje"]').forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const crotal = btn.getAttribute("data-crotal") || btn.dataset.crotal;
+      const c4 = btn.getAttribute("data-crotal-4") || btn.dataset.crotal4;
+      abrirModalRegistroPesaje({ crotal, crotal_4: c4 });
     });
   });
   contenedor.querySelectorAll('[data-action="ver-factura"]').forEach((btn) => {
@@ -376,6 +386,48 @@ export function generarHtmlDetalleAnimal(animal) {
 
   const esHembra = !animal.sexo || ['H', 'V'].includes(animal.sexo.trim().toUpperCase()[0]);
   const descSexo = (animal.sexo === 'M' || animal.sexo === 'Machos') ? 'Macho' : esHembra ? 'Hembra' : escapeHtml(animal.sexo || 'N/D');
+  const htmlPesajes = (!animal.pesajes || animal.pesajes.length === 0)
+    ? `<div class="empty-notice" style="padding: 14px; text-align: center; color: var(--text-dim); background: var(--bg-surface-soft, #f9fafb); border-radius: 8px;">Sin pesajes registrados en báscula.</div>`
+    : `<div class="pesajes-list" style="display: flex; flex-direction: column; gap: 8px;">` +
+      animal.pesajes.slice().reverse().map(p => `
+        <div class="pesaje-item-card" style="background: var(--md-surface-container-low, #f8faf8); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-weight: 800; font-size: 1.15rem; color: var(--brand-primary);">${formatearKg(p.peso_kg)} kg</span>
+              <span class="status-pill ${p.tipo === 'Salida' ? 'venta' : 'activo'}" style="font-size: 0.72rem;">${escapeHtml(p.tipo || 'Control')}</span>
+              ${Number.isFinite(p.gmd) ? `<span style="background: ${p.gmd >= 0 ? '#e8f5e9' : '#fff3e0'}; color: ${p.gmd >= 0 ? '#1b5e20' : '#e65100'}; font-weight: 700; font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; border: 1px solid ${p.gmd >= 0 ? '#c8e6c9' : '#ffe0b2'};">GMD: ${p.gmd > 0 ? '+' : ''}${p.gmd.toFixed(2)} kg/d</span>` : ''}
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+              ${formatearFecha(p.fecha)} ${p.operador ? `• ${escapeHtml(p.operador)}` : ''} ${p.notas ? `• <em>${escapeHtml(p.notas)}</em>` : ''}
+            </div>
+          </div>
+        </div>
+      `).join("") + `</div>`;
+
+  const htmlTratamientos = (!animal.tratamientos || animal.tratamientos.length === 0)
+    ? ""
+    : `
+    <div class="section-heading" style="margin-top: 20px;">Tratamientos Veterinarios (${animal.tratamientos.length})</div>
+    <div class="tratamientos-list" style="display: flex; flex-direction: column; gap: 8px;">
+      ${animal.tratamientos.map(t => {
+        const hoyStr = new Date().toISOString().slice(0, 10);
+        const fin = t.fecha_fin_retirada || t.fecha_fin;
+        const enRetirada = t.fecha_inicio <= hoyStr && fin && fin >= hoyStr;
+        return `
+        <div class="tratamiento-item-card" style="background: ${enRetirada ? '#fff1f2' : 'var(--md-surface-container-low, #f8faf8)'}; border: 1px solid ${enRetirada ? '#fecdd3' : 'var(--md-outline-variant, #e5e7eb)'}; border-radius: 8px; padding: 10px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+            <span style="font-weight: 700; color: ${enRetirada ? '#be123c' : 'var(--text-main)'};">${escapeHtml(t.medicamento)}</span>
+            <span class="status-pill ${enRetirada ? 'baja' : 'activo'}" style="font-size: 0.72rem;">${enRetirada ? 'En Retirada' : 'Finalizado'}</span>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 3px;">
+            Aplicado: ${formatearFecha(t.fecha_inicio)} • Espera: ${t.dias_retirada || 0} días (${formatearFecha(fin)})
+            ${t.veterinario ? `<br><span style="font-size: 0.75rem;">${escapeHtml(t.veterinario)}</span>` : ''}
+          </div>
+        </div>
+        `;
+      }).join("")}
+    </div>
+    `;
 
   return `
     <div class="detail-card">
@@ -394,6 +446,20 @@ export function generarHtmlDetalleAnimal(animal) {
         </div>
         <span class="status-pill ${estadoClase}">${estadoTexto}</span>
       </div>
+
+      ${animal.alerta_retirada ? `
+      <div class="banner-alerta-retirada" style="background: #ffdad6; border: 1.5px solid #ba1a1a; border-radius: var(--md-shape-md, 12px); padding: 14px 16px; margin: 12px 0 16px 0; color: #410002;">
+        <div style="display: flex; align-items: flex-start; gap: 10px;">
+          <span style="font-size: 1.4rem;">⚠️</span>
+          <div>
+            <div style="font-weight: 800; font-size: 0.98rem; color: #ba1a1a;">EN PERIODO DE RETIRADA SANITARIA</div>
+            <div style="font-size: 0.88rem; margin-top: 2px; line-height: 1.35;">
+              Tratado con <strong>${escapeHtml(animal.alerta_retirada.medicamento)}</strong>. Prohibido traslado a matadero o venta hasta el <strong>${formatearFecha(animal.alerta_retirada.fecha_fin_retirada || animal.alerta_retirada.fecha_fin)}</strong>.
+            </div>
+          </div>
+        </div>
+      </div>
+      ` : ""}
 
       <div class="animal-specs-grid" style="padding-top: 14px; gap: 14px 20px;">
         <div style="grid-column: 1 / -1;">
@@ -466,6 +532,12 @@ export function generarHtmlDetalleAnimal(animal) {
             <div class="spec-label">Importe Liquidado</div>
             <div class="spec-val" style="font-weight: 800; color: var(--text-main);">${formatearMoneda(animal.liquidacion_canal.importe_linea)} €</div>
           </div>
+          ${animal.rendimiento_canal_pct ? `
+          <div>
+            <div class="spec-label">Rendimiento en Canal</div>
+            <div class="spec-val" style="font-size: 1.15rem; font-weight: 800; color: var(--brand-primary);">${animal.rendimiento_canal_pct}% <span style="font-size: 0.76rem; font-weight: 500; color: var(--text-muted); display: block;">(${formatearKg(animal.liquidacion_canal.peso_canal_kg)} kg canal / ${formatearKg(animal.ultimo_peso_vivo)} kg vivo)</span></div>
+          </div>
+          ` : ""}
           <div>
             <div class="spec-label">Factura Liquidación</div>
             <button class="clickable-chip chip-factura" data-action="ver-factura" data-factura-id="${animal.liquidacion_canal.factura_id}" title="Ver factura y canales del lote" style="margin-top: 2px;">
@@ -481,8 +553,19 @@ export function generarHtmlDetalleAnimal(animal) {
       </div>
       ` : ""}
 
-      <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- Control de Pesajes y Crecimiento -->
+      <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+        <span>Control de Pesajes y Crecimiento (${animal.pesajes ? animal.pesajes.length : 0})</span>
+        <button class="btn-registrar-parto-detail" data-action="registrar-pesaje" data-crotal="${escapeHtml(animal.crotal)}" data-crotal-4="${escapeHtml(animal.crotal_4)}">
+          <span>➕ Añadir Pesaje</span>
+        </button>
+      </div>
+      <div>${htmlPesajes}</div>
 
+      <!-- Tratamientos Sanitarios -->
+      ${htmlTratamientos}
+
+      <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
         <span>Historial de Partos y Crías (${animal.partos ? animal.partos.length : 0})</span>
         ${esHembra && esActivo ? `
           <button class="btn-registrar-parto-detail" data-action="registrar-parto" data-madre-crotal="${escapeHtml(animal.crotal)}" data-madre-4="${escapeHtml(animal.crotal_4)}" data-madre-raza="${escapeHtml(animal.raza || '')}">

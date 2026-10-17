@@ -558,7 +558,92 @@ class CampoDB {
       animal.liquidacion_canal = null;
     }
 
+    // Historial de pesajes en manga / tolva y ganancia media diaria (GMD)
+    try {
+      animal.pesajes = this.ejecutarQuery(
+        "SELECT * FROM pesajes WHERE crotal = ? ORDER BY fecha ASC, id ASC",
+        [crotal]
+      );
+      if (animal.pesajes && animal.pesajes.length > 0) {
+        for (let i = 0; i < animal.pesajes.length; i++) {
+          if (i > 0) {
+            const pPrev = animal.pesajes[i - 1];
+            const pCurr = animal.pesajes[i];
+            const dPrev = new Date(pPrev.fecha);
+            const dCurr = new Date(pCurr.fecha);
+            const diffDias = Math.round((dCurr - dPrev) / (1000 * 60 * 60 * 24));
+            if (diffDias > 0 && pCurr.peso_kg != null && pPrev.peso_kg != null) {
+              pCurr.gmd = Number(((pCurr.peso_kg - pPrev.peso_kg) / diffDias).toFixed(3));
+            } else {
+              pCurr.gmd = null;
+            }
+          } else {
+            animal.pesajes[0].gmd = null;
+          }
+        }
+      }
+    } catch (_) {
+      animal.pesajes = [];
+    }
+
+    // Rendimiento a la canal: (peso canal / peso vivo de salida o último) * 100
+    animal.rendimiento_canal_pct = null;
+    animal.ultimo_peso_vivo = null;
+    if (animal.liquidacion_canal && animal.pesajes && animal.pesajes.length > 0) {
+      const pSalida = animal.pesajes.slice().reverse().find(p => p.tipo === "Salida") || animal.pesajes[animal.pesajes.length - 1];
+      if (pSalida && pSalida.peso_kg > 0 && animal.liquidacion_canal.peso_canal_kg > 0) {
+        animal.rendimiento_canal_pct = Number(
+          ((animal.liquidacion_canal.peso_canal_kg / pSalida.peso_kg) * 100).toFixed(1)
+        );
+        animal.ultimo_peso_vivo = pSalida.peso_kg;
+      }
+    }
+
+    // Historial de tratamientos veterinarios y detección de alerta de retirada activa
+    try {
+      animal.tratamientos = this.ejecutarQuery(
+        "SELECT * FROM tratamientos WHERE crotal = ? ORDER BY fecha_inicio DESC, id DESC",
+        [crotal]
+      );
+      const hoyIso = new Date().toISOString().slice(0, 10);
+      animal.alerta_retirada = (animal.tratamientos || []).find(t => {
+        let fin = t.fecha_fin_retirada;
+        if (!fin && Number(t.dias_retirada) > 0) {
+          const baseStr = t.fecha_fin || t.fecha_inicio;
+          if (baseStr) {
+            const d = new Date(baseStr);
+            d.setDate(d.getDate() + Number(t.dias_retirada));
+            fin = d.toISOString().slice(0, 10);
+            t.fecha_fin_retirada = fin;
+          }
+        } else if (!fin) {
+          fin = t.fecha_fin;
+        }
+        return t.fecha_inicio <= hoyIso && fin && fin >= hoyIso;
+      }) || null;
+    } catch (_) {
+      animal.tratamientos = [];
+      animal.alerta_retirada = null;
+    }
+
     return animal;
+  }
+
+  registrarPesaje({ crotal, fecha, peso_kg, tipo = "Control", notas = null, operador = "Álvaro" }) {
+    if (!this.db) throw new Error("Base de datos no inicializada");
+    const fStr = fecha || new Date().toISOString().slice(0, 10);
+    const sql = `
+      INSERT INTO pesajes (crotal, fecha, peso_kg, tipo, notas, operador)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    this.ejecutarQuery(sql, [crotal, fStr, Number(peso_kg), tipo, notas, operador]);
+    try {
+      const data = this.db.export();
+      guardarBaseDatosLocal(data.buffer);
+    } catch (e) {
+      console.warn("[DB] Advertencia persistiendo en IndexedDB:", e);
+    }
+    return true;
   }
 
 

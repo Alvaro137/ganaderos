@@ -1,5 +1,5 @@
 // Service Worker para Ganaderos Campo (Offline-First)
-const CACHE_NAME = "ganaderos-campo-v33";
+const CACHE_NAME = "ganaderos-campo-v34";
 
 
 const ASSETS = [
@@ -24,6 +24,7 @@ const ASSETS = [
   "./js/modules/views/cattle_view.js",
   "./js/modules/views/detail_view.js",
   "./js/modules/views/birth_modal.js",
+  "./js/modules/views/weighing_modal.js",
   "./js/modules/views/sanitary_view.js",
   "./js/modules/views/feeds_view.js",
   "./js/modules/views/movements_view.js",

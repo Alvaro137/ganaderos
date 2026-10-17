@@ -6,18 +6,27 @@ from datetime import date
 from typing import Any, List, Optional
 
 from src.application.query_builder import QueryResult
-from src.domain.models import Animal, Parto, RecetaSanitaria, Usuario
+from src.domain.models import Animal, Parto, Pesaje, RecetaSanitaria, Usuario
 from src.domain.repositories import (
     AnimalRepository,
     PartoRepository,
+    PesajeRepository,
     RecetaRepository,
+    TratamientoRepository,
     UsuarioRepository,
 )
 
 
 class CensoService:
-    def __init__(self, animal_repo: AnimalRepository):
+    def __init__(
+        self,
+        animal_repo: AnimalRepository,
+        pesaje_repo: Optional[PesajeRepository] = None,
+        tratamiento_repo: Optional[TratamientoRepository] = None,
+    ):
         self.animal_repo = animal_repo
+        self.pesaje_repo = pesaje_repo
+        self.tratamiento_repo = tratamiento_repo
 
     def get_animal_by_crotal(self, crotal: str) -> Optional[Animal]:
         return self.animal_repo.get_by_crotal(crotal)
@@ -28,15 +37,106 @@ class CensoService:
     def list_reproductoras(self) -> List[Animal]:
         return self.animal_repo.list_reproductoras()
 
+    def registrar_pesaje(
+        self,
+        crotal: str,
+        fecha: date,
+        peso_kg: float,
+        tipo: str = "Control",
+        notas: Optional[str] = None,
+        operador: Optional[str] = None,
+    ) -> Optional[Pesaje]:
+        if not self.pesaje_repo:
+            return None
+        p = Pesaje(
+            crotal=crotal,
+            fecha=fecha,
+            peso_kg=peso_kg,
+            tipo=tipo,
+            notas=notas,
+            operador=operador,
+        )
+        return self.pesaje_repo.create(p)
+
+    def get_pesajes_con_gmd(self, crotal: str) -> List[dict]:
+        if not self.pesaje_repo:
+            return []
+        pesajes = self.pesaje_repo.list_by_crotal(crotal)
+        res = []
+        for i, p in enumerate(pesajes):
+            gmd = None
+            if i > 0:
+                gmd = Pesaje.calcular_gmd(pesajes[i - 1], p)
+            res.append({
+                "id": p.id,
+                "crotal": p.crotal,
+                "fecha": p.fecha.isoformat(),
+                "peso_kg": p.peso_kg,
+                "tipo": p.tipo,
+                "notas": p.notas,
+                "operador": p.operador,
+                "gmd_kg_dia": gmd,
+            })
+        return res
+
+    def get_tratamientos_animal(self, crotal: str, fecha_ref: Optional[date] = None) -> List[dict]:
+        if not self.tratamiento_repo:
+            return []
+        ref = fecha_ref or date.today()
+        tratamientos = self.tratamiento_repo.list_by_crotal(crotal)
+        return [
+            {
+                "id": t.id,
+                "crotal": t.crotal,
+                "fecha_inicio": t.fecha_inicio.isoformat(),
+                "fecha_fin": t.fecha_fin.isoformat() if t.fecha_fin else None,
+                "medicamento": t.medicamento,
+                "veterinario": t.veterinario,
+                "causa": t.causa,
+                "dias_retirada": t.dias_retirada,
+                "fecha_fin_retirada": t.fecha_fin_retirada.isoformat() if t.fecha_fin_retirada else None,
+                "en_retirada": t.esta_en_retirada(ref),
+            }
+            for t in tratamientos
+        ]
+
+    def verificar_alerta_retirada(self, crotal: str, fecha_ref: Optional[date] = None) -> Optional[dict]:
+        trats = self.get_tratamientos_animal(crotal, fecha_ref)
+        activos = [t for t in trats if t.get("en_retirada")]
+        if activos:
+            return activos[0]
+        return None
+
 
 class SanidadService:
-    def __init__(self, receta_repo: RecetaRepository):
+    def __init__(
+        self,
+        receta_repo: RecetaRepository,
+        tratamiento_repo: Optional[TratamientoRepository] = None,
+    ):
         self.receta_repo = receta_repo
+        self.tratamiento_repo = tratamiento_repo
 
     def get_recetas_activas(self, fecha_referencia: Optional[date] = None) -> List[RecetaSanitaria]:
         ref = fecha_referencia or date.today()
         recetas = self.receta_repo.list_all()
         return [r for r in recetas if r.fecha_limite_carne() and r.fecha_limite_carne() >= ref]
+
+    def get_animales_en_retirada(self, fecha_referencia: Optional[date] = None) -> List[dict]:
+        if not self.tratamiento_repo:
+            return []
+        ref = fecha_referencia or date.today()
+        trats = self.tratamiento_repo.list_activos(ref)
+        return [
+            {
+                "crotal": t.crotal,
+                "medicamento": t.medicamento,
+                "fecha_inicio": t.fecha_inicio.isoformat(),
+                "fecha_fin_retirada": t.fecha_fin_retirada.isoformat() if t.fecha_fin_retirada else None,
+                "veterinario": t.veterinario,
+            }
+            for t in trats
+        ]
 
 
 class GenealogiaService:

@@ -3031,3 +3031,38 @@ body {
   color: var(--md-on-surface-variant);
   line-height: 1.5;
 }
+
+/* ============================================================
+   CONTROL DE PESAJES, GMD Y ALERTAS SANITARIAS
+   ============================================================ */
+
+.banner-alerta-retirada {
+  box-shadow: 0 2px 6px rgba(186, 26, 26, 0.15);
+  animation: pulse-border 2.5s infinite ease-in-out;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: #ba1a1a; }
+  50% { border-color: #ff5449; }
+}
+
+.pesaje-item-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pesaje-item-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.tratamiento-item-card {
+  transition: background-color 0.2s ease;
+}
+
+.btn-tipo-pesaje:hover {
+  filter: brightness(0.95);
+}
+
+.btn-step-peso:active {
+  background: #e2e8f0 !important;
+}
