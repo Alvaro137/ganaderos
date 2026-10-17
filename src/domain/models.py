@@ -115,3 +115,39 @@ class Usuario:
     activo: bool = True
     creado_en: Optional[str] = None
 
+
+@dataclass
+class VentaLiquidacion:
+    """Liquidación oficial de venta de ganado a matadero o cooperativa."""
+    numero_factura: str
+    fecha_factura: Optional[date] = None
+    fecha_pago: Optional[date] = None
+    cliente_cooperativa: str = "GANAVAEX, S.COOP"
+    cif_cliente: str = "F37335411"
+    total_cabezas: Optional[float] = None
+    total_kilos_canal: Optional[float] = None
+    base_imponible: Optional[float] = None
+    porcentaje_iva: float = 10.50
+    cuota_iva: Optional[float] = None
+    gastos_total: Optional[float] = None
+    total_factura: Optional[float] = None
+    archivo_origen: Optional[str] = None
+    id: Optional[int] = None
+
+
+@dataclass
+class VentaCanal:
+    """Canal o cabeza individual liquidada en matadero con peso y precio canal."""
+    factura_id: int
+    linea_numero: int
+    articulo: str
+    cabezas: float = 1.0
+    peso_canal_kg: Optional[float] = None
+    precio_unitario: Optional[float] = None
+    importe_linea: Optional[float] = None
+    referencia: Optional[str] = None
+    fecha_salida_lote: Optional[date] = None
+    crotal_asignado: Optional[str] = None
+    id: Optional[int] = None
+
+
