@@ -1,0 +1,14 @@
+#!/bin/sh
+# Git Hook: pre-push (Ganaderos Campo)
+# Verificaciones rápidas de Gitleaks, Ruff y Pip-Audit antes de enviar commits al remoto.
+
+if command -v python3 >/dev/null 2>&1; then
+    python3 scripts/pre_push_check.py
+elif command -v python >/dev/null 2>&1; then
+    python scripts/pre_push_check.py
+else
+    echo "[ERROR] Python no encontrado en PATH. No se pueden ejecutar los chequeos de pre-push."
+    exit 1
+fi
+
+exit $?
