@@ -108,3 +108,32 @@ export async function registrarPartoOptimista(datos) {
   return await db.registrarPartoOptimista(datos);
 }
 
+export function obtenerLiquidaciones(filtro = "") {
+  const db = getDB();
+  if (!db || typeof db.obtenerLiquidaciones !== "function") return [];
+  return db.obtenerLiquidaciones(filtro);
+}
+
+export function obtenerDetalleLiquidacion(facturaId) {
+  const db = getDB();
+  if (!db || typeof db.obtenerDetalleLiquidacion !== "function") return null;
+  return db.obtenerDetalleLiquidacion(facturaId);
+}
+
+export function obtenerResumenKpisLiquidaciones() {
+  const db = getDB();
+  if (!db || typeof db.obtenerResumenKpisLiquidaciones !== "function") {
+    return {
+      total_facturas: 0,
+      total_importe: 0,
+      total_cabezas: 0,
+      total_kilos: 0,
+      peso_medio: 0,
+      precio_medio: 0,
+      total_canales_pesadas: 0
+    };
+  }
+  return db.obtenerResumenKpisLiquidaciones();
+}
+
+
