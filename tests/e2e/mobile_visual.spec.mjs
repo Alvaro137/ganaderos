@@ -192,4 +192,71 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v9_factura_canales.png') });
   });
+
+  test('V10. Ficha Técnica: Control de Pesajes, GMD y Rendimiento a la Canal', async ({ page }) => {
+    // Abrir un animal que tenga pesajes y canal (los primeros de la lista)
+    const card = page.locator('.animal-card').first();
+    await card.click();
+
+    const detailCard = page.locator('.detail-card');
+    await expect(detailCard).toBeVisible({ timeout: 10000 });
+
+    const btnAnadirPesaje = page.locator('[data-action="registrar-pesaje"]');
+    await expect(btnAnadirPesaje).toBeVisible();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v10_pesajes_gmd.png') });
+  });
+
+  test('V11. Modal Táctil de Pesaje en Manga y Validación', async ({ page }) => {
+    const card = page.locator('.animal-card').first();
+    await card.click();
+
+    const btnAnadirPesaje = page.locator('[data-action="registrar-pesaje"]');
+    await expect(btnAnadirPesaje).toBeVisible({ timeout: 10000 });
+    await btnAnadirPesaje.click();
+
+    const modalPesaje = page.locator('#modal-registro-pesaje');
+    await expect(modalPesaje).toBeVisible();
+    await expect(page.locator('#input-peso-kg')).toBeVisible();
+
+    // Pulsa un botón de incremento rápido
+    const btnMasDiez = page.locator('.btn-step-peso[data-step="+10"]');
+    await btnMasDiez.click();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v11_modal_pesaje.png') });
+
+    // Cerrar modal
+    await page.locator('#btn-cerrar-modal-pesaje').click();
+    await expect(modalPesaje).toBeHidden();
+  });
+
+  test('V12. Ficha Técnica con Alerta Preventiva de Retirada Sanitaria', async ({ page }) => {
+    // Buscar animal en retirada activa (ES083710104591 - 1045)
+    const cardRetirada = page.locator('.animal-card[data-crotal="ES083710104591"]');
+    await expect(cardRetirada).toBeVisible({ timeout: 10000 });
+    await cardRetirada.click();
+
+    const detailCard = page.locator('.detail-card');
+    await expect(detailCard).toBeVisible({ timeout: 10000 });
+
+    const bannerRetirada = page.locator('.banner-alerta-retirada');
+    await expect(bannerRetirada).toBeVisible({ timeout: 5000 });
+    await expect(bannerRetirada).toContainText('EN PERIODO DE RETIRADA SANITARIA');
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v12_alerta_retirada.png') });
+  });
+
+  test('V13. Vista de Liquidaciones con Botón de Subida de Factura PDF', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnSubirPdf = page.locator('#btn-subir-factura-pdf');
+    await expect(btnSubirPdf).toBeVisible({ timeout: 10000 });
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v13_subir_factura_pdf.png') });
+  });
 });
