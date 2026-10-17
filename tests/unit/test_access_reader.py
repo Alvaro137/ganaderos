@@ -62,5 +62,40 @@ class TestAccessReader(unittest.TestCase):
         self.assertEqual(res[0]["fecha_parto"], "2025-03-14")
 
 
+    def test_esta_bloqueada_por_access(self):
+        import tempfile
+        from pathlib import Path
+
+        from src.infrastructure.access_reader import esta_bloqueada_por_access
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir) / "bdlibro.mdb"
+            p.write_text("mdb")
+            self.assertFalse(esta_bloqueada_por_access(p))
+
+            ldb = Path(tmpdir) / "bdlibro.ldb"
+            ldb.write_text("ldb")
+            self.assertTrue(esta_bloqueada_por_access(p))
+
+    def test_file_lock_descarta_lock_obsoleto_por_pid_muerto(self):
+        import tempfile
+        from pathlib import Path
+
+        from src.infrastructure.access_reader import FileLock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_file = Path(tmpdir) / "test.lock"
+            # Escribir un lock con un PID imposible (ej. 9999999)
+            lock_file.write_text("LOCKED by test PID=9999999 2026-01-01T00:00:00\n", encoding="utf-8")
+
+            # El FileLock debe detectar que el PID no existe, descartar el lock y adquirirlo con éxito
+            lock = FileLock(lock_file, timeout=2.0)
+            with lock:
+                self.assertTrue(lock_file.exists())
+                contenido = lock_file.read_text(encoding="utf-8")
+                self.assertIn("ganaderos-campo", contenido)
+            self.assertFalse(lock_file.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
