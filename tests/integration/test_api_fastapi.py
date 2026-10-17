@@ -193,3 +193,40 @@ class TestFastAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 413)
         self.assertIn("supera el límite", response.json()["detail"])
 
+    def test_admin_logs_sin_token_es_401(self):
+        resp = self.client.get("/api/admin/logs")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_admin_logs_operador_normal_es_403(self):
+        token_jose = self.client.post("/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_jose"}).json()["token"]
+        resp = self.client.get("/api/admin/logs", headers={"Authorization": f"Bearer {token_jose}"})
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("Solo el administrador", resp.json()["detail"])
+
+    def test_admin_logs_admin_success(self):
+        token_admin = self.client.post("/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_admin"}).json()["token"]
+        resp = self.client.get("/api/admin/logs?lines=50", headers={"Authorization": f"Bearer {token_admin}"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        self.assertIn("current_level", data)
+        self.assertIn("log_dir", data)
+        self.assertIsInstance(data["logs"], list)
+
+    def test_admin_logs_level_change(self):
+        token_admin = self.client.post("/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_admin"}).json()["token"]
+        # Cambiar a DEBUG
+        resp = self.client.post("/api/admin/logs/level", json={"level": "DEBUG"}, headers={"Authorization": f"Bearer {token_admin}"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["new_level"], "DEBUG")
+
+        # Restaurar a INFO
+        resp_info = self.client.post("/api/admin/logs/level", json={"level": "INFO"}, headers={"Authorization": f"Bearer {token_admin}"})
+        self.assertEqual(resp_info.status_code, 200)
+        self.assertEqual(resp_info.json()["new_level"], "INFO")
+
+        # Nivel inválido -> 422
+        resp_bad = self.client.post("/api/admin/logs/level", json={"level": "NIVEL_INVALIDO"}, headers={"Authorization": f"Bearer {token_admin}"})
+        self.assertEqual(resp_bad.status_code, 422)
+
+

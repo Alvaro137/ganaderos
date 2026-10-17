@@ -1,3 +1,4 @@
+import collections
 import hashlib
 import hmac
 import logging
@@ -9,6 +10,7 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import List, Optional
 
@@ -37,6 +39,91 @@ def _cargar_env_file():
 
 
 _cargar_env_file()
+
+_LOG_BUFFER = collections.deque(maxlen=1000)
+
+
+class _MemoryBufferHandler(logging.Handler):
+    """Buffer circular en memoria para inspección inmediata de logs recientes."""
+
+    def emit(self, record):
+        try:
+            msg = record.getMessage()
+            t_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created))
+            _LOG_BUFFER.append({
+                "timestamp": t_str,
+                "level": record.levelname,
+                "logger": record.name,
+                "message": msg,
+            })
+        except Exception:
+            pass
+
+
+def _resolver_directorio_logs() -> Path:
+    """Busca ubicación idónea de logs: pen USB (/mnt/usb), variable de entorno o ./logs."""
+    env_dir = os.environ.get("GANADEROS_LOG_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        except OSError:
+            pass
+
+    candidatos = [
+        Path("/mnt/usb/ganaderos_logs"),
+        Path("/mnt/usb/logs"),
+        Path("/mnt/usb"),
+        Path("/media/varo/ORANGE/logs"),
+        Path(_REPO_ROOT) / "logs",
+    ]
+    for c in candidatos:
+        try:
+            if c.exists() or (c.parent.exists() and os.access(str(c.parent), os.W_OK)):
+                c.mkdir(parents=True, exist_ok=True)
+                test_file = c / ".test_write"
+                test_file.write_text("ok", encoding="utf-8")
+                test_file.unlink(missing_ok=True)
+                return c
+        except OSError:
+            continue
+    fallback = Path(_REPO_ROOT) / "logs"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+_log_dir = _resolver_directorio_logs()
+_log_file = _log_dir / "ganaderos.log"
+
+_formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+_mem_handler = _MemoryBufferHandler()
+_mem_handler.setFormatter(_formatter)
+
+root_logger = logging.getLogger()
+initial_level_str = os.environ.get("LOG_LEVEL", "INFO").upper()
+initial_level = getattr(logging, initial_level_str, logging.INFO)
+root_logger.setLevel(initial_level)
+
+if not any(isinstance(h, _MemoryBufferHandler) for h in root_logger.handlers):
+    root_logger.addHandler(_mem_handler)
+
+try:
+    _file_handler = RotatingFileHandler(
+        str(_log_file),
+        maxBytes=5 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    _file_handler.setFormatter(_formatter)
+    if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
+        root_logger.addHandler(_file_handler)
+except OSError:
+    pass
 
 logger = logging.getLogger("ganaderos.server")
 
@@ -203,6 +290,7 @@ from src.infrastructure.repositories import (
     SQLiteUsuarioRepository,
 )
 from src.server.schemas import (
+    AdminLogsResponse,
     AIModelResponse,
     AnimalResponse,
     AuthTokenResponse,
@@ -211,7 +299,10 @@ from src.server.schemas import (
     HealthResponse,
     IntentRequest,
     IntentResponse,
+    LogEntry,
     LoginRequest,
+    SetLogLevelRequest,
+    SetLogLevelResponse,
     SyncPushRequest,
     SyncStatusResponse,
     SynthesizeRequest,
@@ -447,6 +538,72 @@ def _autenticacion_op(
 async def health_check():
     """Comprueba la disponibilidad del servicio y su versión activa."""
     return {"status": "healthy", "service": "ganaderos-campo", "version": "2.0.0"}
+
+
+@app.get("/api/admin/logs", tags=["Estado"], response_model=AdminLogsResponse)
+async def get_admin_logs(
+    request: Request,
+    lines: int = 100,
+    level: Optional[str] = None,
+    logger_name: Optional[str] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Devuelve las entradas recientes de log en memoria (solo administradores)."""
+    datos = _autenticacion_op(request, credentials)
+    if datos.get("user_id") != "usr_admin" and datos.get("rol") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador puede consultar los logs del sistema.",
+        )
+
+    nivel_filtro = level.upper() if level else None
+    entradas = list(_LOG_BUFFER)
+    if nivel_filtro:
+        entradas = [e for e in entradas if e["level"] == nivel_filtro]
+    if logger_name:
+        entradas = [e for e in entradas if logger_name.lower() in e["logger"].lower()]
+
+    limite = min(max(1, lines), 1000)
+    entradas_finales = entradas[-limite:]
+
+    current_level_str = logging.getLevelName(logging.getLogger().level)
+    return AdminLogsResponse(
+        ok=True,
+        log_dir=str(_log_dir),
+        log_file=str(_log_file) if _log_file.exists() else None,
+        current_level=current_level_str,
+        total_buffered=len(_LOG_BUFFER),
+        logs=[LogEntry(**e) for e in entradas_finales],
+    )
+
+
+@app.post("/api/admin/logs/level", tags=["Estado"], response_model=SetLogLevelResponse)
+async def set_admin_log_level(
+    req: SetLogLevelRequest,
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Modifica el nivel de logging en caliente (DEBUG, INFO, WARNING, ERROR, CRITICAL)."""
+    datos = _autenticacion_op(request, credentials)
+    if datos.get("user_id") != "usr_admin" and datos.get("rol") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador puede modificar el nivel de log.",
+        )
+
+    prev_str = logging.getLevelName(logging.getLogger().level)
+    nuevo_nivel = getattr(logging, req.level.upper(), logging.INFO)
+    logging.getLogger().setLevel(nuevo_nivel)
+    logging.getLogger("ganaderos").setLevel(nuevo_nivel)
+    logging.getLogger("ganaderos.server").setLevel(nuevo_nivel)
+
+    logger.info(f"[Admin] Nivel de log modificado por {datos.get('user_id')} de {prev_str} a {req.level.upper()}")
+
+    return SetLogLevelResponse(
+        ok=True,
+        previous_level=prev_str,
+        new_level=req.level.upper(),
+    )
 
 
 @app.get("/api/auth/verify", tags=["Autenticación"])
