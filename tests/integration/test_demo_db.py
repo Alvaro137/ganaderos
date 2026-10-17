@@ -17,7 +17,7 @@ class TestDemoDatabase(unittest.TestCase):
             gen_main()
 
     def setUp(self):
-        self.conn = sqlite3.connect(DEMO_DB)
+        self.conn = sqlite3.connect(f"file:{DEMO_DB.resolve()}?mode=ro", uri=True)
         self.conn.row_factory = sqlite3.Row
 
     def tearDown(self):

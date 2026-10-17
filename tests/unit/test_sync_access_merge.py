@@ -88,13 +88,15 @@ class TestSyncAccessMerge(unittest.TestCase):
         mock_pyodbc.connect.return_value = mock_conn
 
         # Mock de consultas:
-        # 1. Crotales libres
-        # 2. Localizar madre
-        # 3. @@IDENTITY para cod_movi
+        # 1. Crotales libres (fetchall)
+        # 2. Comprobar si ya existe cría (fetchone: None -> no existe)
+        # 3. Localizar madre (fetchone: madre)
+        # 4. @@IDENTITY para cod_movi (fetchone: (5665,))
         mock_cur.fetchall.side_effect = [
             [("ES220800857601", "ES371261100121"), ("ES220800857602", "ES371261100121")],
         ]
         mock_cur.fetchone.side_effect = [
+            None,  # no existe previamente
             ("ES090810288379", "0000", "DUEÑA", "ES371261100121", "ES371261100121", datetime(2025, 4, 10)),  # madre
             (5665,),  # @@IDENTITY
         ]
@@ -139,6 +141,7 @@ class TestSyncAccessMerge(unittest.TestCase):
             [("ES220800857601", "ES371261100121")],
         ]
         mock_cur.fetchone.side_effect = [
+            None,  # no existe previamente
             ("ES090810288379", "0000", "DUEÑA", "ES371261100121", "ES371261100121", None),
             (5665,),
         ]
@@ -174,6 +177,7 @@ class TestSyncAccessMerge(unittest.TestCase):
             [],
         ]
         mock_cur.fetchone.side_effect = [
+            None,  # no existe previamente
             ("ES090810288379", "0000", "DUEÑA", "ES371261100121", "ES371261100121", None),
         ]
 
@@ -204,6 +208,53 @@ class TestSyncAccessMerge(unittest.TestCase):
                 with self.assertRaises(AccessReconciliationError) as ctx:
                     conciliar_partos_en_access(db_path, "pwd", [])
             self.assertIn("pyodbc no está disponible", str(ctx.exception))
+
+    def test_conciliar_partos_idempotente_si_ya_existe_en_access(self):
+        mock_pyodbc = MagicMock()
+        mock_conn = MagicMock()
+        mock_cur = MagicMock()
+        mock_conn.cursor.return_value = mock_cur
+        mock_pyodbc.connect.return_value = mock_conn
+
+        # Crotales libres disponibles
+        mock_cur.fetchall.return_value = [("ES220800857601", "ES371261100121")]
+        # fetchone: la cría ya existe previamente con crotal ES220800857601
+        mock_cur.fetchone.return_value = ("ES220800857601",)
+
+        partos = [
+            {
+                "uuid": "uuid-parto-ya-existente",
+                "crotal": "ES090810288379",
+                "payload": {"fecha_parto": "2026-10-17", "cria_sexo": "H"},
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "bdlibro.mdb"
+            db_path.write_text("test")
+
+            with patch.dict("sys.modules", {"pyodbc": mock_pyodbc}):
+                conciliados = conciliar_partos_en_access(db_path, "pwd", partos)
+
+            self.assertEqual(len(conciliados), 1)
+            self.assertEqual(conciliados[0]["uuid"], "uuid-parto-ya-existente")
+            self.assertEqual(conciliados[0]["crotal_asignado"], "ES220800857601")
+            # No debe haberse ejecutado INSERT en Animal ni DELETE en Crotales
+            llamadas_sql = [call[0][0] for call in mock_cur.execute.call_args_list]
+            self.assertFalse(any("INSERT INTO Animal" in sql for sql in llamadas_sql))
+
+    @patch.dict("sys.modules", {"pyodbc": None})
+    def test_conciliar_partos_fichero_ldb_bloqueado_lanza_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "bdlibro.mdb"
+            db_path.write_text("test")
+            # Simular que Access / Ganaderos 10 está abierto
+            ldb_path = Path(tmpdir) / "bdlibro.ldb"
+            ldb_path.write_text("lock")
+
+            with self.assertRaises(AccessReconciliationError) as ctx:
+                conciliar_partos_en_access(db_path, "pwd", [{"uuid": "1"}])
+            self.assertIn("en uso por Ganaderos 10", str(ctx.exception))
 
 
 if __name__ == "__main__":

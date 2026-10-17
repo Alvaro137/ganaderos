@@ -42,6 +42,7 @@ from src.infrastructure.access_reader import (  # noqa: E402
     conn_str_for,
     detectar_python_32,
     detectar_ruta_bd,
+    esta_bloqueada_por_access,
     tiene_controlador_access,
 )
 from src.infrastructure.backup_vault import (  # noqa: E402
@@ -115,6 +116,12 @@ def conciliar_partos_en_access(
 
     Devuelve la lista de registros conciliados con su crotal asignado.
     """
+    if esta_bloqueada_por_access(db_path):
+        raise AccessReconciliationError(
+            f"La base de datos Access está actualmente en uso por Ganaderos 10 o Microsoft Access "
+            f"(detectado archivo {db_path.with_suffix('.ldb').name}). Ciérralo antes de continuar."
+        )
+
     try:
         import pyodbc
     except ImportError:
@@ -137,7 +144,6 @@ def conciliar_partos_en_access(
             # 1. Obtener lista de crotales disponibles en la explotación
             cur.execute("SELECT crotal, cea FROM Crotales ORDER BY crotal ASC")
             crotales_libres = [str(r[0]).strip() for r in cur.fetchall() if r[0]]
-            indice_crotal = 0
 
             for p in partos:
                 uuid = p["uuid"]
@@ -152,6 +158,25 @@ def conciliar_partos_en_access(
                 cria_crotal_solicitado = (payload.get("cria_crotal") or "").strip()
                 cria_sexo_raw = (payload.get("cria_sexo") or "H").strip().upper()
                 cria_sexo_cod = "01" if cria_sexo_raw in ("M", "01", "MACHO") else "02"
+
+                # Idempotencia defensiva (2PC): comprobar si ya se insertó previamente en Access
+                cur.execute(
+                    "SELECT crotal FROM Animal WHERE madre = ? AND fnac = ?",
+                    (madre_crotal, fecha_parto),
+                )
+                cria_existente = cur.fetchone()
+                if cria_existente:
+                    logger.info(
+                        f"El parto de la madre {madre_crotal} en fecha {fecha_parto.strftime('%Y-%m-%d')} "
+                        f"ya existe en Access con crotal {cria_existente[0]}. Marcando como conciliado."
+                    )
+                    conciliados.append({
+                        "uuid": uuid,
+                        "crotal_asignado": cria_existente[0],
+                        "madre_crotal": madre_crotal,
+                        "fecha_parto": fecha_parto.strftime("%Y-%m-%d"),
+                    })
+                    continue
 
                 # 2. Localizar a la madre en Animal
                 cur.execute(
@@ -175,13 +200,12 @@ def conciliar_partos_en_access(
                     crotal_asignado = cria_crotal_solicitado
                     crotales_libres.remove(cria_crotal_solicitado)
                 else:
-                    if indice_crotal >= len(crotales_libres):
+                    if not crotales_libres:
                         raise AccessReconciliationError(
                             "No quedan crotales en la tabla Crotales de bdlibro.mdb. "
                             "Introduce una nueva serie oficial en Ganaderos 10 antes de continuar."
                         )
-                    crotal_asignado = crotales_libres[indice_crotal]
-                    indice_crotal += 1
+                    crotal_asignado = crotales_libres.pop(0)
 
                 # 4. Inserción en Animal (Debe insertarse ANTES de Movimiento por integridad referencial)
                 cur.execute(
