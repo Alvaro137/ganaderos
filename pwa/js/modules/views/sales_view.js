@@ -162,8 +162,19 @@ export function renderVistaLiquidaciones() {
 
   const seriesCarneTrading = tradingCarne ? [
     {
+      id: "granja_cebo",
+      label: "Cobrado Cebo Granja (Terneros/as)",
+      shortLabel: "Cebo Granja",
+      color: "#ea580c",
+      lineWidth: 3,
+      data: tradingCarne.precio_granja_cebo,
+      defaultVisible: true,
+      unit: "€/kg",
+      decimales: 2
+    },
+    {
       id: "anojo_extra",
-      label: "Añojo Extra (<350kg)",
+      label: "Añojo Extra Lonja (<350kg)",
       shortLabel: "Añojo Extra",
       color: "#15803d",
       lineWidth: 2.5,
@@ -173,19 +184,30 @@ export function renderVistaLiquidaciones() {
       decimales: 2
     },
     {
-      id: "granja",
-      label: "Cobrado Granja Real",
-      shortLabel: "Granja Real",
-      color: "#ea580c",
-      lineWidth: 3,
-      data: tradingCarne.precio_granja,
-      defaultVisible: true,
+      id: "granja_vacas",
+      label: "Cobrado Vacas Granja (Desvieje)",
+      shortLabel: "Vacas Granja",
+      color: "#b45309",
+      lineWidth: 2.5,
+      data: tradingCarne.precio_granja_vacas,
+      defaultVisible: false,
+      unit: "€/kg",
+      decimales: 2
+    },
+    {
+      id: "vaca_desvieje",
+      label: "Vaca Desvieje Lonja",
+      shortLabel: "Vaca Lonja",
+      color: "#64748b",
+      lineWidth: 2,
+      data: tradingCarne.vaca_desvieje,
+      defaultVisible: false,
       unit: "€/kg",
       decimales: 2
     },
     {
       id: "anojo_pesado",
-      label: "Añojo Pesado (>350kg)",
+      label: "Añojo Pesado Lonja (>350kg)",
       shortLabel: "Añojo Pesado",
       color: "#2563eb",
       lineWidth: 2,
@@ -196,22 +218,11 @@ export function renderVistaLiquidaciones() {
     },
     {
       id: "ternera_extra",
-      label: "Ternera Extra",
-      shortLabel: "Ternera",
+      label: "Ternera Extra Lonja",
+      shortLabel: "Ternera Lonja",
       color: "#7c3aed",
       lineWidth: 2,
       data: tradingCarne.ternera_extra,
-      defaultVisible: false,
-      unit: "€/kg",
-      decimales: 2
-    },
-    {
-      id: "vaca_desvieje",
-      label: "Vaca Desvieje",
-      shortLabel: "Vaca Desvieje",
-      color: "#64748b",
-      lineWidth: 2,
-      data: tradingCarne.vaca_desvieje,
       defaultVisible: false,
       unit: "€/kg",
       decimales: 2
@@ -791,21 +802,24 @@ export function renderVistaLiquidaciones() {
                     <th style="padding: 10px 12px;">Ternera Extra</th>
                     <th style="padding: 10px 12px;">Vaca Desvieje</th>
                     <th style="padding: 10px 12px;">Cobrado Granja</th>
-                    <th style="padding: 10px 12px;">Canales</th>
-                    <th style="padding: 10px 12px;">Diferencial vs Añojo Extra</th>
+                    <th style="padding: 10px 12px;">Composición Lote</th>
+                    <th style="padding: 10px 12px;">Lonja Ponderada</th>
+                    <th style="padding: 10px 12px;">Diferencial Real (Prima)</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${
                     radarCarne.length === 0
-                      ? `<tr><td colspan="8" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin cotizaciones de carne o ventas en el periodo seleccionado. Pulsa "Actualizar Lonja en Vivo" para cargar datos.</td></tr>`
+                      ? `<tr><td colspan="9" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin cotizaciones de carne o ventas en el periodo seleccionado. Pulsa "Actualizar Lonja en Vivo" para cargar datos.</td></tr>`
                       : radarCarne.map(r => {
-                          const dif = (r.precio_medio_granja != null && r.anojo_extra_lonja != null)
-                            ? Number((r.precio_medio_granja - r.anojo_extra_lonja).toFixed(2))
-                            : null;
+                          const dif = r.diferencial_lonja;
                           const textoDif = dif != null
                             ? `${dif >= 0 ? '+' : ''}${dif.toFixed(2)} €/kg`
                             : "—";
+                          const lonjaRefTexto = r.lonja_referencia != null
+                            ? `${r.lonja_referencia.toFixed(2)} €/kg`
+                            : "—";
+                          const mixTexto = r.mix_texto || (r.canales_vendidas > 0 ? `${r.canales_vendidas} cab.` : "Sin ventas");
 
                           return `
                             <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
@@ -815,12 +829,15 @@ export function renderVistaLiquidaciones() {
                               <td style="padding: 10px 12px; color: #7c3aed; font-weight: 600;">${r.ternera_extra_lonja != null ? `${r.ternera_extra_lonja.toFixed(2)} €/kg` : "—"}</td>
                               <td style="padding: 10px 12px; color: #64748b; font-weight: 600;">${r.vaca_desvieje_lonja != null ? `${r.vaca_desvieje_lonja.toFixed(2)} €/kg` : "—"}</td>
                               <td style="padding: 10px 12px; font-weight: 800; color: ${r.precio_medio_granja ? '#ea580c' : 'var(--text-dim)'};">
-                                ${r.precio_medio_granja != null && r.precio_medio_granja > 0 ? `${r.precio_medio_granja.toFixed(2)} €/kg` : "Sin ventas"}
+                                ${r.precio_medio_granja != null && r.precio_medio_granja > 0 ? `${r.precio_medio_granja.toFixed(2)} €/kg` : "—"}
                               </td>
-                              <td style="padding: 10px 12px; color: var(--text-muted);">
-                                ${r.canales_vendidas > 0 ? `${r.canales_vendidas} cab.` : "—"}
+                              <td style="padding: 10px 12px; font-size: 0.82rem; color: var(--text-main); font-weight: 600;">
+                                ${escapeHtml(mixTexto)}
                               </td>
-                              <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif >= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};">
+                              <td style="padding: 10px 12px; font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">
+                                ${lonjaRefTexto}
+                              </td>
+                              <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif >= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};" title="Diferencial respecto al precio oficial ponderado según la categoría real vendida">
                                 ${textoDif}
                               </td>
                             </tr>
