@@ -265,5 +265,26 @@ export function calcularSimulacionTimingVenta(params = {}) {
   };
 }
 
+export function obtenerSeriesTradingCarne(anio = null, usarEstimaciones = false) {
+  const db = getDB();
+  if (!db || typeof db.obtenerSeriesTradingCarne !== "function") {
+    return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja: [] };
+  }
+  return db.obtenerSeriesTradingCarne(anio, usarEstimaciones);
+}
 
+export function obtenerSeriesTradingMateriasPrimas(anio = null, usarEstimaciones = false) {
+  const db = getDB();
+  if (!db || typeof db.obtenerSeriesTradingMateriasPrimas !== "function") {
+    return { pienso_lonja: [], pienso_granja: [], cebada_lonja: [], maiz_lonja: [] };
+  }
+  return db.obtenerSeriesTradingMateriasPrimas(anio, usarEstimaciones);
+}
 
+export function obtenerSeriesTradingTesoreria(anio = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerSeriesTradingTesoreria !== "function") {
+    return { ingresos_carne: [], gastos_pienso: [], margen_neto: [] };
+  }
+  return db.obtenerSeriesTradingTesoreria(anio);
+}
