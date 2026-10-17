@@ -172,6 +172,14 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
     await expect(badgeEspera).toBeVisible();
     await expect(badgeEspera).toContainText(/espera carne:\s*49\s*d/i);
 
+    // Verificar que NINGUNA receta muestra cifras disparatadas de animales tratados (100.000 o 30.000)
+    const badgesAnimales = page.locator('.badge-animales-tratados');
+    const badgeCount = await badgesAnimales.count();
+    for (let i = 0; i < Math.min(badgeCount, 10); i++) {
+      const txt = await badgesAnimales.nth(i).innerText();
+      expect(txt).not.toMatch(/100000|30000|15000/);
+    }
+
     // 5. Limpiar filtro y certificar restauración de listado
     const btnClearRecetas = page.locator('#btn-clear-recetas');
     await btnClearRecetas.click();
@@ -219,7 +227,16 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
     await expect(movsCount).toBeVisible();
     await expect(movsCount).not.toHaveText('Cargando...', { timeout: 10000 });
 
-    // 3. Probar filtro rápido por chips: "Traspasos a Cebadero"
+    // 3. Probar filtro rápido por chips: "Nacimientos"
+    const chipNacimientos = page.locator('.chip-filtro-mov[data-tipo="NACIMIENTO"]');
+    await chipNacimientos.click();
+    await expect(chipNacimientos).toHaveClass(/active/);
+
+    const movCardNac = page.locator('.movimiento-card').first();
+    await expect(movCardNac).toBeVisible({ timeout: 8000 });
+    await expect(movCardNac.locator('.badge-tipo-mov')).toContainText(/nacimiento/i);
+
+    // 4. Probar filtro rápido por chips: "Traspasos a Cebadero"
     const chipCebadero = page.locator('.chip-filtro-mov[data-tipo="TRASPASO_CEBADERO"]');
     await chipCebadero.click();
     await expect(chipCebadero).toHaveClass(/active/);
@@ -228,9 +245,10 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
     await expect(movCard).toBeVisible({ timeout: 8000 });
     await expect(movCard.locator('.badge-tipo-mov')).toContainText(/cebadero|traspaso/i);
 
-    // 4. Salto directo a la ficha del animal haciendo clic en el botón 'Ver ficha' de un animal activo
+    // 5. Salto directo a la ficha del animal haciendo clic en el botón 'Ver ficha' de un animal activo
     const movCardActivo = page.locator('.movimiento-card:has(.btn-ver-ficha-animal)').first();
     await expect(movCardActivo).toBeVisible();
+
 
     const crotalSpan = movCardActivo.locator('.mov-crotal-completo');
     const crotalText = (await crotalSpan.innerText()).trim();

@@ -156,7 +156,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
     code.startsWith("ES28129");
 
   // 1. Nacimiento siempre es Nacimiento
-  if (t === "NACIMIENTO") {
+  if (t === "NACIMIENTO" || t === "N") {
     return {
       tipo_display: "NACIMIENTO",
       label: "Nacimiento",
@@ -174,7 +174,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
   }
 
   // 3. Ubicaciones o movimientos dentro de la misma finca
-  if (t === "UBICACIÓN" || t === "UBICACION") {
+  if (t === "UBICACIÓN" || t === "UBICACION" || t === "U") {
     return {
       tipo_display: "MOVIMIENTO_INTERNO",
       label: "Movimiento Interno",
@@ -183,7 +183,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
   }
 
   // 4. Traspasos a Cebadero (122) desde explotaciones de vida/cría
-  if (d.endsWith("122") && (esFincaInterna(o) || t === "TRASPASO")) {
+  if (d.endsWith("122") && (esFincaInterna(o) || t === "TRASPASO" || t === "T")) {
     return {
       tipo_display: "TRASPASO_CEBADERO",
       label: "Traspaso Cebadero",
@@ -193,7 +193,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
 
   // 5. Salidas a matadero (desde cebadero 122 o fincas de vida 121/671/591) -> Venta comercial
   if ((o.endsWith("122") || esFincaInterna(o)) && esMatadero(d)) {
-    if (t === "SACRIFICIO" || t === "VENTA") {
+    if (t === "SACRIFICIO" || t === "VENTA" || t === "S" || t === "V") {
       return {
         tipo_display: "VENTA",
         label: "Venta",
@@ -212,7 +212,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
   }
 
   // 7. Ventas explícitas de la base de datos
-  if (t === "VENTA") {
+  if (t === "VENTA" || t === "V") {
     return {
       tipo_display: "VENTA",
       label: "Venta",
@@ -221,7 +221,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
   }
 
   // 8. Compras
-  if (t === "COMPRA") {
+  if (t === "COMPRA" || t === "C") {
     return {
       tipo_display: "COMPRA",
       label: "Compra",
@@ -230,7 +230,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
   }
 
   // 9. Bajas en campo / muerte natural
-  if (t === "MUERTE") {
+  if (t === "MUERTE" || t === "M") {
     return {
       tipo_display: "MUERTE",
       label: "Baja en campo",
@@ -239,11 +239,20 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
   }
 
   // 10. Sacrificios en campo no derivados a matadero comercial
-  if (t === "SACRIFICIO") {
+  if (t === "SACRIFICIO" || t === "S") {
     return {
       tipo_display: "SACRIFICIO",
       label: "Sacrificio",
       badge_class: "sacrificio"
+    };
+  }
+
+  // 11. Traspasos genéricos
+  if (t === "TRASPASO" || t === "T") {
+    return {
+      tipo_display: "TRASPASO",
+      label: "Traspaso",
+      badge_class: "traspaso"
     };
   }
 
@@ -252,6 +261,7 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
     label: t || "Movimiento",
     badge_class: "otro"
   };
+
 }
 
 export function dispararToast(msg, esError = false) {

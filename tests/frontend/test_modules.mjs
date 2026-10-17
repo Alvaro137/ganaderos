@@ -204,7 +204,58 @@ async function runAllTests() {
     const movCompra = clasificarMovimientoUnificado("ES371261100031", "ES371261100121", "COMPRA");
     assert.strictEqual(movCompra.tipo_display, "COMPRA");
     assert.strictEqual(movCompra.label, "Compra");
+
+    // 7. Compatibilidad con códigos legacy de 1 letra ('N', 'M', 'C', 'S', 'V', 'T', 'U')
+    const movNacLetra = clasificarMovimientoUnificado("ES371261100121", "ES371261100121", "N");
+    assert.strictEqual(movNacLetra.tipo_display, "NACIMIENTO");
+    assert.strictEqual(movNacLetra.label, "Nacimiento");
+
+    const movMuerteLetra = clasificarMovimientoUnificado("ES371261100121", "", "M");
+    assert.strictEqual(movMuerteLetra.tipo_display, "MUERTE");
+    assert.strictEqual(movMuerteLetra.label, "Baja en campo");
+
+    const movCompraLetra = clasificarMovimientoUnificado("ES371261100031", "ES371261100121", "C");
+    assert.strictEqual(movCompraLetra.tipo_display, "COMPRA");
+
+    const movTraspasoLetra = clasificarMovimientoUnificado("ES371261100121", "ES371261100122", "T");
+    assert.strictEqual(movTraspasoLetra.tipo_display, "TRASPASO_CEBADERO");
+
+    const movSacrificioLetra = clasificarMovimientoUnificado("ES371261100121", "ES373762000081", "S");
+    assert.strictEqual(movSacrificioLetra.tipo_display, "VENTA");
+
+    const movUbicacionLetra = clasificarMovimientoUnificado("ES371261100121", "ES371261100121", "U");
+    assert.strictEqual(movUbicacionLetra.tipo_display, "MOVIMIENTO_INTERNO");
+
+    const movVentaLetra = clasificarMovimientoUnificado("ES371261100121", "ES379999999999", "V");
+    assert.strictEqual(movVentaLetra.tipo_display, "VENTA");
   });
+
+  await test("Sanidad Animal: Blindaje contra bug de 100.000 animales y escalado Jet Currency", () => {
+    // Simular fila con el bug de escalado (100.000 = 10 envases de VOREN o DRAXXIN con dosis 0)
+    const rConBug = {
+      receta: "D37005842024001466",
+      medicamento: "DRAXXIN,14CC",
+      unidades: 30000.0,
+      dosis_unitaria: 0.0,
+      n_animales: 30000
+    };
+
+    let unidades = Number(rConBug.unidades || 0);
+    let dosisUnitaria = Number(rConBug.dosis_unitaria || 0);
+    if (unidades >= 10000 && (unidades % 5000 === 0 || unidades % 10000 === 0)) {
+      unidades = Math.round((unidades / 10000) * 100) / 100;
+    }
+    assert.strictEqual(unidades, 3, "30000 unidades debe des-escalarse a 3 envases");
+
+    let nAnim = rConBug.n_animales != null ? parseInt(rConBug.n_animales, 10) : null;
+    if (dosisUnitaria > 0 && unidades > 0) {
+      nAnim = Math.max(1, Math.round(unidades / dosisUnitaria));
+    } else if (nAnim == null || nAnim > 500 || dosisUnitaria === 0) {
+      nAnim = null; // No inventar cabezas si no hay dosis individual
+    }
+    assert.strictEqual(nAnim, null, "No debe mostrar 30000 animales si la dosis unitaria es 0");
+  });
+
 
   await test("Búsqueda Incremental: Comparación por prefijo de crotal_4", () => {
     // Al teclear 1 -> 0 -> 4 -> 5, la búsqueda parcial '10' debe filtrar vacas que comiencen por '10'

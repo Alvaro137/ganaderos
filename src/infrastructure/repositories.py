@@ -52,7 +52,7 @@ class SQLiteAnimalRepository(AnimalRepository):
 
     def list_activos(self) -> List[Animal]:
         cur = self.conn.cursor()
-        cur.execute("SELECT * FROM animales WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A' AND vida = 1")
+        cur.execute("SELECT * FROM animales WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A'")
         return [self._map_to_domain(row) for row in cur.fetchall()]
 
     def list_reproductoras(self) -> List[Animal]:
@@ -66,9 +66,10 @@ class SQLiteAnimalRepository(AnimalRepository):
 
     def count_activos(self) -> int:
         cur = self.conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM animales WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A' AND vida = 1")
+        cur.execute("SELECT COUNT(*) FROM animales WHERE UPPER(TRIM(COALESCE(estado, ''))) = 'A'")
         row = cur.fetchone()
         return row[0] if row else 0
+
 
     def _map_to_domain(self, row: sqlite3.Row) -> Animal:
         return Animal(
