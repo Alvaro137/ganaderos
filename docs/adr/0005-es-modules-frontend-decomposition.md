@@ -1,45 +1,48 @@
-# ADR 0005: Descomposición Modular del Frontend en ES Modules
+# ADR 0005: Descomposición modular del frontend en ES modules
 
-* **Estado:** Aceptado
-* **Fecha:** 2026-09-22
-* **Decisores:** Equipo de Arquitectura Web Ganaderos Campo
+- **Estado:** Aceptado
+- **Fecha:** 2026-09-22
+- **Decisores:** Equipo de arquitectura web Ganaderos Campo
 
-## Contexto y Planteamiento del Problema
-El frontend del cliente residía originariamente en un archivo monolítico de más de 2.200 líneas (`pwa/js/app.js`), donde convergían:
+## Contexto y planteamiento del problema
+
+El frontend del cliente residía originariamente en un archivo monolítico de más de 2.200 líneas (`pwa/js/app.js`), que concentraba:
 - Manipulación directa del DOM.
-- Adaptadores de WebAssembly e IndexedDB.
+- Adaptadores para WebAssembly e IndexedDB.
 - Control del sintetizador de voz y Web Speech API.
-- Lógica de negocio (edades, tiempos de retiro sanitario, trazabilidad).
-- Plantillas HTML de 5 vistas diferentes con interpolación de strings.
+- Reglas de negocio sobre cálculo de edades, periodos de supresión de medicamentos y trazabilidad.
+- Plantillas HTML de 5 vistas diferentes mediante interpolación de cadenas.
 
-Este acoplamiento impedía la testabilidad unitaria en entornos sin navegador (CI), propiciaba inyecciones HTML (XSS) y aumentaba drásticamente el riesgo de errores de sintaxis o colisiones en el objeto global `window`.
+Este acoplamiento impedía ejecutar pruebas unitarias en entornos de integración continua basados en Node.js, dificultaba el control contra inyecciones XSS y aumentaba el riesgo de colisiones en el objeto global `window`.
 
-## Alternativas Consideradas
-1. **Migración a un framework SPA (React / Vue / Svelte):** Descartada en esta etapa. Añade cadenas de compilación pesadas (Vite/Webpack, Node_modules gigantes) y dependencias que complican el despliegue directo en edge o el servido sin build tools.
-2. **Modularización en ES Modules Nativos (Vanilla JS):** Seleccionada. El estándar ECMAScript Modules (`import`/`export`) es soportado de forma nativa por todos los navegadores modernos y por Node.js sin necesidad de empaquetadores ni transpilación.
+## Alternativas consideradas
+
+1. Migración a un framework SPA (React, Vue o Svelte): Descartada. Introduce herramientas de compilación obligatorias (Vite o Webpack) y dependencias externas que complican el despliegue directo en placas monoplaca sin fase de empaquetado.
+2. Modularización mediante módulos nativos de ECMAScript (Vanilla JS): Seleccionada. El estándar ES Modules (`import`/`export`) cuenta con soporte nativo en navegadores modernos y en Node.js sin necesidad de herramientas de empaquetado ni transpilación.
 
 ## Decisión
-Dividir el cliente en módulos especializados bajo `pwa/js/modules/`:
-1. **`config.js`:** Estado reactivo central (`AppState`), utilidades de sanitización anti-XSS (`escapeHtml`), formateadores y pila de navegación histórica.
-2. **`db.js`:** Capa de acceso a datos que expone métodos tipados y consultas preparadas con `?`.
-3. **`auth.js`:** Gestión de tokens Bearer y pantalla de autenticación.
-4. **`voice.js`:** `VoiceManager` con soporte dual para Web Speech API y fallback con `MediaRecorder` + Groq Whisper.
-5. **`heuristics.js`:** Suprimido en ADR 0008 (YAGNI & KISS) en favor de Degradación Grácil en `views/assistant_view.js` y asistente conectado Cloud/Edge.
-6. **Vistas Especializadas:**
-   - `views/cattle_view.js`: Listado de animales, teclado numérico táctil de campo y split-view.
-   - `views/detail_view.js`: Ficha individual, madre, árbol de partos y lote.
-   - `views/sanitary_view.js`: Recetas oficiales y tiempos de retirada en carne.
-   - `views/feeds_view.js`: Compras de piensos, albaranes y costes.
-   - `views/movements_view.js`: Trazabilidad y Libro Oficial de Movimientos.
-   - `views/assistant_view.js`: Asistente conversacional con selector de modelos y renderizado estructurado.
-7. **`app.js`:** Coordinador mínimo de 110 líneas para enrutamiento de pestañas y registro del Service Worker.
+
+Dividir el código del cliente en módulos específicos bajo el directorio `pwa/js/modules/`:
+1. `config.js`: estado global reactivo (`AppState`), funciones de escape para mitigar XSS (`escapeHtml`), funciones de formato y control del historial de navegación.
+2. `db.js`: capa de acceso a datos con consultas SQL parametrizadas mediante marcadores `?`.
+3. `auth.js`: gestión de tokens Bearer y control de la vista de autenticación.
+4. `voice.js`: clase `VoiceManager` con soporte para Web Speech API y grabación con `MediaRecorder` hacia Groq Whisper.
+5. `heuristics.js`: retirado conforme a ADR 0008 para utilizar degradación controlada en `views/assistant_view.js`.
+6. Módulos de vista:
+   - `views/cattle_view.js`: listado de animales, teclado numérico de crotal y vista dividida.
+   - `views/detail_view.js`: ficha individual, ascendencia materna, descendientes y lote.
+   - `views/sanitary_view.js`: recetas oficiales y tiempos de espera de medicamentos.
+   - `views/feeds_view.js`: registro de piensos, albaranes y costes.
+   - `views/movements_view.js`: libro oficial de movimientos y trazabilidad.
+   - `views/assistant_view.js`: interfaz del asistente y renderizado de resultados.
+7. `app.js`: coordinador de 110 líneas para navegación entre pestañas e inicialización del Service Worker.
 
 ## Consecuencias
 
 ### Positivas
-- **Cero Empaquetadores:** No requiere Webpack, Vite ni Rollup; el código se sirve directamente al navegador con `<script type="module">`.
-- **Testabilidad en CI con Node.js:** Lógica pura como heurísticas, formateo, navegación y sanitización se ejecuta en segundos en CI con `node tests/frontend/test_modules.mjs`.
-- **Mantenibilidad y Colaboración:** Cada vista y adaptador tecnológico reside en su propio archivo con responsabilidades claramente delimitadas.
+- Ausencia de empaquetadores: el navegador consume los archivos directamente mediante etiquetas `<script type="module">`.
+- Pruebas unitarias en integración continua: los módulos de formateo, navegación y sanitización se validan en CI mediante `node tests/frontend/test_modules.mjs` sin requerir un navegador completo.
+- Separación de responsabilidades: cada vista y adaptador de infraestructura se mantiene en un archivo independiente.
 
-### Negativas / Desafíos
-- **Compatibilidad con Navegadores Antiguos:** Requiere navegadores con soporte de ES Modules (cualquier navegador lanzado a partir de 2018).
+### Negativas y limitaciones
+- Requisito de navegadores compatibles con ES modules: los clientes deben utilizar navegadores con soporte de importación modular nativa (disponible en versiones lanzadas a partir de 2018).

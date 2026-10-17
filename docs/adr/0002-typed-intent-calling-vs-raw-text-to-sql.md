@@ -1,35 +1,38 @@
-# ADR 0002: Intent Calling Tipado vs. Text-to-SQL No Restringido
+# ADR 0002: Invocación tipada de intenciones frente a text-to-sql libre
 
-* **Estado:** Aceptado
-* **Fecha:** 2026-09-20
-* **Decisores:** Equipo de Arquitectura y AI Engineering Ganaderos Campo
+- **Estado:** Aceptado
+- **Fecha:** 2026-09-20
+- **Decisores:** Equipo de arquitectura y software de Ganaderos Campo
 
-## Contexto y Planteamiento del Problema
-Para facilitar la consulta rápida en manga o a caballo, se requiere un asistente conversacional capaz de interpretar preguntas en lenguaje natural ("¿Cuántas vacas han parido en Dueña este año?", "Dime las crías de la 1045", "Traspasos recientes al cebadero").
+## Contexto y planteamiento del problema
 
-En la industria es común pedirle a un LLM que genere directamente sentencias SQL (`Text-to-SQL libre`). Sin embargo, en un entorno ganadero de producción este patrón presenta riesgos inaceptables:
-1. **Riesgo de Inyección SQL y Destrucción de Datos:** Aunque la base sea de solo lectura en cliente, sentencias maliciosas o alucinadas pueden corromper la sesión o ejecutar comandos no previstos.
-2. **Alucinaciones de Esquema:** Los LLMs inventan nombres de tablas, columnas o funciones inexistentes en SQLite, causando fallos en tiempo de ejecución.
-3. **Falta de Privacidad:** En Text-to-SQL convencional, se suele enviar el esquema completo o muestras de datos a la nube para guiar al modelo.
+Para agilizar las consultas durante el manejo de ganado, se requiere una interfaz en lenguaje natural que interprete preguntas de los operarios (por ejemplo, "¿Cuántas vacas han parido en Dueña este año?", "Dime las crías de la 1045", "Traspasos recientes al cebadero").
 
-## Alternativas Consideradas
-1. **Text-to-SQL Directo (Prompt con DDL hacia OpenAI/Groq):** Descartado por vulnerabilidad a alucinaciones, sobrecoste de tokens y riesgo de consultas no deterministas.
-2. **Embeddings Vectoriales y RAG Semántico:** Descartado para consultas cuantitativas estructuradas ("¿Cuántas vacas...?", "¿Fecha del último parto?"). Los vectores no resuelven agregaciones relacionales exactas.
-3. **Tool Calling / Intent Calling Tipado con Constructor SQL Determinista:** Seleccionado. El LLM se restringe estrictamente a un extractor de intención y argumentos cerrados.
+Generar sentencias SQL directamente con un modelo de lenguaje (text-to-sql libre) introduce tres problemas técnicos en un entorno de producción:
+1. Riesgo de inyección SQL y alteración de datos: sentencias no previstas pueden modificar el estado o saturar recursos del cliente.
+2. Consultas con esquema inexistente: los modelos de lenguaje pueden generar nombres de tablas, columnas o funciones no disponibles en SQLite.
+3. Exposición de datos privados: el enfoque convencional suele enviar el esquema relacional completo o muestras de registros a un proveedor externo.
+
+## Alternativas consideradas
+
+1. Text-to-SQL directo con volcado de DDL en el prompt: Descartada. Presenta alta tasa de error sintáctico, mayor consumo de tokens y respuestas no deterministas.
+2. Búsqueda vectorial y RAG semántico: Descartada. La indexación vectorial no resuelve agregaciones relacionales numéricas ni filtros relacionales exactos.
+3. Invocación de intenciones tipadas con constructor SQL determinista: Seleccionada. El modelo de lenguaje se limita a extraer la intención y los parámetros validados.
 
 ## Decisión
-Implementar un sistema de dos capas desacopladas:
-1. **Capa Semántica (Extractor de Intención):** Un catálogo cerrado de herramientas tipadas (`src/application/intents.py`) define esquemas JSON Schema de las intenciones soportadas (ej: `consultar_ficha_animal`, `consultar_censo_corral`, `consultar_vacas_sin_parir`, `consultar_supresion_lote`). El LLM (Groq Llama 3.3) debe invocar obligatoriamente una función del catálogo.
-2. **Capa Determinista (`QueryBuilder`):** El código de la aplicación valida los argumentos (crotales, corrales) y ensambla una sentencia SQL pre-verificada usando parámetros ligados (`?`). La base de datos local ejecuta la consulta parametrizada.
-3. **Asistente Híbrido Conectado y Degradación Grácil (Enmienda ADR 0008):** El asistente en lenguaje natural y dictado por voz se define como un servicio conectado asistido por servidor/Cloud. Cuando no hay red, la aplicación aplica *Degradación Grácil* transparente, guiando al ganadero al buscador directo por 4 dígitos de crotal y a las vistas de censo y corrales, que son 100% Offline-First en SQLite WASM local (sustituyendo el fallback heurístico inicial por simplicidad y robustez, conforme a YAGNI y KISS).
+
+Implementar un sistema desacoplado en dos capas:
+1. Capa semántica (extractor de intenciones): un catálogo tipado (`src/application/intents.py`) define esquemas JSON Schema para las operaciones admitidas (`consultar_ficha_animal`, `consultar_censo_corral`, `consultar_vacas_sin_parir`, `consultar_supresion_lote`). El modelo de lenguaje (Llama 3.3 vía Groq) debe seleccionar exclusivamente una función del catálogo.
+2. Capa determinista (`QueryBuilder`): el código de la aplicación valida los argumentos (crotales, lotes) y construye sentencias SQL parametrizadas con marcadores de posición (`?`). El motor SQLite local ejecuta la consulta.
+3. Degradación controlada sin conexión (enmienda ADR 0008): el asistente por voz y lenguaje natural opera como servicio conectado. Cuando no hay red, la aplicación muestra avisos claros y dirige al usuario a la búsqueda manual por 4 dígitos de crotal y a las vistas de censo y lotes, que funcionan en local con SQLite WebAssembly.
 
 ## Consecuencias
 
 ### Positivas
-- **Inmunidad a Inyecciones SQL:** Al usar sentencias parametrizadas generadas por código probado, es imposible inyectar código SQL arbitrario.
-- **Tasa Cero de Errores Sintácticos:** Todas las plantillas SQL son validadas exhaustivamente mediante pruebas unitarias.
-- **Privacidad Absoluta de Datos:** A la nube del LLM solo viaja la pregunta formulada ("vacas en Dueña"), nunca el censo de animales ni los datos de la explotación.
-- **Degradación Elegante:** Si la red se cae o la cuota de la API se agota, el sistema degrada de forma transparente hacia la navegación táctil y búsqueda determinista por 4 dígitos de la base SQLite WASM local.
+- Prevención de inyección SQL: el uso de sentencias preparadas con parámetros ligados impide la ejecución de código SQL arbitrario.
+- Eliminación de errores de sintaxis: las plantillas SQL se verifican mediante pruebas unitarias automatizadas.
+- Privacidad de datos: hacia el servicio del modelo solo viaja la pregunta formulada ("vacas en Dueña"), sin transmitir el censo ni registros de la explotación.
+- Degradación funcional clara: si la conexión falla o se agota la cuota del proveedor, el sistema redirige al usuario a la búsqueda directa por 4 dígitos en SQLite local.
 
-### Negativas / Desafíos
-- **Catálogo Finito de Consultas:** Nuevos tipos de preguntas complejas requieren registrar una nueva intención y su correspondiente método en `QueryBuilder`.
+### Negativas y limitaciones
+- Catálogo cerrado de consultas: incorporar nuevas consultas requiere definir una nueva intención en el esquema y su correspondiente método en `QueryBuilder`.
