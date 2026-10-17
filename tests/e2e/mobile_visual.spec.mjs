@@ -146,4 +146,50 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v6_sync_banner.png') });
   });
+
+  test('V7. Movimientos: Banner Liquidaciones y Badges de Rendimiento en Canal', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await expect(banner).toContainText(/Liquidaciones de Venta y Matadero/i);
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v7_movimientos_banner.png') });
+  });
+
+  test('V8. Profundidad Nivel 1: Vista de Liquidaciones con KPIs y Desglose de Facturas', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const gridKpis = page.locator('.kpis-liquidaciones-grid');
+    await expect(gridKpis).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.liquidacion-card').first()).toBeVisible();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v8_liquidaciones_kpis.png') });
+  });
+
+  test('V9. Profundidad Nivel 2: Detalle de Factura con Canales y Retorno Reversible', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnVerCanales = page.locator('.btn-ver-canales').first();
+    await expect(btnVerCanales).toBeVisible({ timeout: 10000 });
+    await btnVerCanales.click();
+
+    const tablaCanales = page.locator('.canales-table');
+    await expect(tablaCanales).toBeVisible({ timeout: 10000 });
+    const btnVolver = page.locator('.btn-volver-liq');
+    await expect(btnVolver).toBeVisible();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v9_factura_canales.png') });
+  });
 });

@@ -12,6 +12,7 @@ import { renderVistaAnimales } from './modules/views/cattle_view.js';
 import { renderVistaRecetas } from './modules/views/sanitary_view.js';
 import { renderVistaAlimentos } from './modules/views/feeds_view.js';
 import { renderVistaMovimientos } from './modules/views/movements_view.js';
+import { renderVistaLiquidaciones } from './modules/views/sales_view.js';
 import { setupAsistenteIA } from './modules/views/assistant_view.js';
 import { actualizarBadgeSync, mostrarModalOutbox, sincronizarOutboxConServidor } from './modules/outbox.js';
 
@@ -34,11 +35,20 @@ function setupNavegacion() {
       renderVistaAlimentos();
     } else if (tabKey === "movimientos") {
       renderVistaMovimientos();
+    } else if (tabKey === "ventas") {
+      renderVistaLiquidaciones();
     }
   }
 
   desktopLinks.forEach((l) => l.addEventListener("click", () => cambiarTab(l.dataset.tab)));
   mobileButtons.forEach((b) => b.addEventListener("click", () => cambiarTab(b.dataset.tab)));
+
+  window.addEventListener("campo:navegar-tab", (e) => {
+    const tab = typeof e.detail === "string" ? e.detail : e.detail?.tab;
+    if (tab) {
+      cambiarTab(tab);
+    }
+  });
 }
 
 let toastTimer = null;
@@ -113,6 +123,8 @@ async function iniciarAplicacion() {
         renderVistaRecetas();
       } else if (AppState.tabActual === "movimientos") {
         renderVistaMovimientos();
+      } else if (AppState.tabActual === "ventas") {
+        renderVistaLiquidaciones();
       }
 
       mostrarToast("Base de datos actualizada");
