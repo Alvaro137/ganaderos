@@ -103,6 +103,47 @@ def inicializar_bd_sqlite(ruta_destino: Path) -> sqlite3.Connection:
         pagado INTEGER
     );
 
+    DROP TABLE IF EXISTS ventas_liquidaciones;
+    CREATE TABLE ventas_liquidaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero_factura TEXT UNIQUE NOT NULL,
+        fecha_factura TEXT,
+        fecha_pago TEXT,
+        cliente_cooperativa TEXT DEFAULT 'GANAVAEX, S.COOP',
+        cif_cliente TEXT DEFAULT 'F37335411',
+        total_cabezas REAL,
+        total_kilos_canal REAL,
+        base_imponible REAL,
+        porcentaje_iva REAL DEFAULT 10.50,
+        cuota_iva REAL,
+        gastos_total REAL,
+        total_factura REAL,
+        archivo_origen TEXT
+    );
+
+    DROP TABLE IF EXISTS ventas_canales;
+    CREATE TABLE ventas_canales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        factura_id INTEGER REFERENCES ventas_liquidaciones(id) ON DELETE CASCADE,
+        linea_numero INTEGER,
+        articulo TEXT,
+        cabezas REAL DEFAULT 1.0,
+        peso_canal_kg REAL,
+        precio_unitario REAL,
+        importe_linea REAL,
+        referencia TEXT,
+        fecha_salida_lote TEXT,
+        crotal_asignado TEXT
+    );
+
+    DROP TABLE IF EXISTS ventas_gastos;
+    CREATE TABLE ventas_gastos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        factura_id INTEGER REFERENCES ventas_liquidaciones(id) ON DELETE CASCADE,
+        concepto TEXT,
+        importe REAL
+    );
+
     DROP TABLE IF EXISTS meta;
     CREATE TABLE meta (
         clave TEXT PRIMARY KEY,
@@ -123,6 +164,10 @@ def inicializar_bd_sqlite(ruta_destino: Path) -> sqlite3.Connection:
     CREATE INDEX idx_recetas_cea ON recetas(cea);
     CREATE INDEX idx_compras_fecha ON compras_alimento(fecha);
     CREATE INDEX idx_compras_alimento ON compras_alimento(alimento);
+    CREATE INDEX idx_ventas_factura ON ventas_canales(factura_id);
+    CREATE INDEX idx_ventas_crotal ON ventas_canales(crotal_asignado);
+    CREATE INDEX idx_ventas_fecha ON ventas_liquidaciones(fecha_factura);
+
     """)
     conn.commit()
     return conn
