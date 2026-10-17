@@ -260,6 +260,114 @@ class TestSyncAPI(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
+    def test_pendientes_endpoint(self):
+        token_admin = self._token("usr_admin")
+        self.client.post(
+            "/api/sync/push",
+            headers={"Authorization": f"Bearer {token_admin}"},
+            json={"device_id": "movil-admin", "changes": [CHANGENOTA]},
+        )
+        resp = self.client.get(
+            "/api/sync/pendientes",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["pendientes"][0]["uuid"], CHANGENOTA["uuid"])
+
+    def test_conciliado_endpoint_solo_admin(self):
+        token_jose = self._token("usr_jose")
+        resp = self.client.post(
+            "/api/sync/conciliado",
+            headers={"Authorization": f"Bearer {token_jose}"},
+            json={"conciliados": [{"uuid": "dummy-uuid"}]},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_conciliado_endpoint_flujo_exitoso(self):
+        token_admin = self._token("usr_admin")
+        self.client.post(
+            "/api/sync/push",
+            headers={"Authorization": f"Bearer {token_admin}"},
+            json={"device_id": "movil-admin", "changes": [CHANGENOTA]},
+        )
+        resp = self.client.post(
+            "/api/sync/conciliado",
+            headers={"Authorization": f"Bearer {token_admin}"},
+            json={"conciliados": [{"uuid": CHANGENOTA["uuid"], "crotal_asignado": "ES220800857601"}]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["actualizados"], 1)
+
+        # Ya no debe aparecer en pendientes
+        resp_pend = self.client.get(
+            "/api/sync/pendientes",
+            headers={"Authorization": f"Bearer {token_admin}"},
+        )
+        self.assertEqual(resp_pend.json()["total"], 0)
+
+
+class TestConciliacion(TestSyncServiceBase):
+    def test_listar_pendientes_y_marcar_conciliados(self):
+        parto = {
+            "uuid": "uuid-parto-conciliar-1",
+            "tipo": "parto",
+            "crotal": "ES000810740273",
+            "ts_dispositivo": "2026-10-17T10:00:00",
+            "payload": {"fecha_parto": "2026-10-17", "cria_sexo": "H"},
+        }
+        self.svc.aplicar_cambios("dev-1", "usr_admin", [CHANGENOTA, parto])
+
+        todos = self.svc.listar_pendientes()
+        self.assertEqual(len(todos), 2)
+
+        partos = self.svc.listar_pendientes(tipo="parto")
+        self.assertEqual(len(partos), 1)
+        self.assertEqual(partos[0]["uuid"], parto["uuid"])
+        self.assertEqual(partos[0]["conciliado_en_access"], 0)
+
+        actualizados = self.svc.marcar_conciliados([
+            {"uuid": parto["uuid"], "crotal_asignado": "ES220800857601"}
+        ])
+        self.assertEqual(actualizados, 1)
+
+        partos_post = self.svc.listar_pendientes(tipo="parto")
+        self.assertEqual(len(partos_post), 0)
+
+        hist = self.svc.historial()
+        parto_hist = next(h for h in hist if h["uuid"] == parto["uuid"])
+        self.assertEqual(parto_hist["conciliado_en_access"], 1)
+        self.assertEqual(parto_hist["crotal_asignado"], "ES220800857601")
+        self.assertIsNotNone(parto_hist["ts_conciliado"])
+
+    def test_import_conserva_estado_conciliacion(self):
+        parto = {
+            "uuid": "uuid-parto-import-1",
+            "tipo": "parto",
+            "crotal": "ES000810740273",
+            "ts_dispositivo": "2026-10-17T10:00:00",
+            "payload": {"fecha_parto": "2026-10-17", "cria_sexo": "H"},
+        }
+        self.svc.aplicar_cambios("dev-1", "usr_admin", [parto])
+        self.svc.marcar_conciliados([
+            {"uuid": parto["uuid"], "crotal_asignado": "ES220800857601"}
+        ])
+
+        actualizada = self.tmp / "actualizada.sqlite"
+        shutil.copyfile(DEMO, actualizada)
+        self.svc.importar_bd_actualizada(actualizada)
+
+        hist = self.svc.historial()
+        parto_hist = next(h for h in hist if h["uuid"] == parto["uuid"])
+        self.assertEqual(parto_hist["conciliado_en_access"], 1)
+        self.assertEqual(parto_hist["crotal_asignado"], "ES220800857601")
+        self.assertIsNotNone(parto_hist["ts_conciliado"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

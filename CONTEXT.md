@@ -222,16 +222,24 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **Buffer circular en memoria:** Los últimos 1000 logs retenidos en RAM con timestamp y severidad.
   - **Endpoints administrativos protegidos:** `GET /api/admin/logs` y `POST /api/admin/logs/level` (solo admin, 403 para operadores normales).
   - **CI en Node 22:** Actualizados los jobs de GitHub Actions a Node 22 para evitar deprecaciones.
+- [x] **Fase 4: Pipeline de Conciliación Bidireccional con Access (`bdlibro.mdb`) y Asignación de Crotales:**
+  - **Endpoints en Hub:** `GET /api/sync/pendientes` (filtro por tipo, `conciliado_en_access = 0`) y `POST /api/sync/conciliado` (solo admin, confirmación con `crotal_asignado` y timestamp).
+  - **Esquema de BD:** Columnas `conciliado_en_access`, `ts_conciliado`, `crotal_asignado` añadidas a `campo_registros` con migración defensiva e integridad preservada durante cada import.
+  - **Script en PC (`scripts/sync_access_merge.py`):**
+    - Autenticación segura con el hub remoto.
+    - Backup automático con timestamp en `backups/bdlibro_backup_YYYYMMDD_HHMMSS.mdb`.
+    - Bloqueo por concurrencia con `FileLock`.
+    - Inserción en orden estricto de integridad referencial: `Animal` -> `Movimiento` ('N') -> `SELECT @@IDENTITY` -> `Parto` -> `UPDATE Animal` (madre) -> `DELETE FROM Crotales`.
+    - Auto-asignación secuencial desde `Crotales` y confirmación al hub (`POST /api/sync/conciliado`).
+    - Re-exportación y subida automática del nuevo censo consolidado al hub.
+    - Modos `--dry-run` y `--skip-export`, con delegación automática a Python 32-bit en Windows 64-bit.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
-- [ ] **Siguientes Fases de la Épica de Campo (Local-First Offline Writes & Conciliación con Access):**
+- [ ] **Siguientes Fases de la Épica de Campo:**
   - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
     - Modal táctil para mover animales o grupos entre cercados (ej. de *DUEÑA* a *CEBADERO* o *RIVERA*).
     - Actualización inmediata del campo `corral` en SQLite local + mutación de tipo `movimiento` en Outbox.
   - **Fase 2.3: Registro de Tratamiento Sanitario en Campo**:
     - Ficha de aplicación de fármaco de la lista oficial, cálculo de fecha fin de supresión de carne y alerta visual sanitaria.
-  - **Fase 4: Pipeline de Conciliación con Access (`bdlibro.mdb`)**:
-    - Script bidireccional en PC (`scripts/sync_access_merge.py`): extrae eventos no conciliados de la OPi vía API (`/api/sync/eventos`), los inserta en `C:\GANADEROS 10\bdlibro.mdb` (respetando autonuméricos de Access) y marca `conciliado_en_access=1`.
-    - Regeneración y despliegue del censo consolidado.
 
 ## 9. Glosario rápido
 

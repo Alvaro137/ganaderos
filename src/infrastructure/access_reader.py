@@ -83,9 +83,11 @@ def tiene_controlador_access() -> bool:
 
 def detectar_python_32() -> Optional[Path]:
     """Busca un intérprete de Python de 32 bits en rutas estándar para entornos Windows 64-bit."""
+    repo_root = Path(__file__).resolve().parents[2]
     candidatos = [
         os.environ.get("GANADEROS_PY32"),
-        Path(__file__).resolve().parents[2] / ".tools" / "py32" / "python.exe",
+        repo_root / ".tools" / "py32" / "python.exe",
+        repo_root / "python" / "recetas-mvp" / ".tools" / "py32" / "python.exe",
         Path("C:/GANADEROS 10/python/python.exe"),
     ]
     for c in candidatos:
