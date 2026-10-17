@@ -6,6 +6,8 @@
 # Bases de datos y volcados de produccion (datos reales y privados de explotacion)
 *.sqlite
 *.sqlite3
+*.sqlite-shm
+*.sqlite-wal
 *.db
 *.mdb
 *.accdb

@@ -1112,6 +1112,247 @@ class CampoDB {
     }
   }
 
+  obtenerMargenTecnicoCebo(anio = null, categoria = null) {
+    try {
+      let whereCanales = "c.peso_canal_kg > 1";
+      const params = [];
+
+      if (anio && anio !== "TODOS") {
+        whereCanales += " AND substr(COALESCE(c.fecha_salida_lote, f.fecha_factura), 1, 4) = ?";
+        params.push(String(anio));
+      }
+
+      if (categoria && categoria !== "TODOS") {
+        if (categoria === "CEBO") {
+          whereCanales += " AND (c.articulo LIKE '%TERNER%' OR c.articulo LIKE '%CEBO%' OR c.articulo LIKE '%AÑOJO%')";
+        } else if (categoria === "DESVIEJE") {
+          whereCanales += " AND (c.articulo LIKE '%VACAS%' OR c.articulo LIKE '%TOROS%' OR c.articulo LIKE '%DESVIEJE%')";
+        }
+      }
+
+      const rows = this.ejecutarQuery(`
+        SELECT 
+          c.id as canal_id,
+          c.crotal_asignado,
+          c.articulo,
+          c.peso_canal_kg,
+          c.precio_unitario,
+          c.importe_linea,
+          COALESCE(c.fecha_salida_lote, f.fecha_factura) as fecha_sacrificio,
+          f.numero_factura,
+          f.cliente_cooperativa
+        FROM ventas_canales c
+        JOIN ventas_liquidaciones f ON c.factura_id = f.id
+        WHERE ${whereCanales}
+        ORDER BY fecha_sacrificio DESC
+      `, params);
+
+      if (!rows || rows.length === 0) {
+        return {
+          total_animales: 0,
+          margen_tecnico_total: 0,
+          margen_medio_cabeza: 0,
+          coste_pienso_medio_cabeza: 0,
+          estancia_media_dias: 0,
+          prima_media_lonja_kg: 0,
+          animales: []
+        };
+      }
+
+      let sumaMargen = 0;
+      let sumaPienso = 0;
+      let sumaDias = 0;
+      let sumaPrimas = 0;
+      let totalPrimasContadas = 0;
+
+      const animalesDetalle = rows.map(r => {
+        const crot = r.crotal_asignado;
+        const fSacrificio = r.fecha_sacrificio || new Date().toISOString().slice(0, 10);
+        const pCanal = Number(r.peso_canal_kg || 0);
+        const precioUnit = Number(r.precio_unitario || 0);
+        const importeLinea = Number(r.importe_linea || 0);
+
+        // 1. Obtener fecha de entrada a cebadero
+        let diasCebo = 210; // Estándar de campo si no hay registro histórico
+        if (crot) {
+          const movEntrada = this.ejecutarQuery(`
+            SELECT fecha FROM movimientos 
+            WHERE crotal = ? AND (destino LIKE '%122' OR corral = 'CEBADERO' OR tipo = 'TRASPASO' OR tipo = 'T')
+            ORDER BY fecha ASC LIMIT 1
+          `, [crot]);
+          if (movEntrada && movEntrada.length > 0 && movEntrada[0].fecha) {
+            const d1 = new Date(movEntrada[0].fecha);
+            const d2 = new Date(fSacrificio);
+            const diffDias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+            if (diffDias > 30 && diffDias < 600) {
+              diasCebo = diffDias;
+            }
+          }
+        }
+
+        // 2. Cálculo zootécnico de devengo
+        const esHembra = (r.articulo || "").toUpperCase().includes("TERNERA");
+        const fcr = esHembra ? 4.8 : 5.0;
+        const pesoDestete = esHembra ? 230.0 : 250.0;
+        const rendimiento = esHembra ? 0.56 : 0.58;
+        const pesoVivoEst = pCanal > 0 ? Number((pCanal / rendimiento).toFixed(1)) : 0;
+        const gananciaPv = Math.max(0, Number((pesoVivoEst - pesoDestete).toFixed(1)));
+        const kgPienso = Math.round(gananciaPv * fcr);
+        const precioPiensoKg = 0.315; // Media ponderada T-3 cebo
+        const costePiensoImputado = Number((kgPienso * precioPiensoKg).toFixed(2));
+        const margenAnimal = Number((importeLinea - costePiensoImputado).toFixed(2));
+        const gmdEst = diasCebo > 0 ? Number((gananciaPv / diasCebo).toFixed(2)) : 0;
+
+        // 3. Cruce con Lonja de Salamanca
+        const catLonja = esHembra ? "TERNERA_EXTRA" : (pCanal > 350 ? "AÑOJO_PESADO" : "AÑOJO_EXTRA");
+        let precioLonja = null;
+        let primaKg = null;
+        let penalizacionSobrepeso = null;
+
+        try {
+          const resLonja = this.ejecutarQuery(`
+            SELECT precio FROM cotizaciones_lonja
+            WHERE categoria = ? AND fecha <= ?
+            ORDER BY fecha DESC LIMIT 1
+          `, [catLonja, fSacrificio]);
+
+          if (resLonja && resLonja.length > 0) {
+            precioLonja = Number(resLonja[0].precio);
+            primaKg = Number((precioUnit - precioLonja).toFixed(3));
+            sumaPrimas += primaKg;
+            totalPrimasContadas++;
+          }
+        } catch (_) {}
+
+        if (!esHembra && pCanal > 350.0) {
+          penalizacionSobrepeso = {
+            exceso_kg: Number((pCanal - 350.0).toFixed(1)),
+            coste_penalizacion: Number(((pCanal - 350.0) * 0.45).toFixed(2))
+          };
+        }
+
+        sumaMargen += margenAnimal;
+        sumaPienso += costePiensoImputado;
+        sumaDias += diasCebo;
+
+        return {
+          canal_id: r.canal_id,
+          crotal: crot,
+          crotal_4: crot ? (crot.replace(/\D/g, "").slice(-4) || crot.slice(-4)) : "—",
+          articulo: r.articulo,
+          numero_factura: r.numero_factura,
+          fecha_sacrificio: fSacrificio,
+          peso_canal_kg: pCanal,
+          precio_unitario: precioUnit,
+          importe_linea: importeLinea,
+          dias_cebo: diasCebo,
+          peso_vivo_estimado: pesoVivoEst,
+          ganancia_peso_vivo: gananciaPv,
+          gmd_estimada: gmdEst,
+          kg_pienso_imputados: kgPienso,
+          coste_pienso_imputado: costePiensoImputado,
+          margen_tecnico: margenAnimal,
+          precio_lonja_salamanca: precioLonja,
+          prima_sobre_lonja_kg: primaKg,
+          penalizacion_sobrepeso: penalizacionSobrepeso
+        };
+      });
+
+      const n = animalesDetalle.length;
+      return {
+        total_animales: n,
+        margen_tecnico_total: Number(sumaMargen.toFixed(2)),
+        margen_medio_cabeza: n > 0 ? Number((sumaMargen / n).toFixed(2)) : 0,
+        coste_pienso_medio_cabeza: n > 0 ? Number((sumaPienso / n).toFixed(2)) : 0,
+        estancia_media_dias: n > 0 ? Math.round(sumaDias / n) : 0,
+        prima_media_lonja_kg: totalPrimasContadas > 0 ? Number((sumaPrimas / totalPrimasContadas).toFixed(3)) : null,
+        animales: animalesDetalle
+      };
+    } catch (e) {
+      console.error("[DB] Error en obtenerMargenTecnicoCebo:", e);
+      return {
+        total_animales: 0,
+        margen_tecnico_total: 0,
+        margen_medio_cabeza: 0,
+        coste_pienso_medio_cabeza: 0,
+        estancia_media_dias: 0,
+        prima_media_lonja_kg: null,
+        animales: []
+      };
+    }
+  }
+
+  obtenerRadarMateriasPrimas(anio = null) {
+    try {
+      let whereLonja = "1=1";
+      let whereAlim = "1=1";
+      const paramsLonja = [];
+      const paramsAlim = [];
+
+      if (anio && anio !== "TODOS") {
+        whereLonja += " AND substr(fecha, 1, 4) = ?";
+        paramsLonja.push(String(anio));
+        whereAlim += " AND substr(fecha, 1, 4) = ?";
+        paramsAlim.push(String(anio));
+      } else {
+        whereLonja += " AND fecha >= date('now', '-24 months')";
+        whereAlim += " AND fecha >= date('now', '-24 months')";
+      }
+
+      // Cotizaciones mensuales Lonja de Salamanca (Cebada y Maíz en €/t)
+      const rowsLonja = this.ejecutarQuery(`
+        SELECT 
+          substr(fecha, 1, 7) as mes,
+          categoria,
+          ROUND(AVG(precio), 1) as precio_medio_t
+        FROM cotizaciones_lonja
+        WHERE ${whereLonja} AND categoria IN ('CEBADA', 'MAIZ', 'PIENSO_CEBO')
+        GROUP BY mes, categoria
+        ORDER BY mes ASC
+      `, paramsLonja);
+
+      // Albaranes reales de pienso compuesto en la explotación (€/t)
+      const rowsPienso = this.ejecutarQuery(`
+        SELECT 
+          substr(fecha, 1, 7) as mes,
+          ROUND(COALESCE(SUM(importe) / NULLIF(SUM(kg), 0), 0) * 1000, 1) as precio_pienso_real_t,
+          COALESCE(SUM(kg), 0) as kg_comprados
+        FROM compras_alimento
+        WHERE ${whereAlim} AND alimento LIKE '%CEBO%'
+        GROUP BY mes
+        ORDER BY mes ASC
+      `, paramsAlim);
+
+      const mapaMeses = new Map();
+
+      (rowsLonja || []).forEach(r => {
+        if (!r.mes) return;
+        if (!mapaMeses.has(r.mes)) {
+          mapaMeses.set(r.mes, { mes: r.mes, cebada_lonja_t: null, maiz_lonja_t: null, pienso_lonja_t: null, pienso_real_t: null, kg_comprados: 0 });
+        }
+        const item = mapaMeses.get(r.mes);
+        if (r.categoria === "CEBADA") item.cebada_lonja_t = Number(r.precio_medio_t);
+        if (r.categoria === "MAIZ") item.maiz_lonja_t = Number(r.precio_medio_t);
+        if (r.categoria === "PIENSO_CEBO") item.pienso_lonja_t = Number(r.precio_medio_t);
+      });
+
+      (rowsPienso || []).forEach(p => {
+        if (!p.mes) return;
+        if (!mapaMeses.has(p.mes)) {
+          mapaMeses.set(p.mes, { mes: p.mes, cebada_lonja_t: null, maiz_lonja_t: null, pienso_lonja_t: null, pienso_real_t: null, kg_comprados: 0 });
+        }
+        const item = mapaMeses.get(p.mes);
+        item.pienso_real_t = Number(p.precio_pienso_real_t);
+        item.kg_comprados = Number(p.kg_comprados);
+      });
+
+      return Array.from(mapaMeses.values()).sort((a, b) => a.mes.localeCompare(b.mes));
+    } catch (e) {
+      console.error("[DB] Error en obtenerRadarMateriasPrimas:", e);
+      return [];
+    }
+  }
+
   obtenerMovimientos(params = {}) {
 
     const { filtro = "", tipo = "TODOS", anio = "TODOS", destino = "TODOS", limite = 100, offset = 0 } = params;

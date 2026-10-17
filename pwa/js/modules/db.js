@@ -170,4 +170,27 @@ export function obtenerSerieMensualFinanciera(anio = null) {
   return db.obtenerSerieMensualFinanciera(anio);
 }
 
+export function obtenerMargenTecnicoCebo(anio = null, categoria = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerMargenTecnicoCebo !== "function") {
+    return {
+      total_animales: 0,
+      margen_tecnico_total: 0,
+      margen_medio_cabeza: 0,
+      coste_pienso_medio_cabeza: 0,
+      estancia_media_dias: 0,
+      prima_media_lonja_kg: null,
+      animales: []
+    };
+  }
+  return db.obtenerMargenTecnicoCebo(anio, categoria);
+}
+
+export function obtenerRadarMateriasPrimas(anio = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerRadarMateriasPrimas !== "function") return [];
+  return db.obtenerRadarMateriasPrimas(anio);
+}
+
+
 

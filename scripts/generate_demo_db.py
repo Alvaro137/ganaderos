@@ -195,6 +195,19 @@ def crear_esquema(conn: sqlite3.Connection) -> None:
         importe REAL
     );
 
+    DROP TABLE IF EXISTS cotizaciones_lonja;
+    CREATE TABLE cotizaciones_lonja (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fecha TEXT NOT NULL,
+        lonja TEXT DEFAULT 'SALAMANCA',
+        mesa TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        unidad TEXT NOT NULL,
+        precio REAL NOT NULL,
+        variacion REAL DEFAULT 0.0
+    );
+    CREATE INDEX IF NOT EXISTS idx_lonja_fecha_cat ON cotizaciones_lonja(fecha, categoria);
+
     -- Índices optimizados
     CREATE INDEX idx_animal_crotal_4 ON animales(crotal_4);
     CREATE INDEX idx_animal_estado ON animales(estado);
@@ -502,7 +515,52 @@ def poblar_datos(conn: sqlite3.Connection, num_animales: int = 150) -> None:
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, tratamientos_datos)
 
-    # 9. Metadatos de la base de datos
+    # 9. Cotizaciones Semanales Oficiales de la Lonja de Salamanca (2025 - 2026)
+    lonja_datos = []
+    # Generar sesiones de los lunes desde enero 2025 hasta la actualidad
+    inicio_lonja = date(2025, 1, 6)  # Primer lunes de 2025
+    dias_totales = (hoy - inicio_lonja).days
+    num_semanas = (dias_totales // 7) + 1
+
+    p_anojo = 7.15
+    p_cebada = 214.0
+    p_maiz = 230.0
+
+    for sem in range(num_semanas):
+        f_sesion = inicio_lonja + timedelta(weeks=sem)
+        # Tendencia real 2025-2026: subida en primavera, ajuste en verano
+        if f_sesion.year == 2025:
+            p_anojo = round(7.10 + (sem * 0.006) + rnd.uniform(-0.02, 0.02), 2)
+            p_cebada = round(210.0 + (sem * 0.25) + rnd.uniform(-1.0, 1.0), 1)
+            p_maiz = round(228.0 + (sem * 0.30) + rnd.uniform(-1.0, 1.0), 1)
+        else:
+            # 2026: pico en primavera (7.45) y estabilización (7.22 - 7.30)
+            sem_2026 = sem - 52
+            p_anojo = round(7.35 + (0.12 * rnd.uniform(0.8, 1.1)) - (sem_2026 * 0.003), 2)
+            p_cebada = round(222.0 - (sem_2026 * 0.15) + rnd.uniform(-0.8, 0.8), 1)
+            p_maiz = round(238.0 - (sem_2026 * 0.20) + rnd.uniform(-1.0, 1.0), 1)
+
+        p_anojo_pes = round(p_anojo - 0.14, 2)
+        p_ternera = round(p_anojo + 0.28, 2)
+        p_vaca = round(4.15 + rnd.uniform(-0.05, 0.08), 2)
+        p_pienso = round(315.0 + ((p_cebada - 215.0) * 0.5) + ((p_maiz - 230.0) * 0.4), 1)
+
+        f_str = f_sesion.isoformat()
+        lonja_datos.append((f_str, "SALAMANCA", "CARNE", "AÑOJO_EXTRA", "EUR_KG_CANAL", p_anojo, 0.0))
+        lonja_datos.append((f_str, "SALAMANCA", "CARNE", "AÑOJO_PESADO", "EUR_KG_CANAL", p_anojo_pes, 0.0))
+        lonja_datos.append((f_str, "SALAMANCA", "CARNE", "TERNERA_EXTRA", "EUR_KG_CANAL", p_ternera, 0.0))
+        lonja_datos.append((f_str, "SALAMANCA", "CARNE", "VACA_DESVIEJE", "EUR_KG_CANAL", p_vaca, 0.0))
+        lonja_datos.append((f_str, "SALAMANCA", "CEREALES", "CEBADA", "EUR_TONELADA", p_cebada, 0.0))
+        lonja_datos.append((f_str, "SALAMANCA", "CEREALES", "MAIZ", "EUR_TONELADA", p_maiz, 0.0))
+        lonja_datos.append((f_str, "SALAMANCA", "CEREALES", "PIENSO_CEBO", "EUR_TONELADA", p_pienso, 0.0))
+
+    cur.executemany("""
+    INSERT INTO cotizaciones_lonja (
+        fecha, lonja, mesa, categoria, unidad, precio, variacion
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, lonja_datos)
+
+    # 10. Metadatos de la base de datos
     cur.executemany("""
     INSERT INTO meta (clave, valor) VALUES (?, ?)
     """, [
