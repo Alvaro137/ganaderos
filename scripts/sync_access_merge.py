@@ -116,6 +116,12 @@ def conciliar_partos_en_access(
 
     Devuelve la lista de registros conciliados con su crotal asignado.
     """
+    if esta_bloqueada_por_access(db_path):
+        raise AccessReconciliationError(
+            f"La base de datos Access está actualmente en uso por Ganaderos 10 o Microsoft Access "
+            f"(detectado archivo {db_path.with_suffix('.ldb').name}). Ciérralo antes de continuar."
+        )
+
     try:
         import pyodbc
     except ImportError:
@@ -123,12 +129,6 @@ def conciliar_partos_en_access(
 
     if pyodbc is None:
         raise AccessReconciliationError("El controlador pyodbc no está disponible en este entorno.")
-
-    if esta_bloqueada_por_access(db_path):
-        raise AccessReconciliationError(
-            f"La base de datos Access está actualmente en uso por Ganaderos 10 o Microsoft Access "
-            f"(detectado archivo {db_path.with_suffix('.ldb').name}). Ciérralo antes de continuar."
-        )
 
     conciliados: List[Dict[str, Any]] = []
     if not partos:
