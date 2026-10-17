@@ -18,6 +18,8 @@ export const AppState = {
   limiteMovimientos: 100,
   limiteAnimales: 50,
   tecladoTactilVisible: false,
+  // Flag para reconstrucción de datos faltantes con cotizaciones de Lonja (por defecto desactivado)
+  usarEstimacionesLonja: false,
   // Historial conversacional para preguntas de seguimiento (multi-turno) con IA
   conversacionIA: [],
   // Pila de navegación para permitir clics encadenados (vaca -> madre -> corral -> ternero -> ...)

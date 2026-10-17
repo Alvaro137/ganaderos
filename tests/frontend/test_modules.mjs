@@ -24,8 +24,10 @@ import {
   renderGraficoBarrasComparativas,
   renderGraficoCotizacionCanal,
   renderGraficoRadarMateriasPrimas,
-  renderGraficoLonjaCarne
+  renderGraficoLonjaCarne,
+  renderGraficoEstacionalidadCarne
 } from '../../pwa/js/modules/components/charts_svg.js';
+import { calcularSimulacionTimingVenta } from '../../pwa/js/modules/db.js';
 
 console.log("==================================================");
 console.log("EJECUTANDO SUITE DE TESTS FRONTEND (NODE.JS)");
@@ -634,6 +636,68 @@ async function runAllTests() {
     assert.ok(htmlCarne.includes("Vaca Desvieje"), "Debe incluir leyenda de Vaca Desvieje");
     assert.ok(htmlCarne.includes("Precio Cobrado Granja"), "Debe incluir leyenda de precio de granja");
     assert.ok(htmlCarne.includes("5.52€"), "Debe etiquetar el precio cobrado por la granja");
+  });
+
+  await test("Gráfico SVG Estacionalidad Vacuno: Manejo de array vacío", () => {
+    const htmlVacio = renderGraficoEstacionalidadCarne([]);
+    assert.ok(htmlVacio.includes("No hay datos suficientes de estacionalidad"), "Debe indicar falta de datos");
+  });
+
+  await test("Gráfico SVG Estacionalidad Vacuno: Renderizado de 12 meses y sombreado de meses pico", () => {
+    const mockMeses = [
+      { mes_num: "01", nombre_mes: "Ene", anojo_extra: 5.40, anojo_pesado: 5.25, ternera_extra: 5.55, vaca_desvieje: 4.10 },
+      { mes_num: "02", nombre_mes: "Feb", anojo_extra: 5.35, anojo_pesado: 5.20, ternera_extra: 5.50, vaca_desvieje: 4.05 },
+      { mes_num: "11", nombre_mes: "Nov", anojo_extra: 5.65, anojo_pesado: 5.45, ternera_extra: 5.75, vaca_desvieje: 4.30 },
+      { mes_num: "12", nombre_mes: "Dic", anojo_extra: 5.75, anojo_pesado: 5.50, ternera_extra: 5.85, vaca_desvieje: 4.40 }
+    ];
+    const htmlEst = renderGraficoEstacionalidadCarne(mockMeses, { ancho: 640, alto: 230 });
+    assert.ok(htmlEst.includes("<svg"), "Debe generar elemento <svg>");
+    assert.ok(htmlEst.includes("viewBox=\"0 0 640 230\""), "Debe tener dimensiones correctas");
+    assert.ok(htmlEst.includes("Periodo histórico de alta demanda"), "Debe incluir sombreado para meses pico (Nov, Dic, Ene)");
+    assert.ok(htmlEst.includes("Añojo Extra"), "Debe incluir leyenda");
+  });
+
+  await test("Simulador de Timing de Venta: Añojo normal sin salto de categoría", () => {
+    // Ternero de 310 kg canal aguantado 21 días a 1.35 kg/d vivo (rdto 58%) -> +16.4 kg canal = ~326.4 kg (sigue <350 kg)
+    const res = calcularSimulacionTimingVenta({
+      pesoCanalActual: 310.0,
+      diasRetraso: 21,
+      gmdVivo: 1.35,
+      costeDiarioPienso: 2.50,
+      precioActualKg: 7.10,
+      precioEsperadoKg: 7.20,
+      esMacho: true
+    });
+
+    assert.strictEqual(res.saltaSobrepeso, false, "No debe saltar a sobrepeso (<350kg)");
+    assert.strictEqual(res.penalizacionSobrepeso, 0, "Penalización debe ser 0");
+    assert.strictEqual(res.pesoCanalActual, 310.0);
+    assert.ok(res.pesoCanalNuevo > 325 && res.pesoCanalNuevo < 330, `Peso proyectado: ${res.pesoCanalNuevo}`);
+    assert.ok(res.gananciaCanal > 15, `Ganancia canal: ${res.gananciaCanal}`);
+    assert.ok(res.costePiensoAcumulado === 52.50, `Coste pienso acumulado (21*2.50): ${res.costePiensoAcumulado}`);
+    assert.ok(res.ingresoMarginal > 100, `Ingreso marginal: ${res.ingresoMarginal}`);
+    assert.strictEqual(res.esRentable, true, "Debe ser rentable con subida de precio y ganancia de peso");
+    assert.ok(res.precioUmbralEquilibrio < 7.20, `Precio umbral: ${res.precioUmbralEquilibrio}`);
+  });
+
+  await test("Simulador de Timing de Venta: Salto de categoría por sobrepeso (>350 kg canal)", () => {
+    // Añojo de 340 kg canal aguantado 28 días a 1.40 kg/d vivo -> +22.7 kg canal = 362.7 kg (>350 kg)
+    // Pasa de Añojo Extra a Añojo Pesado (-0.25 €/kg penalización en lonja)
+    const res = calcularSimulacionTimingVenta({
+      pesoCanalActual: 340.0,
+      diasRetraso: 28,
+      gmdVivo: 1.40,
+      costeDiarioPienso: 3.00,
+      precioActualKg: 7.20,
+      precioEsperadoKg: 7.25,
+      esMacho: true
+    });
+
+    assert.strictEqual(res.saltaSobrepeso, true, "Debe detectar salto de sobrepeso >350 kg");
+    assert.ok(res.pesoCanalNuevo > 350, `Peso nuevo: ${res.pesoCanalNuevo}`);
+    assert.strictEqual(res.precioFinalEfectivo, 7.00, "Precio final efectivo debe restar 0.25 €/kg por penalización");
+    assert.ok(res.penalizacionSobrepeso > 80, `Penalización total estimada: ${res.penalizacionSobrepeso}`);
+    assert.ok(res.costePiensoAcumulado === 84.00, `Coste pienso: ${res.costePiensoAcumulado}`);
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

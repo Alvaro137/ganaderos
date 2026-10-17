@@ -315,6 +315,10 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(btnRadar).toBeVisible({ timeout: 10000 });
     await btnRadar.click();
 
+    const btnSubtabPiensos = page.locator('.radar-subtab-btn[data-radar-subtab="piensos"]');
+    await expect(btnSubtabPiensos).toBeVisible({ timeout: 5000 });
+    await btnSubtabPiensos.click();
+
     const bannerRadar = page.locator('.info-banner-devengo');
     await expect(bannerRadar).toBeVisible({ timeout: 5000 });
     await expect(bannerRadar).toContainText('Radar Analítico de Materias Primas');
@@ -323,6 +327,59 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(svgRadar).toBeVisible({ timeout: 5000 });
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v16_radar_materias_primas.png') });
+  });
+
+  test('V17. Perspectiva de Radar de Vacuno de Carne y Reconstrucción con Estimaciones Lonja', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnRadar = page.locator('.perspective-pill-btn[data-perspectiva="radar"]');
+    await expect(btnRadar).toBeVisible({ timeout: 10000 });
+    await btnRadar.click();
+
+    const btnSubtabCarne = page.locator('.radar-subtab-btn[data-radar-subtab="carne"]');
+    await expect(btnSubtabCarne).toBeVisible({ timeout: 5000 });
+    await btnSubtabCarne.click();
+
+    const chkEst = page.locator('#chk-estimaciones-lonja');
+    await expect(chkEst).toBeVisible({ timeout: 5000 });
+    await chkEst.check();
+
+    const svgCarne = page.locator('.chart-scroll-box svg').first();
+    await expect(svgCarne).toBeVisible({ timeout: 5000 });
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_radar_vacuno_carne.png') });
+  });
+
+  test('V18. Perspectiva de Timing y Estacionalidad de Venta con Simulador Interactivo', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnRadar = page.locator('.perspective-pill-btn[data-perspectiva="radar"]');
+    await expect(btnRadar).toBeVisible({ timeout: 10000 });
+    await btnRadar.click();
+
+    const btnSubtabTiming = page.locator('.radar-subtab-btn[data-radar-subtab="timing"]');
+    await expect(btnSubtabTiming).toBeVisible({ timeout: 5000 });
+    await btnSubtabTiming.click();
+
+    const inputDias = page.locator('#sim-dias-retraso');
+    await expect(inputDias).toBeVisible({ timeout: 5000 });
+
+    const kpisGrid = page.locator('.kpis-liquidaciones-grid').last();
+    await expect(kpisGrid).toBeVisible({ timeout: 5000 });
+
+    await kpisGrid.scrollIntoViewIfNeeded();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v18_timing_y_estacionalidad.png') });
   });
 });
 

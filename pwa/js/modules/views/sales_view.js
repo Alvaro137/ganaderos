@@ -27,6 +27,8 @@ import {
   obtenerMargenTecnicoCebo,
   obtenerRadarMateriasPrimas,
   obtenerRadarLonjaCarne,
+  obtenerEstacionalidadLonjaCarne,
+  calcularSimulacionTimingVenta,
   sincronizarBaseDatosAhora
 } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
@@ -34,7 +36,8 @@ import {
   renderGraficoBarrasComparativas,
   renderGraficoCotizacionCanal,
   renderGraficoRadarMateriasPrimas,
-  renderGraficoLonjaCarne
+  renderGraficoLonjaCarne,
+  renderGraficoEstacionalidadCarne
 } from '../components/charts_svg.js';
 
 // Estado local de la vista financiera
@@ -51,10 +54,21 @@ if (AppState.perspectivaFinanciera === undefined) {
   AppState.perspectivaFinanciera = "tesoreria"; // "tesoreria" | "devengo" | "radar"
 }
 if (AppState.subseccionRadar === undefined) {
-  AppState.subseccionRadar = "carne"; // "carne" o "piensos"
+  AppState.subseccionRadar = "carne"; // "carne" | "piensos" | "timing"
 }
 if (AppState.graficosExpandidos === undefined) {
   AppState.graficosExpandidos = false; // Colapsado por defecto en móvil para máxima claridad
+}
+if (AppState.simulacionTiming === undefined) {
+  AppState.simulacionTiming = {
+    pesoCanalActual: 330,
+    diasRetraso: 21,
+    gmdVivo: 1.35,
+    costeDiarioPienso: 2.65,
+    precioActualKg: 7.15,
+    precioEsperadoKg: 7.20,
+    esMacho: true
+  };
 }
 
 export function renderVistaLiquidaciones() {
@@ -102,14 +116,20 @@ export function renderVistaLiquidaciones() {
   }
 
   const devengo = (AppState.perspectivaFinanciera === "devengo")
-    ? obtenerMargenTecnicoCebo(AppState.anioFinanciero, AppState.categoriaFinanciera)
+    ? obtenerMargenTecnicoCebo(AppState.anioFinanciero, AppState.categoriaFinanciera, AppState.usarEstimacionesLonja)
     : null;
   const radarData = (AppState.perspectivaFinanciera === "radar")
-    ? obtenerRadarMateriasPrimas(AppState.anioFinanciero)
+    ? obtenerRadarMateriasPrimas(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
     : null;
   const radarCarne = (AppState.perspectivaFinanciera === "radar")
-    ? obtenerRadarLonjaCarne(AppState.anioFinanciero)
+    ? obtenerRadarLonjaCarne(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
     : [];
+  const estacionalidadData = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "timing")
+    ? obtenerEstacionalidadLonjaCarne()
+    : [];
+  const simulacionTiming = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "timing")
+    ? calcularSimulacionTimingVenta(AppState.simulacionTiming)
+    : null;
 
   const html = `
     <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 24px;">
@@ -160,25 +180,33 @@ export function renderVistaLiquidaciones() {
         </button>
       </div>
 
-      <!-- Filtros de Campaña y Categoría -->
-      <div class="financial-controls-row">
-        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
-          <span>📅 Campaña:</span>
-          <select id="sel-anio-financiero" class="financial-select-pill">
-            ${opcionesAnios}
-          </select>
-        </label>
-
-        ${AppState.perspectivaFinanciera !== "radar" ? `
+      <!-- Filtros de Campaña, Categoría y Reconstrucción con Estimaciones -->
+      <div class="financial-controls-row" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
           <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
-            <span>🐄 Tipo:</span>
-            <select id="sel-categoria-financiera" class="financial-select-pill">
-              <option value="TODOS" ${AppState.categoriaFinanciera === "TODOS" ? "selected" : ""}>Todo el ganado</option>
-              <option value="CEBO" ${AppState.categoriaFinanciera === "CEBO" ? "selected" : ""}>Cebo (Terneros/as)</option>
-              <option value="DESVIEJE" ${AppState.categoriaFinanciera === "DESVIEJE" ? "selected" : ""}>Desvieje (Vacas/Toros)</option>
+            <span>📅 Campaña:</span>
+            <select id="sel-anio-financiero" class="financial-select-pill">
+              ${opcionesAnios}
             </select>
           </label>
-        ` : ""}
+
+          ${AppState.perspectivaFinanciera !== "radar" ? `
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
+              <span>🐄 Tipo:</span>
+              <select id="sel-categoria-financiera" class="financial-select-pill">
+                <option value="TODOS" ${AppState.categoriaFinanciera === "TODOS" ? "selected" : ""}>Todo el ganado</option>
+                <option value="CEBO" ${AppState.categoriaFinanciera === "CEBO" ? "selected" : ""}>Cebo (Terneros/as)</option>
+                <option value="DESVIEJE" ${AppState.categoriaFinanciera === "DESVIEJE" ? "selected" : ""}>Desvieje (Vacas/Toros)</option>
+              </select>
+            </label>
+          ` : ""}
+        </div>
+
+        <!-- Checkbox de estimaciones Lonja (no marcada por defecto) -->
+        <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: var(--text-main); cursor: pointer; user-select: none; background: var(--md-surface-container-low, #fff); padding: 5px 12px; border-radius: 20px; border: 1px solid ${AppState.usarEstimacionesLonja ? 'var(--brand-primary)' : 'var(--md-outline-variant, #e5e7eb)'};" title="Si faltan albaranes de compra o precio en liquidaciones, estimar usando las cotizaciones oficiales de la Lonja de Salamanca">
+          <input type="checkbox" id="chk-estimaciones-lonja" ${AppState.usarEstimacionesLonja ? "checked" : ""} style="width: 16px; height: 16px; accent-color: var(--brand-primary); cursor: pointer;" />
+          <span>Completar datos con Lonja (~ Est.)</span>
+        </label>
       </div>
 
       ${AppState.perspectivaFinanciera === "tesoreria" ? `
@@ -462,6 +490,18 @@ export function renderVistaLiquidaciones() {
                             </span>`
                           : "";
 
+                        const badgeEstimacion = a.es_estimado
+                          ? `<span style="display: inline-block; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-weight: 700;" title="Coste o precio completado con cotizaciones oficiales de la Lonja de Salamanca">~ Est. Lonja</span>`
+                          : "";
+
+                        const precioUnitTexto = a.precio_carne_estimado
+                          ? `<span style="color: #d97706; font-weight: 800;" title="Precio de carne estimado según Lonja Salamanca">~${Number(a.precio_unitario).toFixed(3)} €/kg</span>`
+                          : (a.precio_unitario != null && a.precio_unitario > 0 ? `${Number(a.precio_unitario).toFixed(3)} €/kg` : "—");
+
+                        const costePiensoTexto = a.precio_pienso_estimado && a.es_estimado
+                          ? `<span style="font-weight: 700; color: var(--chart-pienso, #ea580c);" title="Coste de pienso estimado según cotización Lonja Salamanca">~${formatearMoneda(a.coste_pienso_imputado)} €</span>`
+                          : `<span style="font-weight: 700; color: var(--chart-pienso, #ea580c);">${formatearMoneda(a.coste_pienso_imputado)} €</span>`;
+
                         return `
                           <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
                             <td style="padding: 10px 12px;">
@@ -480,14 +520,14 @@ export function renderVistaLiquidaciones() {
                               ${formatearKg(a.peso_canal_kg)} kg
                             </td>
                             <td style="padding: 10px 12px; font-weight: 700;">
-                              ${a.precio_unitario != null ? `${Number(a.precio_unitario).toFixed(3)} €/kg` : "—"}
+                              ${precioUnitTexto}
                             </td>
                             <td style="padding: 10px 12px;">
                               <span style="font-weight: 700; color: var(--text-main);">${a.dias_cebo} d</span>
                               <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">GMD: ${a.gmd_estimada ? a.gmd_estimada.toFixed(2) : '1.30'} kg/d</span>
                             </td>
                             <td style="padding: 10px 12px;">
-                              <span style="font-weight: 700; color: var(--chart-pienso, #ea580c);">${formatearMoneda(a.coste_pienso_imputado)} €</span>
+                              ${costePiensoTexto}
                               <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">${formatearKg(a.kg_pienso_imputados)} kg FCR</span>
                             </td>
                             <td style="padding: 10px 12px; font-weight: 800; color: ${a.margen_tecnico >= 0 ? '#1b5e20' : '#ba1a1a'};">
@@ -497,6 +537,7 @@ export function renderVistaLiquidaciones() {
                               <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
                                 ${badgePrima}
                                 ${badgeSobrepeso}
+                                ${badgeEstimacion}
                               </div>
                             </td>
                           </tr>
@@ -508,7 +549,7 @@ export function renderVistaLiquidaciones() {
           </div>
         </div>
       ` : (AppState.perspectivaFinanciera === "radar" ? `
-        <!-- Selector de Subsección del Radar: Carne vs Cereales -->
+        <!-- Selector de Subsección del Radar: Carne vs Cereales vs Timing -->
         <div class="financial-subtabs" style="margin-bottom: 16px;">
           <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'carne' ? 'active' : ''}" data-radar-subtab="carne">
             🥩 Vacuno de Carne (Lonja vs Granja)
@@ -516,15 +557,20 @@ export function renderVistaLiquidaciones() {
           <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'piensos' ? 'active' : ''}" data-radar-subtab="piensos">
             🌾 Materias Primas (Cereales vs Pienso)
           </button>
+          <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'timing' ? 'active' : ''}" data-radar-subtab="timing">
+            🧭 Timing y Estacionalidad
+          </button>
         </div>
 
         <!-- Banner descriptivo con botón de Sincronización en Vivo -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
           <div class="info-banner-devengo" style="margin: 0; flex: 1; min-width: 280px; background: var(--md-surface-container-high, #fffbeb); border-color: #fde68a; border-left-color: #d97706;">
-            <strong>${AppState.subseccionRadar === 'carne' ? 'Radar Oficial de Vacuno de Carne:' : 'Radar Analítico de Materias Primas:'}</strong>
+            <strong>${AppState.subseccionRadar === 'carne' ? 'Radar Oficial de Vacuno de Carne:' : (AppState.subseccionRadar === 'piensos' ? 'Radar Analítico de Materias Primas:' : 'Herramienta de Timing y Estacionalidad:')}</strong>
             ${AppState.subseccionRadar === 'carne'
               ? 'Evolución de las cotizaciones oficiales de la Lonja de Salamanca (€/kg canal: Añojo, Ternera, Vaca) frente al precio medio liquidado a la explotación ganadera.'
-              : 'Seguimiento neutral de las cotizaciones oficiales de Salamanca (Cebada y Maíz en €/t) frente al precio medio efectivo del concentrado de cebo en albaranes.'}
+              : (AppState.subseccionRadar === 'piensos'
+                  ? 'Seguimiento neutral de las cotizaciones oficiales de Salamanca (Cebada y Maíz en €/t) frente al precio medio efectivo del concentrado de cebo en albaranes.'
+                  : 'Ciclo estacional histórico de precios y simulador interactivo para evaluar objetivamente si compensa retrasar la salida a matadero.')}
           </div>
           <button id="btn-sync-lonja" class="btn-action-small" style="min-height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--brand-primary); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; white-space: nowrap;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -596,7 +642,7 @@ export function renderVistaLiquidaciones() {
               </table>
             </div>
           </div>
-        ` : `
+        ` : (AppState.subseccionRadar === 'piensos' ? `
           <!-- Gráfico SVG Responsivo de Materias Primas -->
           <div style="margin-bottom: 24px;">
             ${renderGraficoRadarMateriasPrimas(radarData || [])}
@@ -656,7 +702,145 @@ export function renderVistaLiquidaciones() {
               </table>
             </div>
           </div>
-        `}
+        ` : `
+          <!-- Bloque de Timing y Estacionalidad de Venta -->
+          <div style="margin-bottom: 24px;">
+            <div style="margin-bottom: 8px;">
+              <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin: 0;">
+                Ciclo Estacional Anual: Lonja de Salamanca (€/kg Canal)
+              </h3>
+              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0 0;">
+                Sombreado verde: periodo de máxima demanda histórica (Nov-Ene). Compara las curvas de Añojo Extra vs Añojo Pesado.
+              </p>
+            </div>
+            ${renderGraficoEstacionalidadCarne(estacionalidadData)}
+          </div>
+
+          <!-- Simulador Interactivo de Decisión de Salida / Venta -->
+          <div style="margin-top: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--brand-primary); margin: 0;">
+                  🧭 Simulador de Decisión de Salida (Timing de Cebo)
+                </h3>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0 0;">
+                  Calcula el impacto económico de posponer el sacrificio N días: kilos ganados, coste de pienso y riesgo de sobrepeso (&gt;350 kg canal).
+                </p>
+              </div>
+            </div>
+
+            <!-- Formulario de Parámetros del Simulador -->
+            <div style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    Peso Canal Actual (kg)
+                  </label>
+                  <input type="number" id="sim-peso-actual" value="${AppState.simulacionTiming.pesoCanalActual}" step="1" min="150" max="600" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    Días Extra de Cebo
+                  </label>
+                  <input type="number" id="sim-dias-retraso" value="${AppState.simulacionTiming.diasRetraso}" step="1" min="1" max="90" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    GMD Vivo Estimada (kg/día)
+                  </label>
+                  <input type="number" id="sim-gmd" value="${AppState.simulacionTiming.gmdVivo}" step="0.05" min="0.5" max="2.5" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    Coste Pienso (€/día)
+                  </label>
+                  <input type="number" id="sim-coste-pienso" value="${AppState.simulacionTiming.costeDiarioPienso}" step="0.05" min="0.5" max="10.0" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    Precio Hoy (€/kg Canal)
+                  </label>
+                  <input type="number" id="sim-precio-actual" value="${AppState.simulacionTiming.precioActualKg}" step="0.05" min="2.0" max="12.0" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    Precio Esperado (€/kg Canal)
+                  </label>
+                  <input type="number" id="sim-precio-futuro" value="${AppState.simulacionTiming.precioEsperadoKg}" step="0.05" min="2.0" max="12.0" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
+                </div>
+
+                <div>
+                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                    Tipo / Sexo
+                  </label>
+                  <select id="sim-sexo" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; background: var(--md-surface, #fff); box-sizing: border-box;">
+                    <option value="MACHO" ${AppState.simulacionTiming.esMacho ? 'selected' : ''}>Añojo Macho (Rdto ~58%, penaliza &gt;350kg)</option>
+                    <option value="HEMBRA" ${!AppState.simulacionTiming.esMacho ? 'selected' : ''}>Ternera Hembra (Rdto ~56%)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tarjetas de Resultados del Modelo -->
+            ${simulacionTiming ? `
+              <div class="kpis-liquidaciones-grid" style="margin-bottom: 16px;">
+                <div class="kpi-card-tonal">
+                  <div class="kpi-tonal-lbl">Peso Canal Proyectado</div>
+                  <div class="kpi-tonal-val" style="color: var(--brand-primary);">${simulacionTiming.pesoCanalNuevo} kg</div>
+                  <div class="kpi-tonal-sub">+${simulacionTiming.gananciaCanal} kg canal (+${(AppState.simulacionTiming.diasRetraso * AppState.simulacionTiming.gmdVivo).toFixed(1)} kg vivo)</div>
+                </div>
+
+                <div class="kpi-card-tonal">
+                  <div class="kpi-tonal-lbl">Ingreso Marginal Extra</div>
+                  <div class="kpi-tonal-val" style="color: ${simulacionTiming.ingresoMarginal >= 0 ? '#1b5e20' : '#ba1a1a'};">
+                    ${simulacionTiming.ingresoMarginal >= 0 ? '+' : ''}${formatearMoneda(simulacionTiming.ingresoMarginal)} €
+                  </div>
+                  <div class="kpi-tonal-sub">${formatearMoneda(simulacionTiming.ingresoNuevo)} € vs ${formatearMoneda(simulacionTiming.ingresoActual)} € hoy</div>
+                </div>
+
+                <div class="kpi-card-tonal">
+                  <div class="kpi-tonal-lbl">Coste Pienso Adicional</div>
+                  <div class="kpi-tonal-val" style="color: var(--chart-pienso, #ea580c);">-${formatearMoneda(simulacionTiming.costePiensoAcumulado)} €</div>
+                  <div class="kpi-tonal-sub">${AppState.simulacionTiming.diasRetraso} días × ${AppState.simulacionTiming.costeDiarioPienso} €/d</div>
+                </div>
+
+                <div class="kpi-card-tonal" style="border-left: 3px solid ${simulacionTiming.esRentable ? 'var(--brand-primary)' : '#ba1a1a'};">
+                  <div class="kpi-tonal-lbl">Resultado Neto de Decisión</div>
+                  <div class="kpi-tonal-val" style="color: ${simulacionTiming.esRentable ? '#1b5e20' : '#ba1a1a'};">
+                    ${simulacionTiming.margenNetoRetraso >= 0 ? '+' : ''}${formatearMoneda(simulacionTiming.margenNetoRetraso)} €
+                  </div>
+                  <div class="kpi-tonal-sub" style="font-weight: 700; color: ${simulacionTiming.esRentable ? '#1b5e20' : '#ba1a1a'};">
+                    ${simulacionTiming.esRentable ? '✓ Compensa aguantar' : '⚠️ No compensa retrasar'}
+                  </div>
+                </div>
+
+                <div class="kpi-card-tonal">
+                  <div class="kpi-tonal-lbl">Precio de Equilibrio (Break-even)</div>
+                  <div class="kpi-tonal-val" style="color: var(--md-secondary, #b45309);">${simulacionTiming.precioUmbralEquilibrio.toFixed(3)} €/kg</div>
+                  <div class="kpi-tonal-sub">Precio mínimo necesario para no perder</div>
+                </div>
+
+                <div class="kpi-card-tonal">
+                  <div class="kpi-tonal-lbl">Precio Efectivo Aplicado</div>
+                  <div class="kpi-tonal-val">${simulacionTiming.precioFinalEfectivo.toFixed(3)} €/kg</div>
+                  <div class="kpi-tonal-sub">${simulacionTiming.saltaSobrepeso ? 'Añojo Pesado (-0.25€ penaliz.)' : 'Añojo Extra'}</div>
+                </div>
+              </div>
+
+              ${simulacionTiming.saltaSobrepeso ? `
+                <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 12px 14px; font-size: 0.85rem; color: #991b1b; margin-top: 10px;">
+                  <strong>⚠️ Alerta de Salto de Categoría por Sobrepeso (&gt;350 kg):</strong>
+                  El peso proyectado (${simulacionTiming.pesoCanalNuevo} kg canal) supera el umbral de 350 kg. En lonja y matadero pasa a categoría <em>Añojo Pesado</em>, con una penalización aproximada de <strong>-0.25 €/kg</strong> sobre toda la canal (descuento estimado: <strong>-${simulacionTiming.penalizacionSobrepeso} €</strong>).
+                </div>
+              ` : ''}
+            ` : ''}
+          </div>
+        `)}
       ` : ""))}
     </div>
   `;
@@ -852,6 +1036,43 @@ function adjuntarEventosLiquidaciones(container) {
   if (selCat) {
     selCat.addEventListener("change", (e) => {
       AppState.categoriaFinanciera = e.target.value;
+      renderVistaLiquidaciones();
+    });
+  }
+
+  // Checkbox de Reconstrucción con Estimaciones Lonja
+  const chkEstimaciones = container.querySelector("#chk-estimaciones-lonja");
+  if (chkEstimaciones) {
+    chkEstimaciones.addEventListener("change", (e) => {
+      AppState.usarEstimacionesLonja = e.target.checked;
+      renderVistaLiquidaciones();
+    });
+  }
+
+  // Inputs del Simulador Interactivo de Timing de Venta
+  const bindSimInput = (selector, key, isFloat = true) => {
+    const el = container.querySelector(selector);
+    if (!el) return;
+    el.addEventListener("change", (e) => {
+      const val = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+      if (!isNaN(val)) {
+        AppState.simulacionTiming[key] = val;
+        renderVistaLiquidaciones();
+      }
+    });
+  };
+
+  bindSimInput("#sim-peso-actual", "pesoCanalActual", true);
+  bindSimInput("#sim-dias-retraso", "diasRetraso", false);
+  bindSimInput("#sim-gmd", "gmdVivo", true);
+  bindSimInput("#sim-coste-pienso", "costeDiarioPienso", true);
+  bindSimInput("#sim-precio-actual", "precioActualKg", true);
+  bindSimInput("#sim-precio-futuro", "precioEsperadoKg", true);
+
+  const selSexoSim = container.querySelector("#sim-sexo");
+  if (selSexoSim) {
+    selSexoSim.addEventListener("change", (e) => {
+      AppState.simulacionTiming.esMacho = e.target.value === "MACHO";
       renderVistaLiquidaciones();
     });
   }

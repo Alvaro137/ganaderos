@@ -170,7 +170,7 @@ export function obtenerSerieMensualFinanciera(anio = null) {
   return db.obtenerSerieMensualFinanciera(anio);
 }
 
-export function obtenerMargenTecnicoCebo(anio = null, categoria = null) {
+export function obtenerMargenTecnicoCebo(anio = null, categoria = null, usarEstimaciones = false) {
   const db = getDB();
   if (!db || typeof db.obtenerMargenTecnicoCebo !== "function") {
     return {
@@ -180,22 +180,89 @@ export function obtenerMargenTecnicoCebo(anio = null, categoria = null) {
       coste_pienso_medio_cabeza: 0,
       estancia_media_dias: 0,
       prima_media_lonja_kg: null,
+      usar_estimaciones: usarEstimaciones,
       animales: []
     };
   }
-  return db.obtenerMargenTecnicoCebo(anio, categoria);
+  return db.obtenerMargenTecnicoCebo(anio, categoria, usarEstimaciones);
 }
 
-export function obtenerRadarMateriasPrimas(anio = null) {
+export function obtenerRadarMateriasPrimas(anio = null, usarEstimaciones = false) {
   const db = getDB();
   if (!db || typeof db.obtenerRadarMateriasPrimas !== "function") return [];
-  return db.obtenerRadarMateriasPrimas(anio);
+  return db.obtenerRadarMateriasPrimas(anio, usarEstimaciones);
 }
 
-export function obtenerRadarLonjaCarne(anio = null) {
+export function obtenerRadarLonjaCarne(anio = null, usarEstimaciones = false) {
   const db = getDB();
   if (!db || typeof db.obtenerRadarLonjaCarne !== "function") return [];
-  return db.obtenerRadarLonjaCarne(anio);
+  return db.obtenerRadarLonjaCarne(anio, usarEstimaciones);
+}
+
+export function obtenerEstacionalidadLonjaCarne() {
+  const db = getDB();
+  if (!db || typeof db.obtenerEstacionalidadLonjaCarne !== "function") return [];
+  return db.obtenerEstacionalidadLonjaCarne();
+}
+
+export function calcularSimulacionTimingVenta(params = {}) {
+  const db = getDB();
+  if (db && typeof db.calcularSimulacionTimingVenta === "function") {
+    return db.calcularSimulacionTimingVenta(params);
+  }
+  const {
+    pesoCanalActual = 330.0,
+    diasRetraso = 21,
+    gmdVivo = 1.35,
+    costeDiarioPienso = 2.65,
+    precioActualKg = 7.15,
+    precioEsperadoKg = 7.20,
+    esMacho = true
+  } = params;
+
+  const rendimiento = esMacho ? 0.58 : 0.56;
+  const pesoVivoActual = pesoCanalActual / rendimiento;
+  const gananciaVivo = diasRetraso * gmdVivo;
+  const pesoVivoNuevo = pesoVivoActual + gananciaVivo;
+  const pesoCanalNuevo = Number((pesoVivoNuevo * rendimiento).toFixed(1));
+  const gananciaCanal = Number((pesoCanalNuevo - pesoCanalActual).toFixed(1));
+
+  let penalizacionSobrepeso = 0;
+  let precioFinalEfectivo = precioEsperadoKg;
+  let saltaSobrepeso = false;
+
+  if (esMacho && pesoCanalActual <= 350.0 && pesoCanalNuevo > 350.0) {
+    saltaSobrepeso = true;
+    precioFinalEfectivo = Math.max(0, Number((precioEsperadoKg - 0.25).toFixed(3)));
+    penalizacionSobrepeso = Number(((precioEsperadoKg - precioFinalEfectivo) * pesoCanalNuevo).toFixed(2));
+  }
+
+  const ingresoActual = Number((pesoCanalActual * precioActualKg).toFixed(2));
+  const ingresoNuevo = Number((pesoCanalNuevo * precioFinalEfectivo).toFixed(2));
+  const ingresoMarginal = Number((ingresoNuevo - ingresoActual).toFixed(2));
+
+  const costePiensoAcumulado = Number((diasRetraso * costeDiarioPienso).toFixed(2));
+  const margenNetoRetraso = Number((ingresoMarginal - costePiensoAcumulado).toFixed(2));
+
+  const precioUmbralEquilibrio = pesoCanalNuevo > 0 
+    ? Number(((ingresoActual + costePiensoAcumulado) / pesoCanalNuevo).toFixed(3))
+    : precioActualKg;
+
+  return {
+    pesoCanalActual,
+    pesoCanalNuevo,
+    gananciaCanal,
+    saltaSobrepeso,
+    penalizacionSobrepeso,
+    ingresoActual,
+    ingresoNuevo,
+    ingresoMarginal,
+    costePiensoAcumulado,
+    margenNetoRetraso,
+    esRentable: margenNetoRetraso > 0,
+    precioFinalEfectivo,
+    precioUmbralEquilibrio
+  };
 }
 
 
