@@ -156,3 +156,13 @@ class SyncConciliarResponse(BaseModel):
     actualizados: int
     message: str
 
+
+class DatabaseMetaResponse(BaseModel):
+    ok: bool = True
+    mtime: int
+    mtime_iso: str
+    size_bytes: int
+    filename: str
+    total_animales: int = 0
+    total_activos: int = 0
+

@@ -47,6 +47,18 @@ export async function sincronizarBaseDatosAhora(authToken = null) {
   return await db.sincronizarAhora(authToken);
 }
 
+export async function comprobarActualizacionServidor(authToken = null) {
+  const db = getDB();
+  if (!db || typeof db.verificarActualizacionServidor !== "function") return null;
+  return await db.verificarActualizacionServidor(authToken);
+}
+
+export function obtenerEstadoSync() {
+  const db = getDB();
+  if (!db || typeof db.obtenerEstadoSync !== "function") return { localMeta: null, historial: [] };
+  return db.obtenerEstadoSync();
+}
+
 export function obtenerDetalleAnimal(crotal) {
   const db = getDB();
   if (!db) return null;

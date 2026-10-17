@@ -95,6 +95,49 @@ async function obtenerBaseDatosLocal() {
   }
 }
 
+const DB_META_STORAGE_KEY = "campo_pwa_db_meta";
+const DB_SYNC_HISTORY_KEY = "campo_pwa_sync_history";
+
+function getStoredDBMeta() {
+  try {
+    const raw = localStorage.getItem(DB_META_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setStoredDBMeta(meta) {
+  try {
+    localStorage.setItem(DB_META_STORAGE_KEY, JSON.stringify(meta));
+  } catch (e) {
+    console.warn("[DB] Error guardando meta local:", e);
+  }
+}
+
+function getStoredSyncHistory() {
+  try {
+    const raw = localStorage.getItem(DB_SYNC_HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendSyncHistory(evento) {
+  try {
+    const list = getStoredSyncHistory();
+    list.unshift({
+      timestamp: new Date().toISOString(),
+      ...evento
+    });
+    const trimmed = list.slice(0, 15);
+    localStorage.setItem(DB_SYNC_HISTORY_KEY, JSON.stringify(trimmed));
+  } catch (e) {
+    console.warn("[DB] Error guardando historial de sync:", e);
+  }
+}
+
 class CampoDB {
   constructor() {
     this.db = null;
@@ -188,24 +231,72 @@ class CampoDB {
         await guardarBaseDatosLocal(newBuf);
         console.log("[DB] Censo local actualizado en segundo plano en IndexedDB.");
         this._reemplazarBaseDatosEnCaliente(newBuf);
+        appendSyncHistory({
+          accion: "Sincronización en segundo plano",
+          estado: "Éxito",
+          detalle: "Censo actualizado silenciosamente en segundo plano"
+        });
       }
     } catch {
       // Silencioso: las operaciones offline tienen prioridad
     }
   }
 
+  async verificarActualizacionServidor(authToken = null) {
+    if (!navigator.onLine) {
+      return { ok: false, razon: "offline" };
+    }
+    const token = authToken || localStorage.getItem("campo_pwa_token") || "";
+    const headers = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+      headers["X-Auth-Token"] = token;
+    }
+    try {
+      const resp = await fetch("./api/database/meta", { headers });
+      if (!resp.ok) {
+        if (resp.status === 401) return { ok: false, razon: "auth_required" };
+        return { ok: false, razon: "error_servidor", status: resp.status };
+      }
+      const serverMeta = await resp.json();
+      const localMeta = getStoredDBMeta();
+
+      const mtimeLocal = (localMeta && localMeta.mtime) ? localMeta.mtime : 0;
+      const hayActualizacion = (serverMeta.mtime > mtimeLocal);
+
+      return {
+        ok: true,
+        hayActualizacion,
+        serverMeta,
+        localMeta
+      };
+    } catch (err) {
+      return { ok: false, razon: "network_error", error: String(err) };
+    }
+  }
+
+  obtenerEstadoSync() {
+    return {
+      localMeta: getStoredDBMeta(),
+      historial: getStoredSyncHistory()
+    };
+  }
+
   async sincronizarAhora(authToken = null) {
     if (!navigator.onLine) {
+      appendSyncHistory({ accion: "Descarga manual", estado: "Error", detalle: "Sin conexión a internet" });
       throw new Error("SIN_CONEXION");
     }
     const token = authToken || localStorage.getItem("campo_pwa_token") || "";
     if (!token) {
+      appendSyncHistory({ accion: "Descarga manual", estado: "Error", detalle: "Sesión no autenticada" });
       throw new Error("AUTH_REQUIRED");
     }
 
     // Protección Local-First: vaciar Outbox antes de sobrescribir el censo local
     const outboxLimpio = await this._verificarYVaciarOutbox(token);
     if (!outboxLimpio) {
+      appendSyncHistory({ accion: "Descarga manual", estado: "Pospuesta", detalle: "Partos pendientes en Outbox" });
       throw new Error("MUTACIONES_PENDIENTES: Hay partos o registros locales en cola que no pudieron subirse al servidor. Resuelve los envíos pendientes antes de reemplazar el censo.");
     }
 
@@ -213,8 +304,18 @@ class CampoDB {
       "Authorization": `Bearer ${token}`,
       "X-Auth-Token": token
     };
+
+    let serverMeta = null;
+    try {
+      const metaResp = await fetch("./api/database/meta", { headers });
+      if (metaResp.ok) {
+        serverMeta = await metaResp.json();
+      }
+    } catch (_) {}
+
     const resp = await fetch("./api/database", { headers });
     if (!resp.ok) {
+      appendSyncHistory({ accion: "Descarga manual", estado: "Error", detalle: `Fallo HTTP ${resp.status}` });
       if (resp.status === 401) throw new Error("AUTH_REQUIRED");
       throw new Error(`Error en el servidor (${resp.status})`);
     }
@@ -222,7 +323,32 @@ class CampoDB {
     const newBuf = await resp.arrayBuffer();
     await guardarBaseDatosLocal(newBuf);
     const hotOk = this._reemplazarBaseDatosEnCaliente(newBuf);
-    return { ok: true, hotReloaded: hotOk, meta: this.meta };
+
+    const mtimeVal = serverMeta ? serverMeta.mtime : Math.floor(Date.now() / 1000);
+    const mtimeIso = serverMeta ? serverMeta.mtime_iso : new Date().toISOString();
+    const countAnimales = this.contarAnimales("", false);
+
+    setStoredDBMeta({
+      mtime: mtimeVal,
+      mtime_iso: mtimeIso,
+      descargado_en: new Date().toISOString(),
+      total_animales: serverMeta ? serverMeta.total_animales : countAnimales,
+      filename: serverMeta ? serverMeta.filename : "ganaderos_campo.sqlite"
+    });
+
+    appendSyncHistory({
+      accion: "Actualización censo",
+      estado: "Éxito",
+      detalle: `Descargado censo (${countAnimales} animales en total)`
+    });
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("campo:db-sync-completed", {
+        detail: { meta: this.meta, serverMeta }
+      }));
+    }
+
+    return { ok: true, hotReloaded: hotOk, meta: this.meta, serverMeta };
   }
 
   async inicializar(onProgress, authToken = null) {
@@ -281,6 +407,20 @@ class CampoDB {
     this.db = new SQL.Database(new Uint8Array(buf));
     this.ready = true;
     this._cargarMetadatos();
+
+    const countInit = this.contarAnimales("", false);
+    setStoredDBMeta({
+      mtime: Math.floor(Date.now() / 1000),
+      mtime_iso: new Date().toISOString(),
+      descargado_en: new Date().toISOString(),
+      total_animales: countInit,
+      filename: "ganaderos_campo.sqlite"
+    });
+    appendSyncHistory({
+      accion: "Descarga inicial",
+      estado: "Éxito",
+      detalle: `Primera descarga del censo (${countInit} animales)`
+    });
   }
 
   ejecutarQuery(sql, params = []) {

@@ -253,3 +253,21 @@ export function clasificarMovimientoUnificado(orig = "", dest = "", tipo = "") {
     badge_class: "otro"
   };
 }
+
+export function dispararToast(msg, esError = false) {
+  if (typeof document === "undefined") return;
+  let toast = document.getElementById("pwa-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "pwa-toast";
+    toast.className = "pwa-toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.backgroundColor = esError ? "var(--md-error, #ba1a1a)" : "var(--md-primary, #1b5e20)";
+  toast.style.color = "#ffffff";
+  toast.classList.add("pwa-toast--visible");
+  setTimeout(() => {
+    toast.classList.remove("pwa-toast--visible");
+  }, 3500);
+}

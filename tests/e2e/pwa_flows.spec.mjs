@@ -399,4 +399,67 @@ test.describe('Autenticación y Control de Acceso', () => {
     await expect(page.locator('#header-user-name')).toHaveText(/Jose/i);
   });
 
+  test('10. Experiencia de Sincronización PC -> Móvil, Detección de Novedades y Modal de Auditoría', async ({ page }) => {
+    // 0. Asegurar sesión autenticada y censo cargado
+    await page.addInitScript(() => {
+      window.localStorage.setItem('campo_pwa_token', 'e2e-valid-auth-token');
+    });
+    await page.goto('./');
+    await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
+
+    // 1. Verificar badge de sincronización en cabecera de filtros
+    const badge = page.locator('#btn-sync-status-badge');
+    await expect(badge).toBeVisible();
+
+    // 2. Abrir modal de estado de sincronización
+    await badge.click();
+    const modalSync = page.locator('#modal-sync-info');
+    await expect(modalSync).toBeVisible();
+    await expect(modalSync).toContainText(/Base de Datos Local/i);
+    await expect(modalSync).toContainText(/Historial de Sincronizaciones/i);
+
+    // 3. Cerrar modal
+    await page.locator('#btn-cerrar-modal-sync').click();
+    await expect(modalSync).not.toBeVisible();
+
+    // 4. Simular actualización en el PC en el endpoint de metadatos
+    await page.route('**/api/database/meta', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          mtime: Math.floor(Date.now() / 1000) + 3600,
+          mtime_iso: new Date(Date.now() + 3600000).toISOString(),
+          size_bytes: 524288,
+          filename: 'ganaderos_campo.sqlite',
+          total_animales: 155,
+          total_activos: 150
+        })
+      });
+    });
+
+    // 5. Forzar meta local desactualizado y recargar
+    await page.evaluate(() => {
+      localStorage.setItem('campo_pwa_db_meta', JSON.stringify({
+        mtime: 100,
+        descargado_en: '2026-01-01T00:00:00.000Z',
+        total_animales: 100
+      }));
+    });
+    await page.reload();
+    await expect(page.locator('#txt-busqueda')).toBeVisible({ timeout: 25000 });
+
+    // 6. Verificar que el banner prominente aparece
+    const banner = page.locator('#banner-sync-actualizacion');
+    await expect(banner).toBeVisible({ timeout: 10000 });
+    await expect(banner).toContainText(/Nueva versión del censo en el PC disponible/i);
+
+    // 7. Descartar con botón cerrar
+    const btnCerrarBanner = banner.locator('#btn-sync-cerrar');
+    await expect(btnCerrarBanner).toBeVisible();
+    await btnCerrarBanner.click();
+    await expect(banner).not.toBeVisible();
+  });
+
 });
