@@ -244,11 +244,12 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   - **Protección de Outbox en PWA (`db_client.js`):** `_verificarYVaciarOutbox()` envía mutaciones pendientes antes de descargar cualquier nuevo censo remoto, evitando sobrescrituras que oculten partos no sincronizados.
   - **Hot-Reload en FastAPI y Aislamiento de Tests:** `recargar_servicios_dominio()` refresca la conexión de FastAPI y repositorios tras cada importación de BD sin reiniciar systemd. Aislamiento estricto de `ganaderos_demo.sqlite` (modo solo lectura y usuarios en `:memory:` si falta la tabla).
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
-- [ ] **Fase 2: Ergonomía de Campo y Reparación UX de la PWA (En progreso):**
-  - Teclado táctil en móviles solo visible bajo demanda (`.touch-keypad.visible`).
-  - Touch targets WCAG ≥48px en botones de parto y limpieza de filtros.
-  - Búsqueda flexible por crotal de 1 a 4 dígitos con autocompletado de ceros.
-  - Sustitución de `alert()` por validación inline y toasts amigables.
+- [x] **Fase 2: Ergonomía de Campo y Reparación UX de la PWA:**
+  - **Teclado Táctil en Móviles:** Corregida regla CSS para que `.touch-keypad` esté oculto (`display: none;`) por defecto tanto en móvil como en escritorio, mostrándose exclusivamente bajo demanda con `.touch-keypad.visible` al pulsar el botón de toggle.
+  - **Touch Targets WCAG ≥48px para Guantes:** Botón `.btn-nuevo-parto-header` aumentado a `min-height: 48px; min-width: 48px;` con icono proporcional (18px), botón de borrado `.btn-input-clear` centrado verticalmente con área táctil accesible de 48x48px, botón de cierre de modal de parto `#btn-cerrar-modal-parto` elevado a 48x48px y `.btn-toggle-keypad` ajustado a `min-height: 48px;`.
+  - **Búsqueda Flexible por Crotal (1 a 4 dígitos):** Soporte en `db_client.js` para coincidencia incremental por prefijo, con ceros a la izquierda mediante `padStart(4, '0')` y por sufijo, priorizando coincidencias exactas y animales activos.
+  - **Erradicación de `alert()`:** Sustitución de `alert()` en `birth_modal.js` y `detail_view.js` por validación visual inline (`#modal-parto-error`), resaltado en rojo de inputs obligatorios y notificaciones toasts Material 3 (`.pwa-toast--visible`).
+  - **Service Worker:** Versión de caché actualizada a `ganaderos-campo-v30` en `pwa/sw.js`.
 - [ ] **Roadmap Futuro (Pendiente de formato y especificaciones):**
   - Registro de pesaje (cuando se disponga del formato de datos de la báscula).
   *(Nota: Descartados explícitamente por el ganadero por SRP e innecesarios en campo: cambio de lote/corral móvil y recetas/tratamientos sanitarios en la PWA).*

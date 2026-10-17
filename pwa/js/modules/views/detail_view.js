@@ -54,7 +54,19 @@ export function seleccionarAnimal(crotal, pushHistory = true) {
 
   const animal = obtenerDetalleAnimal(crotal);
   if (!animal) {
-    alert(`El animal con crotal ${crotal} no se encuentra en la base de datos.`);
+    console.warn(`[Animal] No encontrado: ${crotal}`);
+    let toast = document.getElementById("pwa-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "pwa-toast";
+      toast.className = "pwa-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = `⚠️ Animal ${crotal} no encontrado en el censo.`;
+    toast.style.backgroundColor = "var(--md-error, #ba1a1a)";
+    toast.style.color = "#ffffff";
+    toast.classList.add("pwa-toast--visible");
+    setTimeout(() => toast.classList.remove("pwa-toast--visible"), 3500);
     return;
   }
 
