@@ -66,9 +66,9 @@ def main() -> int:
             print(f"[+] Snapshot guardado con éxito (Commit {res.get('commit')})")
             print(f"    Archivos actualizados: {', '.join(res.get('archivos', []))}")
             if res.get("pushed"):
-                print("    ✓ Sincronizado correctamente con GitHub.")
+                print("    [OK] Sincronizado correctamente con GitHub.")
             elif not args.no_push:
-                print("    ⚠ Commit creado pero no se pudo hacer push (verificar conexión/claves).")
+                print("    [!] Commit creado pero no se pudo hacer push (verificar conexión/claves).")
         else:
             print("[+] " + res.get("message", "Sin cambios."))
         print("==================================================\n")
