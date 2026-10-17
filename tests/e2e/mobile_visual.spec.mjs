@@ -148,7 +148,7 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
   });
 
   test('V7. Movimientos: Banner Liquidaciones y Badges de Rendimiento en Canal', async ({ page }) => {
-    const btnMov = page.locator('.mobile-tab-btn[data-tab="movimientos"]');
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
     await btnMov.click();
 
     const banner = page.locator('.banner-liquidaciones');
@@ -159,7 +159,7 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
   });
 
   test('V8. Profundidad Nivel 1: Vista de Liquidaciones con KPIs y Desglose de Facturas', async ({ page }) => {
-    const btnMov = page.locator('.mobile-tab-btn[data-tab="movimientos"]');
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
     await btnMov.click();
 
     const banner = page.locator('.banner-liquidaciones');
@@ -174,7 +174,7 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
   });
 
   test('V9. Profundidad Nivel 2: Detalle de Factura con Canales y Retorno Reversible', async ({ page }) => {
-    const btnMov = page.locator('.mobile-tab-btn[data-tab="movimientos"]');
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
     await btnMov.click();
 
     const banner = page.locator('.banner-liquidaciones');
