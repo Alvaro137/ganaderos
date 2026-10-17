@@ -476,7 +476,7 @@ def main() -> int:
                     print(f"    Vault snapshot: {c_hash} ({res_vault.get('message')})")
                 except Exception as e_vault:
                     logger.warning(f"Advertencia guardando en Git Vault: {e_vault}")
-                    print(f"    ⚠ Advertencia en Git Vault: {e_vault}")
+                    print(f"    [!] Advertencia en Git Vault: {e_vault}")
         else:
             print("[*] Modo dry-run finalizado sin modificar Access ni el hub.")
 
