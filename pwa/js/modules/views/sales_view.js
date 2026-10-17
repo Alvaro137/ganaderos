@@ -50,7 +50,7 @@ import {
 
 // Estado local de la vista financiera
 if (AppState.anioFinanciero === undefined) {
-  AppState.anioFinanciero = "2026";
+  AppState.anioFinanciero = "TODOS";
 }
 if (AppState.categoriaFinanciera === undefined) {
   AppState.categoriaFinanciera = "TODOS";
@@ -117,7 +117,7 @@ export function renderVistaLiquidaciones() {
 
   // Opciones de selector de años
   const opcionesAnios = [
-    `<option value="TODOS" ${AppState.anioFinanciero === "TODOS" ? "selected" : ""}>Todos los Años</option>`,
+    `<option value="TODOS" ${AppState.anioFinanciero === "TODOS" ? "selected" : ""}>Histórico Completo (Todos los años)</option>`,
     ...aniosDisponibles.map(a => `<option value="${a}" ${AppState.anioFinanciero === a ? "selected" : ""}>Campaña ${a}</option>`)
   ].join("");
 
@@ -150,14 +150,15 @@ export function renderVistaLiquidaciones() {
     : null;
 
   // Series para gráficos interactivos estilo TradingView
+  const anioTrading = AppState.anioFinanciero === "TODOS" ? null : AppState.anioFinanciero;
   const tradingCarne = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "carne")
-    ? obtenerSeriesTradingCarne(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
+    ? obtenerSeriesTradingCarne(anioTrading, AppState.usarEstimacionesLonja)
     : null;
   const tradingPiensos = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "piensos")
-    ? obtenerSeriesTradingMateriasPrimas(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
+    ? obtenerSeriesTradingMateriasPrimas(anioTrading, AppState.usarEstimacionesLonja)
     : null;
   const tradingTesoreria = (AppState.perspectivaFinanciera === "tesoreria" && AppState.graficosExpandidos)
-    ? obtenerSeriesTradingTesoreria(AppState.anioFinanciero)
+    ? obtenerSeriesTradingTesoreria(anioTrading)
     : null;
 
   const seriesCarneTrading = tradingCarne ? [
@@ -309,7 +310,7 @@ export function renderVistaLiquidaciones() {
       color: "#2563eb",
       lineWidth: 2,
       data: tradingTesoreria.margen_neto,
-      defaultVisible: false,
+      defaultVisible: true,
       unit: "€",
       decimales: 0
     }
