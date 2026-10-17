@@ -16,8 +16,8 @@ class Animal:
     fecha_nacimiento: date
     madre_crotal: Optional[str]
     padre_crotal: Optional[str]
-    estado: str  # 'A' = Activo, 'B' = Baja
-    vida: int    # 1 = Vivo, 0 = Muerto
+    estado: str  # 'A' = Activo (alta en censo), 'B' = Baja (muerte o venta)
+    vida: int    # 1 = Ganado para vida (reproducción / nodrizas), 0 = Cebo (carne)
     corral: str  # Lote o cercado de pasto (ej: DUEÑA, ESPADAÑA)
     fecha_alta: date
     fecha_ult_parto: Optional[date] = None
@@ -25,11 +25,12 @@ class Animal:
 
     @property
     def es_activo(self) -> bool:
-        return self.estado == "A" and self.vida == 1
+        return self.estado.strip().upper() == "A"
 
     @property
     def es_reproductora(self) -> bool:
-        return self.es_activo and (self.sexo == "Vaca" or "Hembra" in self.sexo)
+        return self.es_activo and self.vida == 1 and (self.sexo == "Vaca" or "Hembra" in self.sexo)
+
 
     def edad_anios(self, fecha_referencia: Optional[date] = None) -> float:
         ref = fecha_referencia or date.today()
