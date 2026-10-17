@@ -23,7 +23,8 @@ import {
 import {
   renderGraficoBarrasComparativas,
   renderGraficoCotizacionCanal,
-  renderGraficoRadarMateriasPrimas
+  renderGraficoRadarMateriasPrimas,
+  renderGraficoLonjaCarne
 } from '../../pwa/js/modules/components/charts_svg.js';
 
 console.log("==================================================");
@@ -612,6 +613,27 @@ async function runAllTests() {
     assert.ok(htmlRadar.includes("Maíz Lonja"), "Debe incluir leyenda de maíz");
     assert.ok(htmlRadar.includes("Pienso T-3 Comprado"), "Debe incluir leyenda de pienso");
     assert.ok(htmlRadar.includes("Ene"), "Debe etiquetar el mes");
+  });
+
+  await test("Gráfico SVG Lonja Vacuno de Carne: Manejo de array vacío", () => {
+    const htmlVacio = renderGraficoLonjaCarne([]);
+    assert.ok(htmlVacio.includes("No hay datos de cotizaciones de carne"), "Debe informar ausencia de datos");
+  });
+
+  await test("Gráfico SVG Lonja Vacuno de Carne: Renderizado de curvas de categorías y barras de granja", () => {
+    const mockCarne = [
+      { mes: "2026-01", anojo_extra_lonja: 5.48, anojo_pesado_lonja: 5.35, ternera_extra_lonja: 5.60, vaca_desvieje_lonja: 4.10, precio_medio_granja: 5.52, canales_vendidas: 12 },
+      { mes: "2026-02", anojo_extra_lonja: 5.50, anojo_pesado_lonja: 5.38, ternera_extra_lonja: 5.62, vaca_desvieje_lonja: 4.15, precio_medio_granja: 5.55, canales_vendidas: 8 }
+    ];
+    const htmlCarne = renderGraficoLonjaCarne(mockCarne, { ancho: 640, alto: 230 });
+    assert.ok(htmlCarne.includes("<svg"), "Debe generar elemento <svg>");
+    assert.ok(htmlCarne.includes("viewBox=\"0 0 640 230\""), "Debe tener el viewBox correcto");
+    assert.ok(htmlCarne.includes("Añojo Extra"), "Debe incluir leyenda de Añojo Extra");
+    assert.ok(htmlCarne.includes("Añojo Pesado"), "Debe incluir leyenda de Añojo Pesado");
+    assert.ok(htmlCarne.includes("Ternera Extra"), "Debe incluir leyenda de Ternera Extra");
+    assert.ok(htmlCarne.includes("Vaca Desvieje"), "Debe incluir leyenda de Vaca Desvieje");
+    assert.ok(htmlCarne.includes("Precio Cobrado Granja"), "Debe incluir leyenda de precio de granja");
+    assert.ok(htmlCarne.includes("5.52€"), "Debe etiquetar el precio cobrado por la granja");
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

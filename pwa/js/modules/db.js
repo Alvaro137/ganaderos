@@ -192,5 +192,11 @@ export function obtenerRadarMateriasPrimas(anio = null) {
   return db.obtenerRadarMateriasPrimas(anio);
 }
 
+export function obtenerRadarLonjaCarne(anio = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerRadarLonjaCarne !== "function") return [];
+  return db.obtenerRadarLonjaCarne(anio);
+}
+
 
 
