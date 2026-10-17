@@ -303,6 +303,10 @@ from src.server.schemas import (
     LoginRequest,
     SetLogLevelRequest,
     SetLogLevelResponse,
+    SyncConciliarRequest,
+    SyncConciliarResponse,
+    SyncPendienteItem,
+    SyncPendientesResponse,
     SyncPushRequest,
     SyncStatusResponse,
     SynthesizeRequest,
@@ -961,6 +965,51 @@ async def sync_historial(
     if service is None:
         raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
     return {"ok": True, "registros": service.historial(limite=limite)}
+
+
+@app.get("/api/sync/pendientes", tags=["Sincronización"], response_model=SyncPendientesResponse)
+async def sync_pendientes(
+    request: Request,
+    tipo: Optional[str] = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Devuelve los registros de campo pendientes de conciliar en Access (conciliado_en_access = 0)."""
+    _autenticacion_op(request, credentials)
+    service = get_sync_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
+    pendientes = service.listar_pendientes(tipo=tipo)
+    return {
+        "ok": True,
+        "pendientes": [SyncPendienteItem(**p) for p in pendientes],
+        "total": len(pendientes),
+    }
+
+
+@app.post("/api/sync/conciliado", tags=["Sincronización"], response_model=SyncConciliarResponse)
+async def sync_conciliado(
+    request: Request,
+    req: SyncConciliarRequest,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Marca registros de campo como conciliados en Access (solo administrador)."""
+    datos = _autenticacion_op(request, credentials)
+    if datos["user_id"] != "usr_admin" and datos.get("rol") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador puede confirmar la conciliación en Access.",
+        )
+    service = get_sync_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
+
+    actualizados = service.marcar_conciliados([c.model_dump() for c in req.conciliados])
+    logger.info(f"[Sync] {actualizados} registros marcados como conciliados en Access por {datos['user_id']}.")
+    return {
+        "ok": True,
+        "actualizados": actualizados,
+        "message": f"{actualizados} registro(s) marcados como conciliados en Access.",
+    }
 
 
 @app.post("/api/sync/import", tags=["Sincronización"])

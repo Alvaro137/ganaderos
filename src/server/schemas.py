@@ -126,3 +126,33 @@ class SetLogLevelResponse(BaseModel):
     previous_level: str
     new_level: str
 
+class SyncPendienteItem(BaseModel):
+    uuid: str
+    tipo: str
+    crotal: Optional[str] = None
+    operador: str
+    device_id: Optional[str] = None
+    ts_dispositivo: Optional[str] = None
+    ts_servidor: str
+    payload: Optional[Dict[str, Any]] = None
+    conciliado_en_access: int = 0
+    ts_conciliado: Optional[str] = None
+    crotal_asignado: Optional[str] = None
+
+class SyncPendientesResponse(BaseModel):
+    ok: bool = True
+    pendientes: List[SyncPendienteItem] = Field(default_factory=list)
+    total: int = 0
+
+class ConciliarItem(BaseModel):
+    uuid: str = Field(min_length=1, max_length=64)
+    crotal_asignado: Optional[str] = Field(default=None, max_length=32)
+
+class SyncConciliarRequest(BaseModel):
+    conciliados: List[ConciliarItem] = Field(min_length=1)
+
+class SyncConciliarResponse(BaseModel):
+    ok: bool = True
+    actualizados: int
+    message: str
+
