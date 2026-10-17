@@ -137,6 +137,47 @@ def crear_esquema(conn: sqlite3.Connection) -> None:
         valor TEXT
     );
 
+    DROP TABLE IF EXISTS ventas_liquidaciones;
+    CREATE TABLE ventas_liquidaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero_factura TEXT UNIQUE NOT NULL,
+        fecha_factura TEXT,
+        fecha_pago TEXT,
+        cliente_cooperativa TEXT DEFAULT 'GANAVAEX, S.COOP',
+        cif_cliente TEXT DEFAULT 'F37335411',
+        total_cabezas REAL,
+        total_kilos_canal REAL,
+        base_imponible REAL,
+        porcentaje_iva REAL DEFAULT 10.50,
+        cuota_iva REAL,
+        gastos_total REAL,
+        total_factura REAL,
+        archivo_origen TEXT
+    );
+
+    DROP TABLE IF EXISTS ventas_canales;
+    CREATE TABLE ventas_canales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        factura_id INTEGER REFERENCES ventas_liquidaciones(id) ON DELETE CASCADE,
+        linea_numero INTEGER,
+        articulo TEXT,
+        cabezas REAL DEFAULT 1.0,
+        peso_canal_kg REAL,
+        precio_unitario REAL,
+        importe_linea REAL,
+        referencia TEXT,
+        fecha_salida_lote TEXT,
+        crotal_asignado TEXT
+    );
+
+    DROP TABLE IF EXISTS ventas_gastos;
+    CREATE TABLE ventas_gastos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        factura_id INTEGER REFERENCES ventas_liquidaciones(id) ON DELETE CASCADE,
+        concepto TEXT,
+        importe REAL
+    );
+
     -- Índices optimizados
     CREATE INDEX idx_animal_crotal_4 ON animales(crotal_4);
     CREATE INDEX idx_animal_estado ON animales(estado);
@@ -151,6 +192,9 @@ def crear_esquema(conn: sqlite3.Connection) -> None:
     CREATE INDEX idx_recetas_cea ON recetas(cea);
     CREATE INDEX idx_compras_fecha ON compras_alimento(fecha);
     CREATE INDEX idx_compras_alimento ON compras_alimento(alimento);
+    CREATE INDEX idx_ventas_factura ON ventas_liquidaciones(numero_factura);
+    CREATE INDEX idx_ventas_canales_crotal ON ventas_canales(crotal_asignado);
+    CREATE INDEX idx_ventas_canales_factura ON ventas_canales(factura_id);
     """)
     conn.commit()
 
@@ -304,7 +348,62 @@ def poblar_datos(conn: sqlite3.Connection, num_animales: int = 150) -> None:
     VALUES (?, ?, ?, ?, ?, ?)
     """, movimientos)
 
-    # 6. Metadatos de la base de datos
+    # 6. Liquidaciones y Canales de Venta (GANAVAEX)
+    animales_baja = [a for a in animales if a[8] == "B"]
+    if len(animales_baja) >= 4:
+        lote1 = animales_baja[:4]
+        canales1 = []
+        kg_total1 = 0.0
+        base1 = 0.0
+        f_fac1 = hoy - timedelta(days=60)
+        for idx, anim in enumerate(lote1):
+            crot = anim[0]
+            kg = round(rnd.uniform(260.0, 310.0), 1)
+            pr = round(rnd.uniform(7.10, 7.85), 3)
+            imp = round(kg * pr, 2)
+            kg_total1 += kg
+            base1 += imp
+            canales1.append((1, idx + 1, "TERNERA CEBO", 1.0, kg, pr, imp, "REF-02", f_fac1.isoformat(), crot))
+            movimientos.append((
+                crot, (f_fac1 - timedelta(days=2)).isoformat(), "VENTA",
+                "ES371261100122", "ES373762000081", "CEBADERO"
+            ))
+
+        pct_iva = 10.5
+        iva1 = round(base1 * (pct_iva / 100.0), 2)
+        gastos1 = round(base1 * 0.015, 2)
+        total1 = round(base1 + iva1 - gastos1, 2)
+
+        cur.execute("""
+        INSERT INTO ventas_liquidaciones (
+            id, numero_factura, fecha_factura, fecha_pago, cliente_cooperativa,
+            cif_cliente, total_cabezas, total_kilos_canal, base_imponible,
+            porcentaje_iva, cuota_iva, gastos_total, total_factura, archivo_origen
+        ) VALUES (1, 'F-2024-00452', ?, ?, 'GANAVAEX, S.COOP', 'F37335411', ?, ?, ?, ?, ?, ?, ?, 'factura_00452.pdf')
+        """, (
+            f_fac1.isoformat(),
+            (f_fac1 + timedelta(days=15)).isoformat(),
+            float(len(lote1)),
+            round(kg_total1, 1),
+            round(base1, 2),
+            pct_iva,
+            iva1,
+            gastos1,
+            total1
+        ))
+
+        cur.executemany("""
+        INSERT INTO ventas_canales (
+            factura_id, linea_numero, articulo, cabezas, peso_canal_kg, precio_unitario, importe_linea, referencia, fecha_salida_lote, crotal_asignado
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, canales1)
+
+        cur.execute("""
+        INSERT INTO ventas_gastos (factura_id, concepto, importe)
+        VALUES (1, 'Portes y cuota cooperativa GANAVAEX', ?)
+        """, (gastos1,))
+
+    # 7. Metadatos de la base de datos
     cur.executemany("""
     INSERT INTO meta (clave, valor) VALUES (?, ?)
     """, [
