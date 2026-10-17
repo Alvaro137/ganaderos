@@ -144,4 +144,30 @@ export function registrarPesaje(datos) {
   return db.registrarPesaje(datos);
 }
 
+export function obtenerAniosDisponiblesFinancieros() {
+  const db = getDB();
+  if (!db || typeof db.obtenerAniosDisponiblesFinancieros !== "function") return [new Date().getFullYear().toString()];
+  return db.obtenerAniosDisponiblesFinancieros();
+}
+
+export function obtenerResumenFinancieroGlobal(anio = null, categoria = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerResumenFinancieroGlobal !== "function") {
+    return {
+      ingresos_carne: 0,
+      gasto_pienso: 0,
+      margen_bruto_alimentacion: 0,
+      ratio_carne_pienso: null,
+      desglose_categorias: []
+    };
+  }
+  return db.obtenerResumenFinancieroGlobal(anio, categoria);
+}
+
+export function obtenerSerieMensualFinanciera(anio = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerSerieMensualFinanciera !== "function") return [];
+  return db.obtenerSerieMensualFinanciera(anio);
+}
+
 
