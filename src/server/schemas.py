@@ -166,3 +166,54 @@ class DatabaseMetaResponse(BaseModel):
     total_animales: int = 0
     total_activos: int = 0
 
+
+class PesajeCreateRequest(BaseModel):
+    crotal: str = Field(min_length=4, max_length=20)
+    fecha: str
+    peso_kg: float = Field(gt=0, lt=2000)
+    tipo: str = "Control"
+    notas: Optional[str] = None
+    operador: Optional[str] = None
+
+
+class PesajeItemResponse(BaseModel):
+    id: Optional[int]
+    crotal: str
+    fecha: str
+    peso_kg: float
+    tipo: str
+    notas: Optional[str] = None
+    operador: Optional[str] = None
+    gmd_kg_dia: Optional[float] = None
+
+
+class TratamientoItemResponse(BaseModel):
+    id: Optional[int]
+    crotal: str
+    fecha_inicio: str
+    fecha_fin: Optional[str] = None
+    medicamento: str
+    veterinario: Optional[str] = None
+    causa: Optional[str] = None
+    dias_retirada: int = 0
+    fecha_fin_retirada: Optional[str] = None
+    en_retirada: bool = False
+
+
+class MogaDiscrepanciaItem(BaseModel):
+    crotal: str
+    crotal_4: Optional[str] = None
+    motivo: str
+    corral: Optional[str] = None
+    estado_moga: Optional[str] = None
+    explotacion: Optional[str] = None
+
+
+class MogaConciliacionResponse(BaseModel):
+    ok: bool = True
+    resumen: Dict[str, Any]
+    no_en_moga: List[MogaDiscrepanciaItem]
+    bajas_oficiales_activas_local: List[MogaDiscrepanciaItem]
+    bajas_locales_activas_oficial: List[MogaDiscrepanciaItem] = Field(default_factory=list)
+    no_en_campo: List[MogaDiscrepanciaItem]
+
