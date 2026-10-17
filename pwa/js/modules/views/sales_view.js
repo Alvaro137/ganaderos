@@ -26,13 +26,15 @@ import {
   obtenerComprasAlimento,
   obtenerMargenTecnicoCebo,
   obtenerRadarMateriasPrimas,
+  obtenerRadarLonjaCarne,
   sincronizarBaseDatosAhora
 } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
 import {
   renderGraficoBarrasComparativas,
   renderGraficoCotizacionCanal,
-  renderGraficoRadarMateriasPrimas
+  renderGraficoRadarMateriasPrimas,
+  renderGraficoLonjaCarne
 } from '../components/charts_svg.js';
 
 // Estado local de la vista financiera
@@ -47,6 +49,9 @@ if (AppState.subtabFinanciera === undefined) {
 }
 if (AppState.perspectivaFinanciera === undefined) {
   AppState.perspectivaFinanciera = "tesoreria"; // "tesoreria" | "devengo" | "radar"
+}
+if (AppState.subseccionRadar === undefined) {
+  AppState.subseccionRadar = "carne"; // "carne" o "piensos"
 }
 if (AppState.graficosExpandidos === undefined) {
   AppState.graficosExpandidos = false; // Colapsado por defecto en móvil para máxima claridad
@@ -102,6 +107,9 @@ export function renderVistaLiquidaciones() {
   const radarData = (AppState.perspectivaFinanciera === "radar")
     ? obtenerRadarMateriasPrimas(AppState.anioFinanciero)
     : null;
+  const radarCarne = (AppState.perspectivaFinanciera === "radar")
+    ? obtenerRadarLonjaCarne(AppState.anioFinanciero)
+    : [];
 
   const html = `
     <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 24px;">
@@ -122,7 +130,7 @@ export function renderVistaLiquidaciones() {
             ${AppState.perspectivaFinanciera === "devengo" 
               ? "Margen técnico individual por ciclo de cebo y auditoría vs Lonja de Salamanca."
               : (AppState.perspectivaFinanciera === "radar" 
-                  ? "Evolución comparada de materias primas (Lonja Salamanca vs Albaranes granja)."
+                  ? "Evolución comparada de Lonja Salamanca (Vacuno de Carne y Materias Primas) vs Explotación."
                   : "Rentabilidad de la explotación: Facturación de Carne vs Coste de Alimentación.")}
           </p>
         </div>
@@ -148,7 +156,7 @@ export function renderVistaLiquidaciones() {
           <span>🐄 Margen Técnico de Cebo</span>
         </button>
         <button class="perspective-pill-btn ${AppState.perspectivaFinanciera === 'radar' ? 'active' : ''}" data-perspectiva="radar">
-          <span>🌾 Radar Materias Primas</span>
+          <span>🌾 Radar de Mercados y Lonja</span>
         </button>
       </div>
 
@@ -499,71 +507,156 @@ export function renderVistaLiquidaciones() {
             </table>
           </div>
         </div>
-      ` : (AppState.perspectivaFinanciera === "radar" && radarData ? `
-        <!-- PERSPECTIVA DE RADAR: Materias Primas Lonja vs Albaranes -->
-        <div class="info-banner-devengo" style="background: var(--md-surface-container-high, #fffbeb); border-color: #fde68a; border-left-color: #d97706;">
-          <strong>Radar Analítico de Materias Primas:</strong> Seguimiento neutral de las cotizaciones oficiales de la Lonja Agropecuaria de Salamanca (Cebada y Maíz en €/t) frente al precio medio efectivo del concentrado de cebo en los albaranes de la explotación.
+      ` : (AppState.perspectivaFinanciera === "radar" ? `
+        <!-- Selector de Subsección del Radar: Carne vs Cereales -->
+        <div class="financial-subtabs" style="margin-bottom: 16px;">
+          <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'carne' ? 'active' : ''}" data-radar-subtab="carne">
+            🥩 Vacuno de Carne (Lonja vs Granja)
+          </button>
+          <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'piensos' ? 'active' : ''}" data-radar-subtab="piensos">
+            🌾 Materias Primas (Cereales vs Pienso)
+          </button>
         </div>
 
-        <!-- Gráfico SVG Responsivo del Radar -->
-        <div style="margin-bottom: 24px;">
-          ${renderGraficoRadarMateriasPrimas(radarData)}
-        </div>
-
-        <!-- Tabla de Evolución Mensual de Cotizaciones e Insumos -->
-        <div style="margin-top: 20px;">
-          <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 12px;">
-            Evolución Mensual: Lonja Salamanca vs Pienso Comprado
-          </h3>
-
-          <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
-            <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
-              <thead>
-                <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
-                  <th style="padding: 10px 12px;">Mes</th>
-                  <th style="padding: 10px 12px;">Cebada Salamanca (€/t)</th>
-                  <th style="padding: 10px 12px;">Maíz Salamanca (€/t)</th>
-                  <th style="padding: 10px 12px;">Pienso Lonja (€/t)</th>
-                  <th style="padding: 10px 12px;">Pienso Granja (€/t)</th>
-                  <th style="padding: 10px 12px;">Volumen Comprado</th>
-                  <th style="padding: 10px 12px;">Diferencial Real vs Lonja</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  radarData.length === 0
-                    ? `<tr><td colspan="7" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin datos de cotización en el periodo seleccionado.</td></tr>`
-                    : radarData.map(r => {
-                        const dif = (r.pienso_real_t != null && r.pienso_lonja_t != null)
-                          ? Number((r.pienso_real_t - r.pienso_lonja_t).toFixed(1))
-                          : null;
-                        const textoDif = dif != null
-                          ? `${dif >= 0 ? '+' : ''}${dif} €/t`
-                          : "—";
-
-                        return `
-                          <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
-                            <td style="padding: 10px 12px; font-weight: 700; color: var(--text-main);">${escapeHtml(r.mes)}</td>
-                            <td style="padding: 10px 12px; color: #b45309; font-weight: 600;">${r.cebada_lonja_t != null ? `${r.cebada_lonja_t} €/t` : "—"}</td>
-                            <td style="padding: 10px 12px; color: #d97706; font-weight: 600;">${r.maiz_lonja_t != null ? `${r.maiz_lonja_t} €/t` : "—"}</td>
-                            <td style="padding: 10px 12px; color: var(--chart-pienso, #ea580c); font-weight: 700;">${r.pienso_lonja_t != null ? `${r.pienso_lonja_t} €/t` : "—"}</td>
-                            <td style="padding: 10px 12px; font-weight: 800; color: ${r.pienso_real_t ? 'var(--brand-primary)' : 'var(--text-dim)'};">
-                              ${r.pienso_real_t != null && r.pienso_real_t > 0 ? `${r.pienso_real_t} €/t` : "Sin compras"}
-                            </td>
-                            <td style="padding: 10px 12px; color: var(--text-muted);">
-                              ${r.kg_comprados > 0 ? `${formatearKg(r.kg_comprados)} kg` : "—"}
-                            </td>
-                            <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif <= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};">
-                              ${textoDif}
-                            </td>
-                          </tr>
-                        `;
-                      }).join("")
-                }
-              </tbody>
-            </table>
+        <!-- Banner descriptivo con botón de Sincronización en Vivo -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <div class="info-banner-devengo" style="margin: 0; flex: 1; min-width: 280px; background: var(--md-surface-container-high, #fffbeb); border-color: #fde68a; border-left-color: #d97706;">
+            <strong>${AppState.subseccionRadar === 'carne' ? 'Radar Oficial de Vacuno de Carne:' : 'Radar Analítico de Materias Primas:'}</strong>
+            ${AppState.subseccionRadar === 'carne'
+              ? 'Evolución de las cotizaciones oficiales de la Lonja de Salamanca (€/kg canal: Añojo, Ternera, Vaca) frente al precio medio liquidado a la explotación ganadera.'
+              : 'Seguimiento neutral de las cotizaciones oficiales de Salamanca (Cebada y Maíz en €/t) frente al precio medio efectivo del concentrado de cebo en albaranes.'}
           </div>
+          <button id="btn-sync-lonja" class="btn-action-small" style="min-height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--brand-primary); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>Actualizar Lonja en Vivo</span>
+          </button>
         </div>
+
+        ${AppState.subseccionRadar === 'carne' ? `
+          <!-- Gráfico SVG Responsivo de Vacuno de Carne -->
+          <div style="margin-bottom: 24px;">
+            ${renderGraficoLonjaCarne(radarCarne)}
+          </div>
+
+          <!-- Tabla de Evolución Mensual: Lonja Carne vs Liquidaciones Granja -->
+          <div style="margin-top: 20px;">
+            <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 12px;">
+              Evolución Mensual: Lonja Salamanca vs Precio Cobrado Granja (€/kg Canal)
+            </h3>
+
+            <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
+              <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
+                <thead>
+                  <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
+                    <th style="padding: 10px 12px;">Mes</th>
+                    <th style="padding: 10px 12px;">Añojo Extra (&lt;350kg)</th>
+                    <th style="padding: 10px 12px;">Añojo Pesado (&gt;350kg)</th>
+                    <th style="padding: 10px 12px;">Ternera Extra</th>
+                    <th style="padding: 10px 12px;">Vaca Desvieje</th>
+                    <th style="padding: 10px 12px;">Cobrado Granja</th>
+                    <th style="padding: 10px 12px;">Canales</th>
+                    <th style="padding: 10px 12px;">Diferencial vs Añojo Extra</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    radarCarne.length === 0
+                      ? `<tr><td colspan="8" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin cotizaciones de carne o ventas en el periodo seleccionado. Pulsa "Actualizar Lonja en Vivo" para cargar datos.</td></tr>`
+                      : radarCarne.map(r => {
+                          const dif = (r.precio_medio_granja != null && r.anojo_extra_lonja != null)
+                            ? Number((r.precio_medio_granja - r.anojo_extra_lonja).toFixed(2))
+                            : null;
+                          const textoDif = dif != null
+                            ? `${dif >= 0 ? '+' : ''}${dif.toFixed(2)} €/kg`
+                            : "—";
+
+                          return `
+                            <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
+                              <td style="padding: 10px 12px; font-weight: 700; color: var(--text-main);">${escapeHtml(r.mes)}</td>
+                              <td style="padding: 10px 12px; color: #15803d; font-weight: 700;">${r.anojo_extra_lonja != null ? `${r.anojo_extra_lonja.toFixed(2)} €/kg` : "—"}</td>
+                              <td style="padding: 10px 12px; color: #2563eb; font-weight: 600;">${r.anojo_pesado_lonja != null ? `${r.anojo_pesado_lonja.toFixed(2)} €/kg` : "—"}</td>
+                              <td style="padding: 10px 12px; color: #7c3aed; font-weight: 600;">${r.ternera_extra_lonja != null ? `${r.ternera_extra_lonja.toFixed(2)} €/kg` : "—"}</td>
+                              <td style="padding: 10px 12px; color: #64748b; font-weight: 600;">${r.vaca_desvieje_lonja != null ? `${r.vaca_desvieje_lonja.toFixed(2)} €/kg` : "—"}</td>
+                              <td style="padding: 10px 12px; font-weight: 800; color: ${r.precio_medio_granja ? '#ea580c' : 'var(--text-dim)'};">
+                                ${r.precio_medio_granja != null && r.precio_medio_granja > 0 ? `${r.precio_medio_granja.toFixed(2)} €/kg` : "Sin ventas"}
+                              </td>
+                              <td style="padding: 10px 12px; color: var(--text-muted);">
+                                ${r.canales_vendidas > 0 ? `${r.canales_vendidas} cab.` : "—"}
+                              </td>
+                              <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif >= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};">
+                                ${textoDif}
+                              </td>
+                            </tr>
+                          `;
+                        }).join("")
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : `
+          <!-- Gráfico SVG Responsivo de Materias Primas -->
+          <div style="margin-bottom: 24px;">
+            ${renderGraficoRadarMateriasPrimas(radarData || [])}
+          </div>
+
+          <!-- Tabla de Evolución Mensual de Cotizaciones e Insumos -->
+          <div style="margin-top: 20px;">
+            <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 12px;">
+              Evolución Mensual: Lonja Salamanca vs Pienso Comprado (€/t)
+            </h3>
+
+            <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
+              <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
+                <thead>
+                  <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
+                    <th style="padding: 10px 12px;">Mes</th>
+                    <th style="padding: 10px 12px;">Cebada Salamanca (€/t)</th>
+                    <th style="padding: 10px 12px;">Maíz Salamanca (€/t)</th>
+                    <th style="padding: 10px 12px;">Pienso Lonja (€/t)</th>
+                    <th style="padding: 10px 12px;">Pienso Granja (€/t)</th>
+                    <th style="padding: 10px 12px;">Volumen Comprado</th>
+                    <th style="padding: 10px 12px;">Diferencial Real vs Lonja</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${
+                    !radarData || radarData.length === 0
+                      ? `<tr><td colspan="7" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin datos de cotización en el periodo seleccionado. Pulsa "Actualizar Lonja en Vivo" para cargar datos.</td></tr>`
+                      : radarData.map(r => {
+                          const dif = (r.pienso_real_t != null && r.pienso_lonja_t != null)
+                            ? Number((r.pienso_real_t - r.pienso_lonja_t).toFixed(1))
+                            : null;
+                          const textoDif = dif != null
+                            ? `${dif >= 0 ? '+' : ''}${dif} €/t`
+                            : "—";
+
+                          return `
+                            <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
+                              <td style="padding: 10px 12px; font-weight: 700; color: var(--text-main);">${escapeHtml(r.mes)}</td>
+                              <td style="padding: 10px 12px; color: #b45309; font-weight: 600;">${r.cebada_lonja_t != null ? `${r.cebada_lonja_t} €/t` : "—"}</td>
+                              <td style="padding: 10px 12px; color: #d97706; font-weight: 600;">${r.maiz_lonja_t != null ? `${r.maiz_lonja_t} €/t` : "—"}</td>
+                              <td style="padding: 10px 12px; color: var(--chart-pienso, #ea580c); font-weight: 700;">${r.pienso_lonja_t != null ? `${r.pienso_lonja_t} €/t` : "—"}</td>
+                              <td style="padding: 10px 12px; font-weight: 800; color: ${r.pienso_real_t ? 'var(--brand-primary)' : 'var(--text-dim)'};">
+                                ${r.pienso_real_t != null && r.pienso_real_t > 0 ? `${r.pienso_real_t} €/t` : "Sin compras"}
+                              </td>
+                              <td style="padding: 10px 12px; color: var(--text-muted);">
+                                ${r.kg_comprados > 0 ? `${formatearKg(r.kg_comprados)} kg` : "—"}
+                              </td>
+                              <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif <= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};">
+                                ${textoDif}
+                              </td>
+                            </tr>
+                          `;
+                        }).join("")
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `}
       ` : ""))}
     </div>
   `;
@@ -793,12 +886,71 @@ function adjuntarEventosLiquidaciones(container) {
   }
 
   // Subpestañas (Facturas vs Piensos)
-  container.querySelectorAll(".financial-subtab-btn").forEach(btn => {
+  container.querySelectorAll(".financial-subtab-btn:not(.radar-subtab-btn)").forEach(btn => {
     btn.addEventListener("click", () => {
       AppState.subtabFinanciera = btn.dataset.subtab;
       renderVistaLiquidaciones();
     });
   });
+
+  // Subpestañas de Radar (Carne vs Piensos)
+  container.querySelectorAll(".radar-subtab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      AppState.subseccionRadar = btn.dataset.radarSubtab;
+      renderVistaLiquidaciones();
+    });
+  });
+
+  // Botón Sincronizar Lonja en Vivo
+  const btnSyncLonja = container.querySelector("#btn-sync-lonja");
+  if (btnSyncLonja) {
+    btnSyncLonja.addEventListener("click", async () => {
+      btnSyncLonja.disabled = true;
+      btnSyncLonja.innerHTML = `<span>⏳ Sincronizando...</span>`;
+      let toast = document.getElementById("pwa-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "pwa-toast";
+        toast.className = "pwa-toast";
+        document.body.appendChild(toast);
+      }
+      toast.textContent = "🌾 Sincronizando con la Lonja de Salamanca...";
+      toast.style.backgroundColor = "var(--brand-primary)";
+      toast.style.color = "#ffffff";
+      toast.classList.add("pwa-toast--visible");
+
+      try {
+        const token = localStorage.getItem("campo_pwa_token") || "";
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch("./api/lonja/sync", {
+          method: "POST",
+          headers
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Error (${res.status})`);
+        }
+
+        const data = await res.json();
+        toast.textContent = `✓ ${data.message || "Cotizaciones actualizadas."}`;
+        await sincronizarBaseDatosAhora(token).catch(() => {});
+        setTimeout(() => {
+          toast.classList.remove("pwa-toast--visible");
+          renderVistaLiquidaciones();
+        }, 1200);
+      } catch (err) {
+        console.error("[Lonja Sync] Error:", err);
+        toast.textContent = `⚠️ Error al sincronizar: ${err.message}`;
+        toast.style.backgroundColor = "var(--md-error, #ba1a1a)";
+        setTimeout(() => toast.classList.remove("pwa-toast--visible"), 4000);
+        btnSyncLonja.disabled = false;
+        btnSyncLonja.innerHTML = `<span>🔄 Reintentar Lonja</span>`;
+      }
+    });
+  }
 
   // Clic en tarjetas de facturas para ver detalle de canales (Nivel 3)
   container.querySelectorAll('[data-action="ver-factura"]').forEach(el => {

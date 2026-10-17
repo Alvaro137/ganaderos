@@ -241,4 +241,15 @@ class TestFastAPI(unittest.TestCase):
         self.assertIsInstance(data["mtime"], int)
         self.assertGreater(data["size_bytes"], 0)
 
+    def test_lonja_sync_endpoint(self):
+        from unittest.mock import patch
+        token = self.client.post("/api/auth/login", json={"password": "mvp-testing", "user_id": "usr_admin"}).json()["token"]
+        with patch("scripts.sync_lonjas.sincronizar_cotizaciones_lonja", return_value=12):
+            resp = self.client.post("/api/lonja/sync", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()
+            self.assertTrue(data["ok"])
+            self.assertEqual(data["registros"], 12)
+            self.assertIn("12 cotizaciones", data["message"])
+
 
