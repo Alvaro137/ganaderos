@@ -146,14 +146,14 @@ export function renderVistaLiquidaciones() {
         <!-- 1. Ingresos Carne -->
         <div class="kpi-card-tonal">
           <div class="kpi-tonal-lbl">Venta de Carne</div>
-          <div class="kpi-tonal-val" style="color: var(--brand-primary);">${formatearMoneda(resumen.ingresos_carne)} €</div>
+          <div class="kpi-tonal-val" style="color: var(--chart-carne, #15803d);">${formatearMoneda(resumen.ingresos_carne)} €</div>
           <div class="kpi-tonal-sub">${resumen.total_cabezas_carne} cabezas · ${formatearKg(resumen.total_kilos_canal)} kg canal</div>
         </div>
 
         <!-- 2. Gasto Pienso -->
         <div class="kpi-card-tonal">
           <div class="kpi-tonal-lbl">Gasto en Pienso</div>
-          <div class="kpi-tonal-val" style="color: var(--md-secondary, #b45309);">${formatearMoneda(resumen.gasto_pienso)} €</div>
+          <div class="kpi-tonal-val" style="color: var(--chart-pienso, #ea580c);">${formatearMoneda(resumen.gasto_pienso)} €</div>
           <div class="kpi-tonal-sub">${formatearKg(resumen.kilos_pienso)} kg concentrado</div>
         </div>
 

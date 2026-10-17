@@ -28,7 +28,7 @@ PWA (Vanilla JS, ES Modules, sin bundler) <--descarga 1 vez-- Orange Pi + Caddy 
   - `src/application`: servicios, `query_builder.py` con Intent Calling tipado (el LLM extrae parámetros y el código construye SQL parametrizado con `?`, sin Text-to-SQL libre).
   - `src/infrastructure`: repositorios SQLite, `llm_gateway.py`.
   - `src/server`: FastAPI y esquemas Pydantic.
-- **Frontend**: directorio `pwa/` con ES Modules nativos (`pwa/js/modules/`: auth, api, voice, config, components/charts_svg.js...). El archivo `pwa/sw.js` precachea los recursos para uso offline. Incrementar `CACHE_NAME` en cada cambio de frontend para invalidar la versión en caché de los clientes (actualmente `ganaderos-campo-v35`).
+- **Frontend**: directorio `pwa/` con ES Modules nativos (`pwa/js/modules/`: auth, api, voice, config, components/charts_svg.js...). El archivo `pwa/sw.js` precachea los recursos para uso offline. Incrementar `CACHE_NAME` en cada cambio de frontend para invalidar la versión en caché de los clientes (actualmente `ganaderos-campo-v36`).
 - **IA**: proxy multi-proveedor (Groq, Gemini, OpenRouter) con rotación ante códigos 429 por límite de cuota. Whisper para dictado por voz. Claves en `.env` (excluido del repositorio).
 - **ADRs**: decisiones formales en `docs/adr/` (0001 a 0008): SQLite WASM, Intent Calling, arquitectura limpia, estrategia offline, ES Modules, logging y parseo de fechas legadas.
 
