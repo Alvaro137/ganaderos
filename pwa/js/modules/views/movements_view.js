@@ -69,24 +69,24 @@ export function renderVistaMovimientos() {
 
       <!-- Banner de acceso a Liquidaciones de Venta (Profundidad Progresiva) -->
       <div class="banner-liquidaciones" id="banner-ir-liquidaciones" style="cursor: pointer; margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div class="banner-icon-badge">📊</div>
+        <div class="banner-liquidaciones-content">
+          <div class="banner-liquidaciones-icon">📊</div>
           <div>
-            <div style="font-weight: 800; color: var(--brand-primary); font-size: 0.95rem;">
+            <div class="banner-liquidaciones-title">
               Liquidaciones de Venta y Matadero
             </div>
-            <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
-              11 facturas oficiales GANAVAEX · 54 canales pesadas · Pesos y cotizaciones
+            <div class="banner-liquidaciones-desc">
+              Facturas oficiales GANAVAEX · Canales pesadas · Rendimiento y cotizaciones
             </div>
           </div>
         </div>
-        <button class="btn-profundizar" style="pointer-events: none;">
+        <div class="btn-profundizar">
           <span>Ver liquidaciones</span>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="5" y1="12" x2="19" y2="12"></line>
             <polyline points="12 5 19 12 12 19"></polyline>
           </svg>
-        </button>
+        </div>
       </div>
 
       <div class="filtros-movimientos-wrapper">

@@ -2627,6 +2627,63 @@ body {
   white-space: nowrap;
 }
 
+/* Botón de acción / profundizar a nivel de detalle (Material 3 Pill) */
+.btn-profundizar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--md-shape-full, 9999px);
+  background: var(--md-secondary-container, #d8e6db);
+  color: var(--md-on-secondary-container, #133a22);
+  border: 1px solid var(--md-outline-variant, #b5c7ba);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-profundizar:hover {
+  background: var(--brand-primary, #1e3a2b);
+  color: #ffffff;
+  border-color: var(--brand-primary, #1e3a2b);
+}
+
+.btn-profundizar svg {
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-profundizar:hover svg {
+  transform: translateX(2px);
+}
+
+/* Botones de navegación Volver (Material 3) */
+.btn-volver {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--md-surface-container-high, #e8ede7);
+  color: var(--brand-primary, #1e3a2b);
+  border: 1px solid var(--md-outline-variant, #c8d1c7);
+  border-radius: var(--md-shape-md, 8px);
+  padding: 7px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-volver:hover {
+  background: var(--md-surface-container-highest, #dbe3da);
+  border-color: var(--brand-primary, #1e3a2b);
+}
+
+.btn-volver svg {
+  flex-shrink: 0;
+}
+
 /* Badge de canal en tarjetas de movimientos */
 .mov-canal-badge-box {
   display: flex;
@@ -2792,6 +2849,102 @@ body {
 .kpi-tonal-sub {
   font-size: 0.78rem;
   color: var(--md-on-surface-variant);
+}
+
+/* Controles y Filtros del Módulo Financiero */
+.financial-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.financial-select-pill {
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: var(--md-shape-full, 9999px);
+  border: 1.5px solid var(--md-outline-variant, #c8d1c7);
+  background: var(--md-surface-container-low, #f8faf8);
+  color: var(--text-main, #1e3a2b);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.financial-select-pill:focus,
+.financial-select-pill:hover {
+  border-color: var(--brand-primary, #1e3a2b);
+  background: #ffffff;
+}
+
+.btn-toggle-charts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--md-shape-full, 9999px);
+  background: var(--md-surface-container-high, #e8ede7);
+  border: 1px solid var(--md-outline-variant, #c8d1c7);
+  color: var(--brand-primary, #1e3a2b);
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 16px;
+}
+
+.btn-toggle-charts:hover {
+  background: var(--md-surface-container-highest, #dbe3da);
+}
+
+.financial-subtabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--md-outline-variant, #e5e7eb);
+  margin-bottom: 16px;
+}
+
+.financial-subtab-btn {
+  padding: 10px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: -2px;
+}
+
+.financial-subtab-btn.active {
+  color: var(--brand-primary, #1e3a2b);
+  border-bottom-color: var(--brand-primary, #1e3a2b);
+}
+
+.ratio-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ratio-badge.rentable {
+  background: #e8f5e9;
+  color: #1b5e20;
+  border: 1px solid #c8e6c9;
+}
+
+.ratio-badge.alerta {
+  background: #fff3e0;
+  color: #b45309;
+  border: 1px solid #fed7aa;
 }
 
 .liquidaciones-header-bar {
