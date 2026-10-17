@@ -261,24 +261,23 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
 
     // 4. Abrir asistente en modo offline y verificar degradación grácil
     const btnOpenAi = page.locator('#btn-open-ai');
-    if (await btnOpenAi.isVisible()) {
-      await btnOpenAi.click();
-      const statusText = page.locator('#voice-status-text');
-      await expect(statusText).toContainText(/sin conexión|cobertura|conexión/i);
+    await expect(btnOpenAi).toBeVisible();
+    await btnOpenAi.click();
+    const statusText = page.locator('#voice-status-text');
+    await expect(statusText).toContainText(/sin conexión|cobertura|conexión/i);
 
-      // Enviar una consulta por texto mientras estamos offline
-      const promptInput = page.locator('#txt-ai-prompt');
-      await promptInput.fill('vaca 1045');
-      await page.locator('#btn-send-ai').click();
+    // Enviar una consulta por texto mientras estamos offline
+    const promptInput = page.locator('#txt-ai-prompt');
+    await promptInput.fill('vaca 1045');
+    await page.locator('#btn-send-ai').click();
 
-      // Debe mostrar el banner de degradación grácil sin lanzar errores no controlados
-      const gracefulBox = page.locator('.ai-offline-graceful-box');
-      await expect(gracefulBox).toBeVisible({ timeout: 5000 });
-      await expect(gracefulBox).toContainText(/sin cobertura|offline/i);
+    // Debe mostrar el banner de degradación grácil sin lanzar errores no controlados
+    const gracefulBox = page.locator('.ai-offline-graceful-box');
+    await expect(gracefulBox).toBeVisible({ timeout: 5000 });
+    await expect(gracefulBox).toContainText(/sin cobertura|offline/i);
 
-      // Cerrar modal
-      await page.locator('#btn-close-ai').click();
-    }
+    // Cerrar modal
+    await page.locator('#btn-close-ai').click();
 
     // 5. Restablecer conexión
     await context.setOffline(false);

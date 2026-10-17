@@ -148,10 +148,34 @@ class CampoDB {
     }
   }
 
+  async _verificarYVaciarOutbox(token) {
+    try {
+      const { contarMutacionesPendientes, sincronizarOutboxConServidor } = await import("./modules/outbox.js");
+      const pendientes = await contarMutacionesPendientes();
+      if (pendientes > 0) {
+        console.log(`[DB Sync] Detectadas ${pendientes} mutaciones pendientes en Outbox. Sincronizando antes de actualizar censo...`);
+        await sincronizarOutboxConServidor(token);
+        const restantes = await contarMutacionesPendientes();
+        if (restantes > 0) {
+          console.warn(`[DB Sync] Aún quedan ${restantes} mutaciones pendientes en Outbox. Se pospone la descarga del censo para proteger los datos locales.`);
+          return false;
+        }
+      }
+      return true;
+    } catch (e) {
+      console.warn("[DB Sync] No se pudo comprobar el estado del Outbox:", e);
+      return true;
+    }
+  }
+
   async _sincronizarEnSegundoPlano(authToken = null) {
     if (!navigator.onLine) return;
     const token = authToken || localStorage.getItem("campo_pwa_token") || "";
     if (!token) return;
+
+    // Protección Local-First: nunca sobrescribir si hay partos/mutaciones pendientes en Outbox
+    const outboxLimpio = await this._verificarYVaciarOutbox(token);
+    if (!outboxLimpio) return;
 
     try {
       const headers = {
@@ -177,6 +201,12 @@ class CampoDB {
     const token = authToken || localStorage.getItem("campo_pwa_token") || "";
     if (!token) {
       throw new Error("AUTH_REQUIRED");
+    }
+
+    // Protección Local-First: vaciar Outbox antes de sobrescribir el censo local
+    const outboxLimpio = await this._verificarYVaciarOutbox(token);
+    if (!outboxLimpio) {
+      throw new Error("MUTACIONES_PENDIENTES: Hay partos o registros locales en cola que no pudieron subirse al servidor. Resuelve los envíos pendientes antes de reemplazar el censo.");
     }
 
     const headers = {

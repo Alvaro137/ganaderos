@@ -28,6 +28,26 @@ LOCK_RETRY_S = 0.5
 DEFAULT_DB_PASSWORD = os.environ.get("GANADEROS_DB_PASSWORD", "sggnetpy04")
 
 
+def _pid_sigue_vivo(pid: int) -> bool:
+    """Comprueba si un proceso sigue activo en el sistema operativo."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def esta_bloqueada_por_access(path: Path) -> bool:
+    """Comprueba si existe el fichero de bloqueo .ldb generado por Microsoft Access / Ganaderos 10."""
+    try:
+        ldb_path = Path(path).with_suffix(".ldb")
+        return ldb_path.exists()
+    except Exception:
+        return False
+
+
 class FileLock:
     """Lock pesimista atómico por fichero para evitar lecturas concurrentes sucias."""
 
@@ -36,6 +56,25 @@ class FileLock:
         self.timeout = timeout
         self.retry = retry
         self._fh = None
+
+    def _es_lock_obsoleto(self) -> bool:
+        """Determina si un archivo de bloqueo existente pertenece a un proceso muerto o expiró."""
+        try:
+            if not self.lock_path.exists():
+                return False
+            mtime = self.lock_path.stat().st_mtime
+            if (time.time() - mtime) > 600:
+                return True
+            contenido = self.lock_path.read_text(encoding="utf-8", errors="ignore")
+            import re
+            m = re.search(r"PID=(\d+)", contenido)
+            if m:
+                pid = int(m.group(1))
+                if not _pid_sigue_vivo(pid):
+                    return True
+        except Exception:
+            pass
+        return False
 
     def acquire(self) -> None:
         inicio = time.perf_counter()
@@ -46,6 +85,13 @@ class FileLock:
                 self._fh.flush()
                 return
             except FileExistsError:
+                if self._es_lock_obsoleto():
+                    logger.warning(f"[FileLock] Descartando lock obsoleto en {self.lock_path}")
+                    try:
+                        self.lock_path.unlink(missing_ok=True)
+                        continue
+                    except OSError:
+                        pass
                 if time.perf_counter() - inicio > self.timeout:
                     raise TimeoutError(f"No se pudo adquirir {self.lock_path.name} en {self.timeout:.1f}s.")
                 time.sleep(self.retry)
