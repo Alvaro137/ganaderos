@@ -44,6 +44,10 @@ from src.infrastructure.access_reader import (  # noqa: E402
     detectar_ruta_bd,
     tiene_controlador_access,
 )
+from src.infrastructure.backup_vault import (  # noqa: E402
+    DEFAULT_VAULT_REMOTE,
+    guardar_snapshot_en_vault,
+)
 
 logger = logging.getLogger("ganaderos.sync_access_merge")
 
@@ -356,6 +360,10 @@ def main() -> int:
     parser.add_argument("--pwa-password", type=str, default=os.environ.get("PWA_PASSWORD", "ganaderos"), help="Contraseña compartida de la PWA")
     parser.add_argument("--dry-run", action="store_true", help="Simula la operación sin persistir en Access ni en el servidor")
     parser.add_argument("--skip-export", action="store_true", help="Omite la re-exportación y subida del censo consolidado")
+    parser.add_argument("--vault-dir", type=Path, default=None, help="Directorio del repositorio vault de backups")
+    parser.add_argument("--vault-remote", type=str, default=DEFAULT_VAULT_REMOTE, help="URL del remoto Git para la bóveda de datos")
+    parser.add_argument("--no-vault", action="store_true", help="Desactiva el versionado automático en la bóveda de Git")
+    parser.add_argument("--no-vault-push", action="store_true", help="Crea el snapshot en el vault local pero no hace push a GitHub")
     args = parser.parse_args()
 
     source = args.source or detectar_ruta_bd()
@@ -378,6 +386,14 @@ def main() -> int:
                 cmd.append("--dry-run")
             if args.skip_export:
                 cmd.append("--skip-export")
+            if args.vault_dir:
+                cmd.extend(["--vault-dir", str(args.vault_dir)])
+            if args.vault_remote:
+                cmd.extend(["--vault-remote", str(args.vault_remote)])
+            if args.no_vault:
+                cmd.append("--no-vault")
+            if args.no_vault_push:
+                cmd.append("--no-vault-push")
             return subprocess.call(cmd)
         else:
             print(
@@ -393,15 +409,16 @@ def main() -> int:
     print(f"  Base de datos Access: {source}")
     print(f"  Hub remoto:           {args.api_url}")
     print(f"  Modo simulación:      {'ACTIVADO (dry-run)' if args.dry_run else 'NO (escritura real)'}")
+    print(f"  Git Backup Vault:     {'DESACTIVADO' if args.no_vault else 'ACTIVADO'}")
     print("--------------------------------------------------")
 
     try:
         # 1. Autenticación
-        print("[*] 1/5 Autenticando con el hub...")
+        print("[*] 1/6 Autenticando con el hub...")
         token = autenticar_hub(args.api_url, args.pwa_password)
 
         # 2. Descargar pendientes
-        print("[*] 2/5 Comprobando eventos pendientes en el hub...")
+        print("[*] 2/6 Comprobando eventos pendientes en el hub...")
         partos_pendientes = obtener_pendientes(args.api_url, token, tipo="parto")
         print(f"    Partos pendientes de conciliar: {len(partos_pendientes)}")
 
@@ -411,14 +428,14 @@ def main() -> int:
 
         # 3. Backup
         if not args.dry_run:
-            print("[*] 3/5 Creando copia de seguridad de bdlibro.mdb...")
+            print("[*] 3/6 Creando copia de seguridad de bdlibro.mdb...")
             backup_file = crear_backup(source)
             print(f"    Backup creado en: {backup_file}")
         else:
-            print("[*] 3/5 Backup omitido (modo dry-run)")
+            print("[*] 3/6 Backup omitido (modo dry-run)")
 
         # 4. Conciliación en Access
-        print("[*] 4/5 Aplicando partos en Access con asignación de crotales...")
+        print("[*] 4/6 Aplicando partos en Access con asignación de crotales...")
         conciliados = conciliar_partos_en_access(source, args.password, partos_pendientes, dry_run=args.dry_run)
 
         for c in conciliados:
@@ -431,11 +448,35 @@ def main() -> int:
 
             # 5. Re-exportación y subida
             if not args.skip_export:
-                print("[*] 5/5 Re-exportando y subiendo censo consolidado al hub...")
+                print("[*] 5/6 Re-exportando y subiendo censo consolidado al hub...")
                 resultado_import = exportar_y_subir_censo(source, args.api_url, token, args.password)
                 print(f"    Nuevo censo activo en el hub. Epoch: {resultado_import.get('epoch')}")
             else:
-                print("[*] 5/5 Exportación omitida por flag --skip-export.")
+                print("[*] 5/6 Exportación omitida por flag --skip-export.")
+
+            # 6. Snapshot inmutable en Git Vault
+            if not args.no_vault:
+                print("[*] 6/6 Guardando snapshot inmutable en Git Vault...")
+                try:
+                    crotales_txt = ", ".join([c["crotal_asignado"] for c in conciliados[:5]])
+                    if len(conciliados) > 5:
+                        crotales_txt += f" (+{len(conciliados) - 5} más)"
+                    msg_vault = f"backup: conciliacion de {len(conciliados)} parto(s) - terneros: {crotales_txt}"
+
+                    censo_sqlite = ROOT_DIR / "pwa" / "ganaderos_campo.sqlite"
+                    res_vault = guardar_snapshot_en_vault(
+                        vault_dir=args.vault_dir,
+                        access_path=source,
+                        sqlite_path=censo_sqlite if censo_sqlite.exists() else None,
+                        mensaje=msg_vault,
+                        remote_url=args.vault_remote,
+                        push=not args.no_vault_push,
+                    )
+                    c_hash = res_vault.get("commit") or "Sin cambios"
+                    print(f"    Vault snapshot: {c_hash} ({res_vault.get('message')})")
+                except Exception as e_vault:
+                    logger.warning(f"Advertencia guardando en Git Vault: {e_vault}")
+                    print(f"    ⚠ Advertencia en Git Vault: {e_vault}")
         else:
             print("[*] Modo dry-run finalizado sin modificar Access ni el hub.")
 

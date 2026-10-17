@@ -233,13 +233,15 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
     - Auto-asignación secuencial desde `Crotales` y confirmación al hub (`POST /api/sync/conciliado`).
     - Re-exportación y subida automática del nuevo censo consolidado al hub.
     - Modos `--dry-run` y `--skip-export`, con delegación automática a Python 32-bit en Windows 64-bit.
+- [x] **Bóveda Inmutable de Datos en Git (Git Backup Vault):**
+  - Repositorio independiente: `git@github.com:Alvaro137/ganaderos-backup-vault.git` (URL HTTPS: `https://github.com/Alvaro137/ganaderos-backup-vault.git`).
+  - Módulo `src/infrastructure/backup_vault.py` y CLI `scripts/backup_vault.py`.
+  - Guarda snapshots atómicos de: `access/bdlibro.mdb`, `sqlite/ganaderos_campo.sqlite` y volcado de texto determinista `dumps/censo_dump.sql` (para `git diff` auditables entre versiones).
+  - Integrado automáticamente como paso 6/6 en `scripts/sync_access_merge.py` tras cada conciliación con Access.
 - [ ] (Opcional) `sudo usermod -aG docker varo` en la OPi.
-- [ ] **Siguientes Fases de la Épica de Campo:**
-  - **Fase 2.2: Cambio de Lote / Ubicación de Animales**:
-    - Modal táctil para mover animales o grupos entre cercados (ej. de *DUEÑA* a *CEBADERO* o *RIVERA*).
-    - Actualización inmediata del campo `corral` en SQLite local + mutación de tipo `movimiento` en Outbox.
-  - **Fase 2.3: Registro de Tratamiento Sanitario en Campo**:
-    - Ficha de aplicación de fármaco de la lista oficial, cálculo de fecha fin de supresión de carne y alerta visual sanitaria.
+- [ ] **Roadmap Futuro (Pendiente de formato y especificaciones):**
+  - Registro de pesaje (cuando se disponga del formato de datos de la báscula).
+  *(Nota: Descartados explícitamente por el ganadero por SRP e innecesarios en campo: cambio de lote/corral móvil y recetas/tratamientos sanitarios en la PWA).*
 
 ## 9. Glosario rápido
 
@@ -249,6 +251,7 @@ CI: `.github/workflows/ci.yml` (ruff + pytest + build Docker) en push a master/d
   Cipérez (671) y Cerezal (591); sus movimientos son traspasos internos, no ventas.
 - **Supresión de carne**: días de espera tras medicación (`tiempo_carne` en recetas).
 - **Local-first**: la verdad se exporta del Access al SQLite; el móvil trabaja sobre su copia.
+- **Git Backup Vault**: repositorio privado inmutable para versionar snapshots de la BD de Access y SQLite con volcado SQL determinista.
 
 
 
