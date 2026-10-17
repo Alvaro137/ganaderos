@@ -869,7 +869,16 @@ class CampoDB {
         WHERE fecha IS NOT NULL AND length(fecha) >= 4
       `) || []).map(r => r.anio);
 
-      const setAnios = new Set([...aniosVentas, ...aniosCompras].filter(Boolean));
+      let aniosLonja = [];
+      if (this.tieneTablaLonja()) {
+        aniosLonja = (this.ejecutarQuery(`
+          SELECT DISTINCT substr(fecha, 1, 4) as anio
+          FROM cotizaciones_lonja
+          WHERE fecha IS NOT NULL AND length(fecha) >= 4
+        `) || []).map(r => r.anio);
+      }
+
+      const setAnios = new Set([...aniosVentas, ...aniosCompras, ...aniosLonja].filter(Boolean));
       const lista = Array.from(setAnios).sort((a, b) => b.localeCompare(a));
       return lista.length > 0 ? lista : [new Date().getFullYear().toString()];
     } catch (_) {
@@ -1019,9 +1028,6 @@ class CampoDB {
         paramsVentas.push(String(anio));
         whereCompras += " AND substr(fecha, 1, 4) = ?";
         paramsCompras.push(String(anio));
-      } else {
-        whereVentas += " AND fecha_factura >= date('now', '-24 months')";
-        whereCompras += " AND fecha >= date('now', '-24 months')";
       }
 
       const rowsVentas = this.ejecutarQuery(`
@@ -1102,6 +1108,7 @@ class CampoDB {
         return {
           ...m,
           margen_mes: margen,
+          margen_neto: margen,
           precio_canal_medio: precioCanal,
           precio_pienso_medio: precioPienso
         };
@@ -1346,9 +1353,6 @@ class CampoDB {
         paramsLonja.push(String(anio));
         whereAlim += " AND substr(fecha, 1, 4) = ?";
         paramsAlim.push(String(anio));
-      } else {
-        whereLonja += " AND fecha >= date('now', '-24 months')";
-        whereAlim += " AND fecha >= date('now', '-24 months')";
       }
 
       // Cotizaciones mensuales Lonja de Salamanca (Cebada y Maíz en €/t)
@@ -1458,9 +1462,6 @@ class CampoDB {
         paramsLonja.push(String(anio));
         whereVentas += " AND substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 4) = ?";
         paramsVentas.push(String(anio));
-      } else {
-        whereLonja += " AND fecha >= date('now', '-24 months')";
-        whereVentas += " AND COALESCE(vc.fecha_salida_lote, vl.fecha_factura) >= date('now', '-24 months')";
       }
 
       // Cotizaciones mensuales Lonja de Salamanca (Mesa Bovino de Carne en €/kg canal)
@@ -1858,7 +1859,10 @@ class CampoDB {
         const t = `${s.mes}-01`;
         ingresos_carne.push({ time: t, value: Number(s.ingresos_carne || 0) });
         gastos_pienso.push({ time: t, value: Number(s.gasto_pienso || 0) });
-        margen_neto.push({ time: t, value: Number(s.margen_neto || 0) });
+        const valMargen = s.margen_neto != null 
+          ? Number(s.margen_neto) 
+          : (s.margen_mes != null ? Number(s.margen_mes) : Number((s.ingresos_carne || 0) - (s.gasto_pienso || 0)));
+        margen_neto.push({ time: t, value: valMargen });
       });
 
       return {
