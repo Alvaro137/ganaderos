@@ -14,6 +14,7 @@ import {
   createChart,
   LineSeries,
   AreaSeries,
+  HistogramSeries,
   createSeriesMarkers,
   CrosshairMode
 } from '../../vendor/lightweight-charts.mjs';
@@ -50,7 +51,8 @@ export function renderTradingChartContainer(config) {
     subtitulo = "",
     seriesDefs = [],
     mostrarRangos = true,
-    altura = 300
+    altura = 300,
+    defaultRange = "1Y"
   } = config;
 
   const checkboxesHtml = seriesDefs.map(s => {
@@ -75,11 +77,11 @@ export function renderTradingChartContainer(config) {
         </div>
         ${mostrarRangos ? `
           <div class="trading-timeframe-selector">
-            <button type="button" class="tv-range-btn" data-chart-id="${escapeHtml(id)}" data-range="1M">1M</button>
-            <button type="button" class="tv-range-btn" data-chart-id="${escapeHtml(id)}" data-range="3M">3M</button>
-            <button type="button" class="tv-range-btn" data-chart-id="${escapeHtml(id)}" data-range="6M">6M</button>
-            <button type="button" class="tv-range-btn" data-chart-id="${escapeHtml(id)}" data-range="1Y">1A</button>
-            <button type="button" class="tv-range-btn active" data-chart-id="${escapeHtml(id)}" data-range="ALL">Todo</button>
+            <button type="button" class="tv-range-btn ${defaultRange === '1M' ? 'active' : ''}" data-chart-id="${escapeHtml(id)}" data-range="1M">1M</button>
+            <button type="button" class="tv-range-btn ${defaultRange === '3M' ? 'active' : ''}" data-chart-id="${escapeHtml(id)}" data-range="3M">3M</button>
+            <button type="button" class="tv-range-btn ${defaultRange === '6M' ? 'active' : ''}" data-chart-id="${escapeHtml(id)}" data-range="6M">6M</button>
+            <button type="button" class="tv-range-btn ${defaultRange === '1Y' ? 'active' : ''}" data-chart-id="${escapeHtml(id)}" data-range="1Y">1A</button>
+            <button type="button" class="tv-range-btn ${defaultRange === 'ALL' ? 'active' : ''}" data-chart-id="${escapeHtml(id)}" data-range="ALL">Todo</button>
             <button type="button" class="tv-range-btn tv-fit-btn" data-chart-id="${escapeHtml(id)}" data-range="FIT" title="Ajustar escala al contenido">🔍</button>
           </div>
         ` : ""}
@@ -212,7 +214,8 @@ export function initTradingChart(config) {
   // Registrar y crear series
   seriesDefs.forEach(def => {
     const isArea = def.type === "area";
-    const SeriesConstructor = isArea ? AreaSeries : LineSeries;
+    const isHistogram = def.type === "histogram" || def.type === "Histogram";
+    const SeriesConstructor = isHistogram ? HistogramSeries : (isArea ? AreaSeries : LineSeries);
     const label = def.label || def.name || def.id;
     def.label = label;
 
@@ -257,7 +260,15 @@ export function initTradingChart(config) {
     });
 
     if (dataUnica.length > 0) {
-      series.setData(dataUnica.map(d => ({ time: d.time, value: d.value })));
+      if (isHistogram) {
+        series.setData(dataUnica.map(d => ({
+          time: d.time,
+          value: d.value,
+          color: d.color || (d.value >= 0 ? 'rgba(21, 128, 61, 0.8)' : 'rgba(220, 38, 38, 0.8)')
+        })));
+      } else {
+        series.setData(dataUnica.map(d => ({ time: d.time, value: d.value })));
+      }
 
       // Generar marcadores visuales para distinguir datos reales de interpolaciones
       if (def.showMarkers !== false) {
@@ -388,13 +399,34 @@ export function initTradingChart(config) {
     actualizarHUD(param.time, param.seriesData);
   });
 
-  // Ajustar escala al contenido si existen datos registrados
-  let totalPuntos = 0;
-  seriesMap.forEach(({ data }) => { totalPuntos += (data ? data.length : 0); });
-  if (totalPuntos > 0) {
+  // Ajustar escala al contenido o al rango por defecto (evita aplastar 150 meses en 800px)
+  const defRange = config.defaultRange || "1Y";
+  const maxTimeStr = obtenerUltimoTiempo();
+  let rangoAplicado = false;
+
+  if (maxTimeStr && defRange !== "ALL") {
+    const maxDate = new Date(maxTimeStr);
+    let fromDate = new Date(maxDate);
+    if (defRange === "1M") fromDate.setMonth(fromDate.getMonth() - 1);
+    else if (defRange === "3M") fromDate.setMonth(fromDate.getMonth() - 3);
+    else if (defRange === "6M") fromDate.setMonth(fromDate.getMonth() - 6);
+    else if (defRange === "1Y") fromDate.setFullYear(fromDate.getFullYear() - 1);
+
+    const fromStr = fromDate.toISOString().slice(0, 10);
     try {
-      chart.timeScale().fitContent();
+      chart.timeScale().setVisibleRange({ from: fromStr, to: maxTimeStr });
+      rangoAplicado = true;
     } catch (_) {}
+  }
+
+  if (!rangoAplicado) {
+    let totalPuntos = 0;
+    seriesMap.forEach(({ data }) => { totalPuntos += (data ? data.length : 0); });
+    if (totalPuntos > 0) {
+      try {
+        chart.timeScale().fitContent();
+      } catch (_) {}
+    }
   }
 
   // Gestión de Resize Responsivo

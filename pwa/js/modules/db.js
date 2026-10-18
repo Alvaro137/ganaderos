@@ -271,12 +271,16 @@ export function calcularSimulacionTimingVenta(params = {}) {
   };
 }
 
-export function obtenerSeriesTradingCarne(anio = null, usarEstimaciones = false) {
+export function obtenerSeriesTradingCarne(anio = null, categoria = null, usarEstimaciones = false) {
+  if (typeof categoria === "boolean") {
+    usarEstimaciones = categoria;
+    categoria = null;
+  }
   const db = getDB();
   if (!db || typeof db.obtenerSeriesTradingCarne !== "function") {
-    return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja: [] };
+    return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja_cebo: [], precio_granja_vacas: [], precio_granja: [] };
   }
-  return db.obtenerSeriesTradingCarne(anio, usarEstimaciones);
+  return db.obtenerSeriesTradingCarne(anio, categoria, usarEstimaciones);
 }
 
 export function obtenerSeriesTradingMateriasPrimas(anio = null, usarEstimaciones = false) {

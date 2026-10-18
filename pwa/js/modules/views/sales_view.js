@@ -356,13 +356,15 @@ function renderSeccionLiquidaciones(resumen) {
           titulo: "Evolución Precio Cobrado vs Lonja de Salamanca (€/kg Canal)",
           subtitulo: "Comparativa directa entre el precio real cobrado por la explotación y la cotización oficial de Lonja",
           seriesDefs: [
-            { id: "precio_granja", label: "Cobrado Granja", color: "#15803d", defaultVisible: true },
-            { id: "anojo_extra", label: "Lonja Añojo Extra", color: "#2563eb", defaultVisible: true },
-            { id: "anojo_pesado", label: "Lonja Añojo Pesado (>350kg)", color: "#9333ea", defaultVisible: false },
+            { id: "precio_granja_cebo", label: "Cobrado Cebo", color: "#15803d", defaultVisible: AppState.categoriaFinanciera !== 'DESVIEJE' },
+            { id: "anojo_extra", label: "Lonja Añojo Extra", color: "#2563eb", defaultVisible: AppState.categoriaFinanciera !== 'DESVIEJE' },
             { id: "ternera_extra", label: "Lonja Ternera Extra", color: "#0891b2", defaultVisible: false },
-            { id: "vaca_desvieje", label: "Lonja Vaca Desvieje", color: "#d97706", defaultVisible: false }
+            { id: "anojo_pesado", label: "Lonja Añojo Pesado (>350kg)", color: "#9333ea", defaultVisible: false },
+            { id: "precio_granja_vacas", label: "Cobrado Vacas Desvieje", color: "#b45309", defaultVisible: AppState.categoriaFinanciera !== 'CEBO' },
+            { id: "vaca_desvieje", label: "Lonja Vaca Desvieje", color: "#d97706", defaultVisible: AppState.categoriaFinanciera !== 'CEBO' }
           ],
-          altura: 320
+          altura: 320,
+          defaultRange: "1Y"
         })}
       </div>
 
@@ -663,11 +665,12 @@ function renderSeccionTesoreria(resumen) {
           titulo: "Evolución de Tesorería Mensual (Ingresos Carne vs Compras Pienso)",
           subtitulo: "Flujo de caja bancario mensual y saldo neto operativo de la explotación",
           seriesDefs: [
+            { id: "margen_neto", label: "Saldo Neto Mes (€)", color: "#16a34a", defaultVisible: true },
             { id: "ingresos_carne", label: "Cobros Carne (€)", color: "#15803d", defaultVisible: true },
-            { id: "gastos_pienso", label: "Pagos Pienso (€)", color: "#ea580c", defaultVisible: true },
-            { id: "margen_neto", label: "Saldo Neto Mes (€)", color: "#2563eb", defaultVisible: true }
+            { id: "gastos_pienso", label: "Pagos Pienso (€)", color: "#ea580c", defaultVisible: true }
           ],
-          altura: 300
+          altura: 320,
+          defaultRange: "1Y"
         })}
       </div>
 
@@ -912,22 +915,28 @@ function inicializarGraficosActivos() {
     if (!el) return;
 
     try {
-      const seriesTrading = obtenerSeriesTradingCarne(AppState.anioFinanciero, AppState.usarEstimacionesLonja);
+      const seriesTrading = obtenerSeriesTradingCarne(
+        AppState.anioFinanciero,
+        AppState.categoriaFinanciera,
+        AppState.usarEstimacionesLonja
+      );
       ultimasSeriesTrading.carne = seriesTrading;
 
       const seriesDefs = [
-        { id: "precio_granja", label: "Cobrado Granja", name: "Cobrado Granja (€/kg)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.precio_granja || [], defaultVisible: true, unit: "€/kg" },
-        { id: "anojo_extra", label: "Lonja Añojo Extra", name: "Lonja Añojo Extra (€/kg)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_extra || [], defaultVisible: true, unit: "€/kg" },
-        { id: "anojo_pesado", label: "Lonja Añojo Pesado", name: "Lonja Añojo Pesado (€/kg)", type: "Line", color: "#9333ea", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_pesado || [], defaultVisible: false, unit: "€/kg" },
+        { id: "precio_granja_cebo", label: "Cobrado Cebo", name: "Cobrado Cebo (€/kg)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.precio_granja_cebo || [], defaultVisible: AppState.categoriaFinanciera !== 'DESVIEJE', unit: "€/kg" },
+        { id: "anojo_extra", label: "Lonja Añojo Extra", name: "Lonja Añojo Extra (€/kg)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_extra || [], defaultVisible: AppState.categoriaFinanciera !== 'DESVIEJE', unit: "€/kg" },
         { id: "ternera_extra", label: "Lonja Ternera Extra", name: "Lonja Ternera Extra (€/kg)", type: "Line", color: "#0891b2", lineWidth: 2, lineStyle: 2, data: seriesTrading.ternera_extra || [], defaultVisible: false, unit: "€/kg" },
-        { id: "vaca_desvieje", label: "Lonja Vaca Desvieje", name: "Lonja Vaca Desvieje (€/kg)", type: "Line", color: "#d97706", lineWidth: 2, lineStyle: 2, data: seriesTrading.vaca_desvieje || [], defaultVisible: false, unit: "€/kg" }
+        { id: "anojo_pesado", label: "Lonja Añojo Pesado", name: "Lonja Añojo Pesado (€/kg)", type: "Line", color: "#9333ea", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_pesado || [], defaultVisible: false, unit: "€/kg" },
+        { id: "precio_granja_vacas", label: "Cobrado Vacas Desvieje", name: "Cobrado Vacas Desvieje (€/kg)", type: "Line", color: "#b45309", lineWidth: 2, data: seriesTrading.precio_granja_vacas || [], defaultVisible: AppState.categoriaFinanciera !== 'CEBO', unit: "€/kg" },
+        { id: "vaca_desvieje", label: "Lonja Vaca Desvieje", name: "Lonja Vaca Desvieje (€/kg)", type: "Line", color: "#d97706", lineWidth: 2, lineStyle: 2, data: seriesTrading.vaca_desvieje || [], defaultVisible: AppState.categoriaFinanciera !== 'CEBO', unit: "€/kg" }
       ];
 
       initTradingChart({
         id: "chart-carne-tv",
         containerId: "chart-carne-tv",
         seriesDefs,
-        precioUnitario: "€/kg"
+        precioUnitario: "€/kg",
+        defaultRange: "1Y"
       });
     } catch (e) {
       console.warn("[TradingChart] Error inicializando gráfico de carne:", e);
@@ -945,16 +954,46 @@ function inicializarGraficosActivos() {
       ultimasSeriesTrading.tesoreria = seriesTrading;
 
       const seriesDefs = [
-        { id: "ingresos_carne", label: "Cobros Carne", name: "Cobros Carne (€)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.ingresos_carne || [], defaultVisible: true, unit: "€" },
-        { id: "gastos_pienso", label: "Pagos Pienso", name: "Pagos Pienso (€)", type: "Line", color: "#ea580c", lineWidth: 2, data: seriesTrading.gastos_pienso || [], defaultVisible: true, unit: "€" },
-        { id: "margen_neto", label: "Saldo Neto Mes", name: "Saldo Neto Mes (€)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.margen_neto || [], defaultVisible: true, unit: "€" }
+        { 
+          id: "margen_neto", 
+          label: "Saldo Neto Mes", 
+          name: "Saldo Neto Mes (€)", 
+          type: "histogram", 
+          color: "#16a34a", 
+          data: seriesTrading.margen_neto || [], 
+          defaultVisible: true, 
+          unit: "€" 
+        },
+        { 
+          id: "ingresos_carne", 
+          label: "Cobros Carne", 
+          name: "Cobros Carne (€)", 
+          type: "Line", 
+          color: "#15803d", 
+          lineWidth: 3, 
+          data: seriesTrading.ingresos_carne || [], 
+          defaultVisible: true, 
+          unit: "€" 
+        },
+        { 
+          id: "gastos_pienso", 
+          label: "Pagos Pienso", 
+          name: "Pagos Pienso (€)", 
+          type: "Line", 
+          color: "#ea580c", 
+          lineWidth: 2, 
+          data: seriesTrading.gastos_pienso || [], 
+          defaultVisible: true, 
+          unit: "€" 
+        }
       ];
 
       initTradingChart({
         id: "chart-tesoreria-tv",
         containerId: "chart-tesoreria-tv",
         seriesDefs,
-        precioUnitario: "€"
+        precioUnitario: "€",
+        defaultRange: "1Y"
       });
     } catch (e) {
       console.warn("[TradingChart] Error inicializando gráfico de tesorería:", e);
