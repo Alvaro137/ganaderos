@@ -1,10 +1,10 @@
 // modules/views/sales_view.js
 /**
- * Vista de Análisis Financiero y Liquidaciones de Carne y Pienso.
- * Aplica el principio de profundidad progresiva:
- * Nivel 1: Resumen de KPIs de rentabilidad, margen carne vs pienso, ratio económico y gráficos SVG.
- * Nivel 2: Exploración detallada con conmutador (Facturas de Liquidación vs Compras de Pienso).
- * Nivel 3: Desglose completo de canales individuales por factura con salto a la ficha del animal.
+ * Cuadro de Mando Financiero y Estratégico de Explotación Ganadera.
+ * Arquitectura Funcional de Alto Valor (CFO & BI):
+ * 1. Liquidaciones y Ventas: Auditoría contable estricta de ingresos reales, primas vs Lonja y control de sobrepeso.
+ * 2. Cebadero y Salidas: Monitorización de ganado activo en cebo, coste diario de concentrado y alerta de salida óptima.
+ * 3. Tesorería y Proveedores: Cash flow bancario, auditoría de coste de piensos y gráfico de tijera agropecuaria.
  */
 
 import {
@@ -24,48 +24,32 @@ import {
   obtenerSerieMensualFinanciera,
   obtenerAniosDisponiblesFinancieros,
   obtenerComprasAlimento,
-  obtenerMargenTecnicoCebo,
-  obtenerRadarMateriasPrimas,
-  obtenerRadarLonjaCarne,
-  obtenerEstacionalidadLonjaCarne,
+  obtenerDistribucionPesosCanal,
+  obtenerCebaderoActivo,
   obtenerSeriesTradingCarne,
-  obtenerSeriesTradingMateriasPrimas,
   obtenerSeriesTradingTesoreria,
   calcularSimulacionTimingVenta,
   sincronizarBaseDatosAhora
 } from '../db.js';
 import { seleccionarAnimal } from './detail_view.js';
 import {
-  renderGraficoBarrasComparativas,
-  renderGraficoCotizacionCanal,
-  renderGraficoRadarMateriasPrimas,
-  renderGraficoLonjaCarne,
-  renderGraficoEstacionalidadCarne
-} from '../components/charts_svg.js';
-import {
   renderTradingChartContainer,
   initTradingChart,
   destruirTradingChart
 } from '../components/trading_chart.js';
 
-// Estado local de la vista financiera
+// Inicialización de estado en AppState
 if (AppState.anioFinanciero === undefined) {
-  AppState.anioFinanciero = "TODOS";
+  AppState.anioFinanciero = "2026";
 }
 if (AppState.categoriaFinanciera === undefined) {
   AppState.categoriaFinanciera = "TODOS";
 }
-if (AppState.subtabFinanciera === undefined) {
-  AppState.subtabFinanciera = "facturas"; // "facturas" o "piensos"
+if (AppState.seccionFinanciera === undefined) {
+  AppState.seccionFinanciera = "liquidaciones"; // "liquidaciones" | "cebadero" | "tesoreria"
 }
-if (AppState.perspectivaFinanciera === undefined) {
-  AppState.perspectivaFinanciera = "tesoreria"; // "tesoreria" | "devengo" | "radar"
-}
-if (AppState.subseccionRadar === undefined) {
-  AppState.subseccionRadar = "carne"; // "carne" | "piensos" | "timing"
-}
-if (AppState.graficosExpandidos === undefined) {
-  AppState.graficosExpandidos = false; // Colapsado por defecto en móvil para máxima claridad
+if (AppState.usarEstimacionesLonja === undefined) {
+  AppState.usarEstimacionesLonja = false; // Por defecto modo estrictamente real contable
 }
 if (AppState.simulacionTiming === undefined) {
   AppState.simulacionTiming = {
@@ -81,10 +65,12 @@ if (AppState.simulacionTiming === undefined) {
 
 let ultimasSeriesTrading = {
   carne: [],
-  piensos: [],
   tesoreria: []
 };
 
+/**
+ * Renderiza la vista principal del cuadro de mando financiero.
+ */
 export function renderVistaLiquidaciones() {
   const container = document.getElementById("app-container");
   if (!container) return;
@@ -94,1504 +80,901 @@ export function renderVistaLiquidaciones() {
   AppState.corralSeleccionado = null;
 
   destruirTradingChart("chart-carne-tv");
-  destruirTradingChart("chart-piensos-tv");
   destruirTradingChart("chart-tesoreria-tv");
 
-  // Si hay una factura seleccionada, renderizar su vista de profundidad (Nivel 3)
+  // Si hay una liquidación seleccionada, mostrar vista de detalle (Nivel 3)
   if (AppState.facturaSeleccionada) {
     verDetalleLiquidacion(AppState.facturaSeleccionada, false);
     return;
   }
 
   const aniosDisponibles = obtenerAniosDisponiblesFinancieros();
-  // Si el año seleccionado no está en la lista y no es TODOS, usar el primer año
   if (AppState.anioFinanciero !== "TODOS" && !aniosDisponibles.includes(AppState.anioFinanciero)) {
     AppState.anioFinanciero = aniosDisponibles[0] || "TODOS";
   }
 
   const resumen = obtenerResumenFinancieroGlobal(
-    AppState.anioFinanciero, 
-    AppState.categoriaFinanciera, 
+    AppState.anioFinanciero,
+    AppState.categoriaFinanciera,
     AppState.usarEstimacionesLonja
   );
-  const serieMensual = obtenerSerieMensualFinanciera(
-    AppState.anioFinanciero, 
-    AppState.categoriaFinanciera, 
-    AppState.usarEstimacionesLonja
-  );
-  const filtro = AppState.filtroLiquidaciones || "";
-  const facturas = obtenerLiquidaciones(filtro);
-  const comprasPienso = (AppState.subtabFinanciera === "piensos") ? obtenerComprasAlimento(filtro) : [];
 
-  // Opciones de selector de años
-  const opcionesAnios = [
-    `<option value="TODOS" ${AppState.anioFinanciero === "TODOS" ? "selected" : ""}>Histórico Completo (Todos los años)</option>`,
-    ...aniosDisponibles.map(a => `<option value="${a}" ${AppState.anioFinanciero === a ? "selected" : ""}>Campaña ${a}</option>`)
-  ].join("");
+  const seccion = AppState.seccionFinanciera || "liquidaciones";
 
-  // Ratio badge
-  let badgeRatioHtml = "";
-  if (resumen.ratio_carne_pienso != null) {
-    const r = resumen.ratio_carne_pienso;
-    const esRentable = r >= 1.5;
-    badgeRatioHtml = `
-      <span class="ratio-badge ${esRentable ? 'rentable' : 'alerta'}">
-        ${esRentable ? '✓ Rentable' : '⚠️ Ajustado'}
-      </span>
-    `;
-  }
-
-  const devengo = (AppState.perspectivaFinanciera === "devengo")
-    ? obtenerMargenTecnicoCebo(AppState.anioFinanciero, AppState.categoriaFinanciera, AppState.usarEstimacionesLonja)
-    : null;
-  const radarData = (AppState.perspectivaFinanciera === "radar")
-    ? obtenerRadarMateriasPrimas(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
-    : null;
-  const radarCarne = (AppState.perspectivaFinanciera === "radar")
-    ? obtenerRadarLonjaCarne(AppState.anioFinanciero, AppState.usarEstimacionesLonja)
-    : [];
-  const estacionalidadData = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "timing")
-    ? obtenerEstacionalidadLonjaCarne()
-    : [];
-  const simulacionTiming = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "timing")
-    ? calcularSimulacionTimingVenta(AppState.simulacionTiming)
-    : null;
-
-  // Series para gráficos interactivos estilo TradingView
-  const anioTrading = AppState.anioFinanciero === "TODOS" ? null : AppState.anioFinanciero;
-  const tradingCarne = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "carne")
-    ? obtenerSeriesTradingCarne(anioTrading, AppState.usarEstimacionesLonja)
-    : null;
-  const tradingPiensos = (AppState.perspectivaFinanciera === "radar" && AppState.subseccionRadar === "piensos")
-    ? obtenerSeriesTradingMateriasPrimas(anioTrading, AppState.usarEstimacionesLonja)
-    : null;
-  const tradingTesoreria = (AppState.perspectivaFinanciera === "tesoreria" && AppState.graficosExpandidos)
-    ? obtenerSeriesTradingTesoreria(anioTrading, AppState.categoriaFinanciera, AppState.usarEstimacionesLonja)
-    : null;
-
-  const seriesCarneTrading = tradingCarne ? [
-    {
-      id: "granja_cebo",
-      label: "Cobrado Cebo Granja (Terneros/as)",
-      shortLabel: "Cebo Granja",
-      color: "#ea580c",
-      lineWidth: 3,
-      data: tradingCarne.precio_granja_cebo,
-      defaultVisible: true,
-      unit: "€/kg",
-      decimales: 2
-    },
-    {
-      id: "anojo_extra",
-      label: "Añojo Extra Lonja (<350kg)",
-      shortLabel: "Añojo Extra",
-      color: "#15803d",
-      lineWidth: 2.5,
-      data: tradingCarne.anojo_extra,
-      defaultVisible: true,
-      unit: "€/kg",
-      decimales: 2
-    },
-    {
-      id: "granja_vacas",
-      label: "Cobrado Vacas Granja (Desvieje)",
-      shortLabel: "Vacas Granja",
-      color: "#b45309",
-      lineWidth: 2.5,
-      data: tradingCarne.precio_granja_vacas,
-      defaultVisible: false,
-      unit: "€/kg",
-      decimales: 2
-    },
-    {
-      id: "vaca_desvieje",
-      label: "Vaca Desvieje Lonja",
-      shortLabel: "Vaca Lonja",
-      color: "#64748b",
-      lineWidth: 2,
-      data: tradingCarne.vaca_desvieje,
-      defaultVisible: false,
-      unit: "€/kg",
-      decimales: 2
-    },
-    {
-      id: "anojo_pesado",
-      label: "Añojo Pesado Lonja (>350kg)",
-      shortLabel: "Añojo Pesado",
-      color: "#2563eb",
-      lineWidth: 2,
-      data: tradingCarne.anojo_pesado,
-      defaultVisible: false,
-      unit: "€/kg",
-      decimales: 2
-    },
-    {
-      id: "ternera_extra",
-      label: "Ternera Extra Lonja",
-      shortLabel: "Ternera Lonja",
-      color: "#7c3aed",
-      lineWidth: 2,
-      data: tradingCarne.ternera_extra,
-      defaultVisible: false,
-      unit: "€/kg",
-      decimales: 2
-    }
-  ] : [];
-
-  const seriesPiensosTrading = tradingPiensos ? [
-    {
-      id: "pienso_granja",
-      label: "Pienso Comprado Granja",
-      shortLabel: "Pienso Granja",
-      color: "#15803d",
-      lineWidth: 3,
-      data: tradingPiensos.pienso_granja,
-      defaultVisible: true,
-      unit: "€/t",
-      decimales: 1
-    },
-    {
-      id: "pienso_lonja",
-      label: "Pienso Cebo Lonja",
-      shortLabel: "Pienso Lonja",
-      color: "#ea580c",
-      lineWidth: 2.5,
-      data: tradingPiensos.pienso_lonja,
-      defaultVisible: true,
-      unit: "€/t",
-      decimales: 1
-    },
-    {
-      id: "cebada_lonja",
-      label: "Cebada Salamanca",
-      shortLabel: "Cebada",
-      color: "#b45309",
-      lineWidth: 2,
-      data: tradingPiensos.cebada_lonja,
-      defaultVisible: false,
-      unit: "€/t",
-      decimales: 1
-    },
-    {
-      id: "maiz_lonja",
-      label: "Maíz Salamanca",
-      shortLabel: "Maíz",
-      color: "#d97706",
-      lineWidth: 2,
-      data: tradingPiensos.maiz_lonja,
-      defaultVisible: false,
-      unit: "€/t",
-      decimales: 1
-    }
-  ] : [];
-
-  const seriesTesoreriaTrading = tradingTesoreria ? [
-    {
-      id: "ingresos_carne",
-      label: "Facturación Carne (€)",
-      shortLabel: "Ventas Carne",
-      color: "#15803d",
-      lineWidth: 3,
-      type: "area",
-      topColor: "rgba(21, 128, 61, 0.25)",
-      bottomColor: "rgba(21, 128, 61, 0.02)",
-      data: tradingTesoreria.ingresos_carne,
-      defaultVisible: true,
-      unit: "€",
-      decimales: 0
-    },
-    {
-      id: "gastos_pienso",
-      label: "Compras Pienso (€)",
-      shortLabel: "Gasto Pienso",
-      color: "#ea580c",
-      lineWidth: 2.5,
-      data: tradingTesoreria.gastos_pienso,
-      defaultVisible: true,
-      unit: "€",
-      decimales: 0
-    },
-    {
-      id: "margen_neto",
-      label: "Margen Neto (€)",
-      shortLabel: "Margen Neto",
-      color: "#2563eb",
-      lineWidth: 2,
-      data: tradingTesoreria.margen_neto,
-      defaultVisible: true,
-      unit: "€",
-      decimales: 0
-    }
-  ] : [];
-
-  ultimasSeriesTrading.carne = seriesCarneTrading;
-  ultimasSeriesTrading.piensos = seriesPiensosTrading;
-  ultimasSeriesTrading.tesoreria = seriesTesoreriaTrading;
-
-  const html = `
-    <div style="max-width: 1000px; margin: 0 auto; padding-bottom: 24px;">
-      <!-- Cabecera con botón volver y título -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-        <div>
-          <button class="btn-volver" id="btn-volver-desde-ventas" title="Volver a la vista anterior">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            <span>${escapeHtml(obtenerTextoBotonVolver())}</span>
-          </button>
-          <h2 style="font-size: 1.45rem; font-weight: 800; color: var(--brand-primary); margin-top: 8px;">
-            Análisis Económico y Liquidaciones
-          </h2>
-          <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 2px;">
-            ${AppState.perspectivaFinanciera === "devengo" 
-              ? "Margen técnico individual por ciclo de cebo y auditoría vs Lonja de Salamanca."
-              : (AppState.perspectivaFinanciera === "radar" 
-                  ? "Evolución comparada de Lonja Salamanca (Vacuno de Carne y Materias Primas) vs Explotación."
-                  : "Rentabilidad de la explotación: Facturación de Carne vs Coste de Alimentación.")}
-          </p>
-        </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button class="btn-action-small" id="btn-subir-factura-pdf" style="min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--brand-primary); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <span>Subir Factura PDF</span>
-          </button>
-          <input type="file" id="input-subir-pdf-factura" accept=".pdf,application/pdf" style="display: none;" />
-        </div>
-      </div>
-
-      <!-- Selector de Perspectiva Analítica (Pills Material Design 3) -->
-      <div class="financial-perspective-selector">
-        <button class="perspective-pill-btn ${AppState.perspectivaFinanciera === 'tesoreria' ? 'active' : ''}" data-perspectiva="tesoreria">
-          <span>💰 Tesorería (Cobros vs Pagos)</span>
-        </button>
-        <button class="perspective-pill-btn ${AppState.perspectivaFinanciera === 'devengo' ? 'active' : ''}" data-perspectiva="devengo">
-          <span>🐄 Margen Técnico de Cebo</span>
-        </button>
-        <button class="perspective-pill-btn ${AppState.perspectivaFinanciera === 'radar' ? 'active' : ''}" data-perspectiva="radar">
-          <span>🌾 Radar de Mercados y Lonja</span>
-        </button>
-      </div>
-
-      <!-- Filtros de Campaña, Categoría y Reconstrucción con Estimaciones -->
-      <div class="financial-controls-row" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
-            <span>📅 Campaña:</span>
-            <select id="sel-anio-financiero" class="financial-select-pill">
-              ${opcionesAnios}
-            </select>
-          </label>
-
-          ${AppState.perspectivaFinanciera !== "radar" ? `
-            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
-              <span>🐄 Tipo:</span>
-              <select id="sel-categoria-financiera" class="financial-select-pill">
-                <option value="TODOS" ${AppState.categoriaFinanciera === "TODOS" ? "selected" : ""}>Todo el ganado</option>
-                <option value="CEBO" ${AppState.categoriaFinanciera === "CEBO" ? "selected" : ""}>Cebo (Terneros/as)</option>
-                <option value="DESVIEJE" ${AppState.categoriaFinanciera === "DESVIEJE" ? "selected" : ""}>Desvieje (Vacas/Toros)</option>
-              </select>
+  container.innerHTML = `
+    <div class="financial-dashboard-container" style="max-width: 1040px; margin: 0 auto; padding: 16px 12px 60px;">
+      
+      <!-- CABECERA Y SELECTOR DE CONTEXTO UNIFICADO -->
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); margin: 0;">Centro Financiero y Mercado</h2>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0;">Control de liquidaciones, cebadero activo y cotizaciones de Lonja</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button id="btn-sync-ventas" class="btn-sync-icon" title="Sincronizar base de datos" style="padding: 8px 12px; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-lowest); cursor: pointer;">
+              🔄 <span style="font-size: 0.8rem; font-weight: 600;">Sincronizar</span>
+            </button>
+            <label for="input-subir-factura" id="btn-subir-factura-pdf" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 0.82rem; font-weight: 700; border-radius: var(--md-shape-md); cursor: pointer;">
+              <span>+ Subir Factura PDF</span>
+              <input type="file" id="input-subir-factura" accept="application/pdf" style="display: none;" />
             </label>
-          ` : ""}
+          </div>
         </div>
 
-        <!-- Checkbox de estimaciones Lonja (no marcada por defecto) -->
-        <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 700; color: var(--text-main); cursor: pointer; user-select: none; background: var(--md-surface-container-low, #fff); padding: 5px 12px; border-radius: 20px; border: 1px solid ${AppState.usarEstimacionesLonja ? 'var(--brand-primary)' : 'var(--md-outline-variant, #e5e7eb)'};" title="Si faltan albaranes de compra o precio en liquidaciones, estimar usando las cotizaciones oficiales de la Lonja de Salamanca">
-          <input type="checkbox" id="chk-estimaciones-lonja" ${AppState.usarEstimacionesLonja ? "checked" : ""} style="width: 16px; height: 16px; accent-color: var(--brand-primary); cursor: pointer;" />
-          <span>Completar datos con Lonja (~ Est.)</span>
-        </label>
+        <!-- BARRA DE CONTROLES: CAMPAÑA, LÍNEA Y MODO -->
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; background: var(--md-surface-container-lowest); padding: 10px 14px; border-radius: var(--md-shape-lg); border: 1px solid var(--md-outline-variant); box-shadow: var(--md-elevation-1);">
+          
+          <!-- Filtro de Campaña -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Campaña:</span>
+            <select id="select-anio-financiero" class="financial-select-pill" style="padding: 6px 12px; border-radius: var(--md-shape-full); border: 1px solid var(--md-outline-variant); font-size: 0.85rem; font-weight: 700; background: var(--md-surface-container-low); color: var(--text-main); cursor: pointer;">
+              <option value="TODOS" ${AppState.anioFinanciero === "TODOS" ? "selected" : ""}>Histórico Completo</option>
+              ${aniosDisponibles.map(a => `
+                <option value="${a}" ${AppState.anioFinanciero === a ? "selected" : ""}>Campaña ${a}</option>
+              `).join("")}
+            </select>
+          </div>
+
+          <!-- Filtro de Línea Productiva -->
+          <div style="display: flex; align-items: center; gap: 6px; overflow-x: auto;">
+            <button class="pill-cat-btn ${AppState.categoriaFinanciera === 'TODOS' ? 'active' : ''}" data-cat="TODOS" style="padding: 6px 12px; border-radius: var(--md-shape-full); font-size: 0.78rem; font-weight: 700; border: 1px solid ${AppState.categoriaFinanciera === 'TODOS' ? 'var(--md-primary)' : 'var(--md-outline-variant)'}; background: ${AppState.categoriaFinanciera === 'TODOS' ? 'var(--md-primary)' : 'transparent'}; color: ${AppState.categoriaFinanciera === 'TODOS' ? 'var(--md-on-primary)' : 'var(--text-main)'}; cursor: pointer;">
+              Todo el Ganado
+            </button>
+            <button class="pill-cat-btn ${AppState.categoriaFinanciera === 'CEBO' ? 'active' : ''}" data-cat="CEBO" style="padding: 6px 12px; border-radius: var(--md-shape-full); font-size: 0.78rem; font-weight: 700; border: 1px solid ${AppState.categoriaFinanciera === 'CEBO' ? 'var(--md-primary)' : 'var(--md-outline-variant)'}; background: ${AppState.categoriaFinanciera === 'CEBO' ? 'var(--md-primary)' : 'transparent'}; color: ${AppState.categoriaFinanciera === 'CEBO' ? 'var(--md-on-primary)' : 'var(--text-main)'}; cursor: pointer;">
+              Cebadero
+            </button>
+            <button class="pill-cat-btn ${AppState.categoriaFinanciera === 'DESVIEJE' ? 'active' : ''}" data-cat="DESVIEJE" style="padding: 6px 12px; border-radius: var(--md-shape-full); font-size: 0.78rem; font-weight: 700; border: 1px solid ${AppState.categoriaFinanciera === 'DESVIEJE' ? 'var(--md-primary)' : 'var(--md-outline-variant)'}; background: ${AppState.categoriaFinanciera === 'DESVIEJE' ? 'var(--md-primary)' : 'transparent'}; color: ${AppState.categoriaFinanciera === 'DESVIEJE' ? 'var(--md-on-primary)' : 'var(--text-main)'}; cursor: pointer;">
+              Desvieje
+            </button>
+          </div>
+
+          <!-- Conmutador de Modo: Real Facturado vs Proyección Lonja -->
+          <div style="display: flex; align-items: center; background: var(--md-surface-container-high); border-radius: var(--md-shape-full); padding: 2px;">
+            <button id="btn-modo-real" class="btn-modo-pill ${!AppState.usarEstimacionesLonja ? 'active' : ''}" style="padding: 5px 12px; border-radius: var(--md-shape-full); font-size: 0.76rem; font-weight: 700; border: none; background: ${!AppState.usarEstimacionesLonja ? 'var(--md-surface-container-lowest)' : 'transparent'}; color: ${!AppState.usarEstimacionesLonja ? 'var(--md-primary)' : 'var(--text-muted)'}; box-shadow: ${!AppState.usarEstimacionesLonja ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'}; cursor: pointer;">
+              🏛️ Real Facturado
+            </button>
+            <button id="btn-modo-proyeccion" class="btn-modo-pill ${AppState.usarEstimacionesLonja ? 'active' : ''}" style="padding: 5px 12px; border-radius: var(--md-shape-full); font-size: 0.76rem; font-weight: 700; border: none; background: ${AppState.usarEstimacionesLonja ? 'var(--md-primary)' : 'transparent'}; color: ${AppState.usarEstimacionesLonja ? 'var(--md-on-primary)' : 'var(--text-muted)'}; box-shadow: ${AppState.usarEstimacionesLonja ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'}; cursor: pointer;">
+              📈 Proyección Lonja
+            </button>
+          </div>
+        </div>
+
+        <!-- 3 PESTAÑAS PRINCIPALES DE NEGOCIO -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px;">
+          <button class="nav-tab-btn ${seccion === 'liquidaciones' ? 'active' : ''}" data-seccion="liquidaciones" style="padding: 10px 8px; border-radius: var(--md-shape-md); border: none; background: ${seccion === 'liquidaciones' ? 'var(--md-primary-container)' : 'var(--md-surface-container-lowest)'}; color: ${seccion === 'liquidaciones' ? 'var(--md-on-primary-container)' : 'var(--text-muted)'}; font-size: 0.85rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s ease; border-bottom: 3px solid ${seccion === 'liquidaciones' ? 'var(--md-primary)' : 'transparent'};">
+            📄 Liquidaciones
+          </button>
+          <button class="nav-tab-btn ${seccion === 'cebadero' ? 'active' : ''}" data-seccion="cebadero" style="padding: 10px 8px; border-radius: var(--md-shape-md); border: none; background: ${seccion === 'cebadero' ? 'var(--md-primary-container)' : 'var(--md-surface-container-lowest)'}; color: ${seccion === 'cebadero' ? 'var(--md-on-primary-container)' : 'var(--text-muted)'}; font-size: 0.85rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s ease; border-bottom: 3px solid ${seccion === 'cebadero' ? 'var(--md-primary)' : 'transparent'};">
+            🐂 Cebadero Activo
+          </button>
+          <button class="nav-tab-btn ${seccion === 'tesoreria' ? 'active' : ''}" data-seccion="tesoreria" style="padding: 10px 8px; border-radius: var(--md-shape-md); border: none; background: ${seccion === 'tesoreria' ? 'var(--md-primary-container)' : 'var(--md-surface-container-lowest)'}; color: ${seccion === 'tesoreria' ? 'var(--md-on-primary-container)' : 'var(--text-muted)'}; font-size: 0.85rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.15s ease; border-bottom: 3px solid ${seccion === 'tesoreria' ? 'var(--md-primary)' : 'transparent'};">
+            💰 Tesorería y Pienso
+          </button>
+        </div>
       </div>
 
-      ${AppState.perspectivaFinanciera === "tesoreria" ? `
-        <!-- Banner de Integridad Contable: Salidas sin Factura o Estimaciones Activas -->
-        ${!AppState.usarEstimacionesLonja && resumen.salidas_sin_factura > 0 ? `
-          <div class="info-banner-devengo" style="background: rgba(234, 88, 12, 0.08); border-left: 4px solid #ea580c; border-radius: 8px; padding: 12px 16px; margin: 12px 0 16px 0; color: var(--text-main); font-size: 0.88rem; line-height: 1.45;">
-            <div style="font-weight: 800; color: #c2410c; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
-              <span>⚠️</span>
-              <span>Aviso contable: ${resumen.salidas_sin_factura} salidas a matadero sin factura cargada</span>
-            </div>
-            <span>En este periodo se registran salidas oficiales de ganado en el censo pero no constan aún sus facturas de liquidación digitalizadas (ingresos computados en 0,00 €). Marca <strong>"Completar datos con Lonja"</strong> para reconstruir los ingresos estimados según las cotizaciones oficiales de Salamanca.</span>
-          </div>
-        ` : ""}
+      <!-- CONTENIDO DE LA SECCIÓN SELECCIONADA -->
+      ${renderContenidoSeccion(seccion, resumen)}
 
-        ${AppState.usarEstimacionesLonja && (resumen.ingresos_estimados > 0 || resumen.salidas_estimadas > 0) ? `
-          <div class="info-banner-devengo" style="background: rgba(21, 128, 61, 0.08); border-left: 4px solid #15803d; border-radius: 8px; padding: 12px 16px; margin: 12px 0 16px 0; color: var(--text-main); font-size: 0.88rem; line-height: 1.45;">
-            <div style="font-weight: 800; color: #15803d; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
-              <span>✓</span>
-              <span>Estimación de Lonja activa: +${formatearMoneda(resumen.ingresos_estimados)} € proyectados (${resumen.salidas_estimadas} cabezas)</span>
-            </div>
-            <span>Los ingresos de periodos sin facturas digitalizadas se han estimado cruzando los movimientos reales de salida a matadero con las cotizaciones semanales oficiales de la Lonja de Salamanca.</span>
-          </div>
-        ` : ""}
-
-        <!-- Cuadrícula de 6 KPIs Financieros (Tesorería) -->
-        <div class="kpis-liquidaciones-grid">
-          <!-- 1. Ingresos Carne -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Venta de Carne</div>
-            <div class="kpi-tonal-val" style="color: var(--chart-carne, #15803d);">${formatearMoneda(resumen.ingresos_carne)} €</div>
-            <div class="kpi-tonal-sub">${resumen.total_cabezas_carne} cabezas · ${formatearKg(resumen.total_kilos_canal)} kg canal</div>
-          </div>
-
-          <!-- 2. Gasto Pienso -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Gasto en Pienso</div>
-            <div class="kpi-tonal-val" style="color: var(--chart-pienso, #ea580c);">${formatearMoneda(resumen.gasto_pienso)} €</div>
-            <div class="kpi-tonal-sub">${formatearKg(resumen.kilos_pienso)} kg concentrado</div>
-          </div>
-
-          <!-- 3. Margen Bruto sobre Alimentación -->
-          <div class="kpi-card-tonal" style="border-left: 3px solid ${resumen.margen_bruto_alimentacion >= 0 ? 'var(--brand-primary)' : '#ba1a1a'};">
-            <div class="kpi-tonal-lbl">Margen sobre Pienso</div>
-            <div class="kpi-tonal-val" style="color: ${resumen.margen_bruto_alimentacion >= 0 ? '#1b5e20' : '#ba1a1a'};">
-              ${resumen.margen_bruto_alimentacion >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_bruto_alimentacion)} €
-            </div>
-            <div class="kpi-tonal-sub">Saldo bruto de tesorería</div>
-          </div>
-
-          <!-- 4. Cotización Media Canal -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Cotización Media Canal</div>
-            <div class="kpi-tonal-val" style="color: var(--brand-primary);">
-              ${resumen.cotizacion_media_canal > 0 ? `${resumen.cotizacion_media_canal.toFixed(2)} €/kg` : "—"}
-            </div>
-            <div class="kpi-tonal-sub">Peso medio: ${resumen.peso_medio_canal > 0 ? `${resumen.peso_medio_canal} kg` : "—"}</div>
-          </div>
-
-          <!-- 5. Coste Medio Pienso -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Coste Medio Pienso</div>
-            <div class="kpi-tonal-val" style="color: var(--md-secondary, #b45309);">
-              ${resumen.coste_medio_pienso_kg > 0 ? `${resumen.coste_medio_pienso_kg.toFixed(3)} €/kg` : "—"}
-            </div>
-            <div class="kpi-tonal-sub">${resumen.coste_medio_pienso_t > 0 ? `${resumen.coste_medio_pienso_t} €/t concentrado` : "Sin compras"}</div>
-          </div>
-
-          <!-- 6. Ratio Carne / Pienso -->
-          <div class="kpi-card-tonal">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <div class="kpi-tonal-lbl">Ratio Carne / Pienso</div>
-              ${badgeRatioHtml}
-            </div>
-            <div class="kpi-tonal-val">
-              ${resumen.ratio_carne_pienso != null ? resumen.ratio_carne_pienso.toFixed(2) : "—"}
-            </div>
-            <div class="kpi-tonal-sub">Euros facturados por euro de pienso</div>
-          </div>
-        </div>
-
-        <!-- Botón Desplegable para Gráficos SVG Nativos -->
-        <button class="btn-toggle-charts" id="btn-toggle-charts">
-          <span>${AppState.graficosExpandidos ? "▲ Ocultar Gráficos de Balance" : "📊 Ver Gráficos de Balance y Precios"}</span>
-          <span style="font-size: 0.8rem; color: var(--text-muted);">${serieMensual.length} meses analizados</span>
-        </button>
-
-        <!-- Bloque de Gráficos Financieros Interactivos (Colapsable con 1 toque) -->
-        ${AppState.graficosExpandidos ? `
-          <div class="financial-charts-section" style="animation: fadeIn 0.2s ease;">
-            ${renderTradingChartContainer({
-              id: "chart-tesoreria-tv",
-              titulo: "Balance Financiero: Facturación Carne vs Compras Pienso",
-              subtitulo: "Gráfico interactivo: pellizca para zoom, arrastra en el tiempo y marca capas.",
-              seriesDefs: seriesTesoreriaTrading,
-              altura: 320
-            })}
-            ${renderGraficoCotizacionCanal(serieMensual)}
-
-            <!-- Tabla de Detalle Mensual de Tesorería -->
-            ${serieMensual.length > 0 ? `
-              <div class="chart-container-card" style="background: var(--md-surface-container-low, #ffffff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: var(--md-shape-lg, 16px); padding: 14px 16px; margin-top: 16px; overflow-x: auto;">
-                <div style="font-weight: 800; font-size: 0.94rem; color: var(--brand-primary, #1e3a2b); margin-bottom: 10px;">
-                  📋 Desglose Mensual de Tesorería (${serieMensual.length} periodos)
-                </div>
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: right;">
-                  <thead>
-                    <tr style="border-bottom: 2px solid var(--md-outline-variant, #e5e7eb); color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;">
-                      <th style="text-align: left; padding: 6px 8px;">Mes</th>
-                      <th style="text-align: center; padding: 6px 8px;">Estado</th>
-                      <th style="padding: 6px 8px;">Carne (€)</th>
-                      <th style="padding: 6px 8px;">Pienso (€)</th>
-                      <th style="padding: 6px 8px;">Saldo (€)</th>
-                      <th style="padding: 6px 8px;">€/kg Canal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${serieMensual.map(m => {
-                      let badgeHtml = "";
-                      if (m.estimado) {
-                        badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(148, 163, 184, 0.2); color: #475569; font-weight: 700;">~ Est. (${m.cabezas} cab)</span>`;
-                      } else if (m.esReal) {
-                        badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d; font-weight: 800;">✓ Real (${m.cabezas} cab)</span>`;
-                      } else if (m.facturas_pendientes) {
-                        badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ ${m.salidas_censo || 0} sal. s/fact</span>`;
-                      } else {
-                        badgeHtml = `<span style="font-size: 0.72rem; color: var(--text-muted);">—</span>`;
-                      }
-
-                      const saldoColor = m.margen_neto >= 0 ? '#1b5e20' : '#ba1a1a';
-
-                      return `
-                        <tr style="border-bottom: 1px solid var(--md-outline-variant, #f1f5f9);">
-                          <td style="text-align: left; font-weight: 700; padding: 7px 8px;">${escapeHtml(m.mes)}</td>
-                          <td style="text-align: center; padding: 7px 8px;">${badgeHtml}</td>
-                          <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-carne, #15803d);">${formatearMoneda(m.ingresos_carne)} €</td>
-                          <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-pienso, #ea580c);">${formatearMoneda(m.gasto_pienso)} €</td>
-                          <td style="padding: 7px 8px; font-weight: 800; color: ${saldoColor};">${m.margen_neto >= 0 ? '+' : ''}${formatearMoneda(m.margen_neto)} €</td>
-                          <td style="padding: 7px 8px; color: var(--text-muted);">${m.precio_canal_medio != null ? `${m.precio_canal_medio.toFixed(2)} €` : '—'}</td>
-                        </tr>
-                      `;
-                    }).join("")}
-                  </tbody>
-                </table>
-              </div>
-            ` : ""}
-          </div>
-        ` : ""}
-
-        <!-- Subpestañas de Exploración Detallada (Facturas vs Piensos) -->
-        <div class="financial-subtabs">
-          <button class="financial-subtab-btn ${AppState.subtabFinanciera === 'facturas' ? 'active' : ''}" data-subtab="facturas">
-            Facturas de Liquidación (${facturas.length})
-          </button>
-          <button class="financial-subtab-btn ${AppState.subtabFinanciera === 'piensos' ? 'active' : ''}" data-subtab="piensos">
-            Compras de Pienso (${comprasPienso.length || "Ver"})
-          </button>
-        </div>
-
-        <!-- Contenido según la subpestaña seleccionada -->
-        ${AppState.subtabFinanciera === 'facturas' ? `
-          <!-- Buscador de facturas -->
-          <div class="search-input-wrapper" style="margin-bottom: 14px;">
-            <input 
-              type="text" 
-              id="txt-busqueda-liquidaciones" 
-              class="search-input" 
-              placeholder="Buscar factura (ej. G015/3, 1/51), fecha o cooperativa..." 
-              value="${escapeHtml(filtro)}"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            ${filtro ? '<button class="btn-input-clear" id="btn-clear-liquidaciones">✕</button>' : ""}
-          </div>
-
-          <div class="liquidaciones-lista">
-            ${
-              facturas.length === 0
-                ? `<div class="empty-state" style="padding: 40px 20px; text-align: center; color: var(--text-muted);">
-                    <p style="font-weight: 700; font-size: 1.05rem;">No se encontraron facturas</p>
-                    <p style="font-size: 0.85rem; margin-top: 4px;">Comprueba el término de búsqueda o sube un PDF oficial de GANAVAEX.</p>
-                  </div>`
-                : facturas
-                    .map((f) => {
-                      const cabezas = f.total_cabezas != null ? `${f.total_cabezas} cabezas` : "Lote";
-                      const kilos = f.total_kilos_canal != null && f.total_kilos_canal > 1 ? `${formatearKg(f.total_kilos_canal)} kg` : null;
-                      return `
-                        <div class="liquidacion-card" data-action="ver-factura" data-factura-id="${f.id}" style="cursor: pointer;">
-                          <div class="card-header-row" style="margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                              <span class="badge-factura">Factura ${escapeHtml(f.numero_factura)}</span>
-                              <span class="liquidacion-fecha">${formatearFecha(f.fecha_factura)}</span>
-                            </div>
-                            <span class="liquidacion-total">${formatearMoneda(f.total_factura)} €</span>
-                          </div>
-
-                          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
-                            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-muted);">
-                              <span class="chip-kpis-mini">🐄 ${escapeHtml(cabezas)}</span>
-                              ${kilos ? `<span class="chip-kpis-mini">⚖️ ${escapeHtml(kilos)} canal</span>` : ""}
-                              <span class="chip-kpis-mini">🏛️ ${escapeHtml(f.cliente_cooperativa || "GANAVAEX")}</span>
-                            </div>
-                            <button class="btn-profundizar btn-ver-canales" data-action="ver-factura" data-factura-id="${f.id}">
-                              <span>Ver canales (${escapeHtml(f.total_cabezas != null ? String(f.total_cabezas) : "desglose")})</span>
-                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                                <polyline points="12 5 19 12 12 19"></polyline>
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      `;
-                    })
-                    .join("")
-            }
-          </div>
-        ` : `
-          <!-- Listado de Compras de Pienso -->
-          <div class="liquidaciones-lista">
-            ${
-              comprasPienso.length === 0
-                ? `<div class="empty-state" style="padding: 40px 20px; text-align: center; color: var(--text-muted);">
-                    <p style="font-weight: 700; font-size: 1.05rem;">Sin compras de pienso registradas</p>
-                    <p style="font-size: 0.85rem; margin-top: 4px;">No constan albaranes de alimentación en el periodo seleccionado.</p>
-                  </div>`
-                : comprasPienso.map(c => {
-                    const tieneImporte = c.importe > 0;
-                    const tieneKg = c.kg > 0;
-                    const precioKg = c.precio_kg > 0 ? c.precio_kg : (tieneImporte && tieneKg ? c.importe / c.kg : 0);
-                    const textoPrecio = precioKg > 0 ? `${formatearMoneda(precioKg, 4)} €/kg` : "—";
-                    return `
-                      <div class="liquidacion-card" style="padding: 14px 16px;">
-                        <div class="card-header-row" style="margin-bottom: 8px;">
-                          <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-weight: 800; font-size: 0.98rem; color: var(--text-main);">${escapeHtml(c.alimento || "Pienso")}</span>
-                            <span class="liquidacion-fecha">${formatearFecha(c.fecha)}</span>
-                          </div>
-                          <span class="liquidacion-total" style="color: var(--md-secondary, #b45309);">${formatearMoneda(c.importe)} €</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.85rem; color: var(--text-muted);">
-                          <div>
-                            <span>⚖️ ${formatearKg(c.kg)} kg</span> • 
-                            <span>🏷️ ${textoPrecio}</span>
-                          </div>
-                          <div>
-                            <span>🏢 ${escapeHtml(c.proveedor || "Cooperativa")}</span>
-                            ${c.albaran ? ` • <span style="font-size: 0.8rem;">Alb. ${escapeHtml(c.albaran)}</span>` : ""}
-                          </div>
-                        </div>
-                      </div>
-                    `;
-                  }).join("")
-            }
-          </div>
-        `}
-      ` : (AppState.perspectivaFinanciera === "devengo" && devengo ? `
-        <!-- PERSPECTIVA DE DEVENGO: Margen Técnico de Cebo -->
-        <div class="info-banner-devengo">
-          <strong>Perspectiva Técnica de Cebo (Devengo Real):</strong> Imputa a cada animal el concentrado consumido (índice FCR ≈ 5.0 kg pienso / kg vivo ganado) según sus días reales de estancia en el cebadero y el precio medio del pienso de sus albaranes. Además, audita el precio cobrado frente a la <strong>Lonja Oficial de Salamanca</strong> y detecta penalizaciones de mercado por sobrepeso (&gt;350 kg canal).
-        </div>
-
-        <!-- Cuadrícula de 6 KPIs de Margen Técnico -->
-        <div class="kpis-liquidaciones-grid">
-          <!-- 1. Margen Técnico Total -->
-          <div class="kpi-card-tonal" style="border-left: 3px solid ${devengo.margen_tecnico_total >= 0 ? 'var(--brand-primary)' : '#ba1a1a'};">
-            <div class="kpi-tonal-lbl">Margen Técnico Total</div>
-            <div class="kpi-tonal-val" style="color: ${devengo.margen_tecnico_total >= 0 ? '#1b5e20' : '#ba1a1a'};">
-              ${devengo.margen_tecnico_total >= 0 ? '+' : ''}${formatearMoneda(devengo.margen_tecnico_total)} €
-            </div>
-            <div class="kpi-tonal-sub">Resultado tras coste de pienso imputado</div>
-          </div>
-
-          <!-- 2. Margen Medio por Cabeza -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Margen / Cabeza</div>
-            <div class="kpi-tonal-val" style="color: ${devengo.margen_medio_cabeza >= 0 ? '#1b5e20' : '#ba1a1a'};">
-              ${devengo.margen_medio_cabeza >= 0 ? '+' : ''}${formatearMoneda(devengo.margen_medio_cabeza)} €
-            </div>
-            <div class="kpi-tonal-sub">Beneficio neto estimado por animal</div>
-          </div>
-
-          <!-- 3. Coste Pienso Imputado Medio -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Pienso Imputado / Cab.</div>
-            <div class="kpi-tonal-val" style="color: var(--chart-pienso, #ea580c);">
-              ${formatearMoneda(devengo.coste_pienso_medio_cabeza)} €
-            </div>
-            <div class="kpi-tonal-sub">Consumo acumulado en estancia</div>
-          </div>
-
-          <!-- 4. Estancia Media en Cebadero -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Estancia Media Cebadero</div>
-            <div class="kpi-tonal-val" style="color: var(--brand-primary);">
-              ${devengo.estancia_media_dias} días
-            </div>
-            <div class="kpi-tonal-sub">Ciclo biológico desde entrada 122</div>
-          </div>
-
-          <!-- 5. Prima Media s/ Lonja Salamanca -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Prima s/ Lonja Salamanca</div>
-            <div class="kpi-tonal-val" style="color: ${(devengo.prima_media_lonja_kg || 0) >= 0 ? '#1b5e20' : '#ba1a1a'};">
-              ${devengo.prima_media_lonja_kg != null ? `${devengo.prima_media_lonja_kg >= 0 ? '+' : ''}${devengo.prima_media_lonja_kg.toFixed(3)} €/kg` : "—"}
-            </div>
-            <div class="kpi-tonal-sub">Diferencial vs cotización oficial</div>
-          </div>
-
-          <!-- 6. Animales Auditados -->
-          <div class="kpi-card-tonal">
-            <div class="kpi-tonal-lbl">Terneros Auditados</div>
-            <div class="kpi-tonal-val">${devengo.total_animales}</div>
-            <div class="kpi-tonal-sub">Canales con ciclo de cebo trazado</div>
-          </div>
-        </div>
-
-        <!-- Tabla Detallada de Animales con Margen Técnico y Lonja -->
-        <div style="margin-top: 24px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
-            <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin: 0;">
-              Auditoría Individual de Terneros (${devengo.animales.length})
-            </h3>
-            <span style="font-size: 0.82rem; color: var(--text-muted);">
-              Cálculo FCR 5.0 · Cruce semanal con Lonja Salamanca
-            </span>
-          </div>
-
-          <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
-            <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
-              <thead>
-                <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
-                  <th style="padding: 10px 12px;">Crotal</th>
-                  <th style="padding: 10px 12px;">Factura / Sacrificio</th>
-                  <th style="padding: 10px 12px;">Canal</th>
-                  <th style="padding: 10px 12px;">Precio Cobrado</th>
-                  <th style="padding: 10px 12px;">Estancia Cebo</th>
-                  <th style="padding: 10px 12px;">Pienso Imputado</th>
-                  <th style="padding: 10px 12px;">Margen Estimado</th>
-                  <th style="padding: 10px 12px;">Lonja Salamanca & Alertas</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${
-                  devengo.animales.length === 0
-                    ? `<tr><td colspan="8" style="padding: 30px; text-align: center; color: var(--text-muted);">No constan liquidaciones con trazabilidad de cebo en el periodo.</td></tr>`
-                    : devengo.animales.map(a => {
-                        const primaPositiva = a.prima_sobre_lonja_kg != null && a.prima_sobre_lonja_kg >= 0;
-                        const badgePrima = a.prima_sobre_lonja_kg != null
-                          ? `<span class="${primaPositiva ? 'badge-prima-positiva' : 'badge-prima-negativa'}" title="Precio Lonja: ${a.precio_lonja_salamanca} €/kg">
-                              ${primaPositiva ? '▲ +' : '▼ '}${a.prima_sobre_lonja_kg.toFixed(2)} €/kg
-                            </span>`
-                          : `<span style="color: var(--text-dim); font-size: 0.8rem;">Sin cotiz.</span>`;
-
-                        const badgeSobrepeso = a.penalizacion_sobrepeso
-                          ? `<span class="badge-penalizacion-sobrepeso" title="Sobrepeso >350kg (+${a.penalizacion_sobrepeso.exceso_kg} kg)">
-                              ⚠️ Sobrepeso (+${a.penalizacion_sobrepeso.exceso_kg}kg, -${a.penalizacion_sobrepeso.coste_penalizacion}€)
-                            </span>`
-                          : "";
-
-                        const badgeEstimacion = a.es_estimado
-                          ? `<span style="display: inline-block; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-weight: 700;" title="Coste o precio completado con cotizaciones oficiales de la Lonja de Salamanca">~ Est. Lonja</span>`
-                          : "";
-
-                        const precioUnitTexto = a.precio_carne_estimado
-                          ? `<span style="color: #d97706; font-weight: 800;" title="Precio de carne estimado según Lonja Salamanca">~${Number(a.precio_unitario).toFixed(3)} €/kg</span>`
-                          : (a.precio_unitario != null && a.precio_unitario > 0 ? `${Number(a.precio_unitario).toFixed(3)} €/kg` : "—");
-
-                        const costePiensoTexto = a.precio_pienso_estimado && a.es_estimado
-                          ? `<span style="font-weight: 700; color: var(--chart-pienso, #ea580c);" title="Coste de pienso estimado según cotización Lonja Salamanca">~${formatearMoneda(a.coste_pienso_imputado)} €</span>`
-                          : `<span style="font-weight: 700; color: var(--chart-pienso, #ea580c);">${formatearMoneda(a.coste_pienso_imputado)} €</span>`;
-
-                        return `
-                          <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
-                            <td style="padding: 10px 12px;">
-                              ${a.crotal ? `
-                                <button class="clickable-chip chip-animal-link" data-action="select-animal" data-crotal="${escapeHtml(a.crotal)}" style="padding: 4px 10px; font-size: 0.82rem;">
-                                  <span style="font-weight: 800; color: var(--brand-primary);">${escapeHtml(a.crotal_4)}</span>
-                                  <span class="chip-action">Ficha →</span>
-                                </button>
-                              ` : `<span style="color: var(--text-muted);">—</span>`}
-                            </td>
-                            <td style="padding: 10px 12px;">
-                              <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">Fact. ${escapeHtml(a.numero_factura || "—")}</div>
-                              <div style="font-size: 0.78rem; color: var(--text-muted);">${formatearFecha(a.fecha_sacrificio)}</div>
-                            </td>
-                            <td style="padding: 10px 12px; font-weight: 800; color: var(--brand-primary);">
-                              ${formatearKg(a.peso_canal_kg)} kg
-                            </td>
-                            <td style="padding: 10px 12px; font-weight: 700;">
-                              ${precioUnitTexto}
-                            </td>
-                            <td style="padding: 10px 12px;">
-                              <span style="font-weight: 700; color: var(--text-main);">${a.dias_cebo} d</span>
-                              <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">GMD: ${a.gmd_estimada ? a.gmd_estimada.toFixed(2) : '1.30'} kg/d</span>
-                            </td>
-                            <td style="padding: 10px 12px;">
-                              ${costePiensoTexto}
-                              <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">${formatearKg(a.kg_pienso_imputados)} kg FCR</span>
-                            </td>
-                            <td style="padding: 10px 12px; font-weight: 800; color: ${a.margen_tecnico >= 0 ? '#1b5e20' : '#ba1a1a'};">
-                              ${a.margen_tecnico >= 0 ? '+' : ''}${formatearMoneda(a.margen_tecnico)} €
-                            </td>
-                            <td style="padding: 10px 12px;">
-                              <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">
-                                ${badgePrima}
-                                ${badgeSobrepeso}
-                                ${badgeEstimacion}
-                              </div>
-                            </td>
-                          </tr>
-                        `;
-                      }).join("")
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ` : (AppState.perspectivaFinanciera === "radar" ? `
-        <!-- Selector de Subsección del Radar: Carne vs Cereales vs Timing -->
-        <div class="financial-subtabs" style="margin-bottom: 16px;">
-          <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'carne' ? 'active' : ''}" data-radar-subtab="carne">
-            🥩 Vacuno de Carne (Lonja vs Granja)
-          </button>
-          <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'piensos' ? 'active' : ''}" data-radar-subtab="piensos">
-            🌾 Materias Primas (Cereales vs Pienso)
-          </button>
-          <button class="financial-subtab-btn radar-subtab-btn ${AppState.subseccionRadar === 'timing' ? 'active' : ''}" data-radar-subtab="timing">
-            🧭 Timing y Estacionalidad
-          </button>
-        </div>
-
-        <!-- Banner descriptivo con botón de Sincronización en Vivo -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-          <div class="info-banner-devengo" style="margin: 0; flex: 1; min-width: 280px; background: var(--md-surface-container-high, #fffbeb); border-color: #fde68a; border-left-color: #d97706;">
-            <strong>${AppState.subseccionRadar === 'carne' ? 'Radar Oficial de Vacuno de Carne:' : (AppState.subseccionRadar === 'piensos' ? 'Radar Analítico de Materias Primas:' : 'Herramienta de Timing y Estacionalidad:')}</strong>
-            ${AppState.subseccionRadar === 'carne'
-              ? 'Evolución de las cotizaciones oficiales de la Lonja de Salamanca (€/kg canal: Añojo, Ternera, Vaca) frente al precio medio liquidado a la explotación ganadera.'
-              : (AppState.subseccionRadar === 'piensos'
-                  ? 'Seguimiento neutral de las cotizaciones oficiales de Salamanca (Cebada y Maíz en €/t) frente al precio medio efectivo del concentrado de cebo en albaranes.'
-                  : 'Ciclo estacional histórico de precios y simulador interactivo para evaluar objetivamente si compensa retrasar la salida a matadero.')}
-          </div>
-          <button id="btn-sync-lonja" class="btn-action-small" style="min-height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--brand-primary); color: #fff; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; white-space: nowrap;">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-            </svg>
-            <span>Actualizar Lonja en Vivo</span>
-          </button>
-        </div>
-
-        ${AppState.subseccionRadar === 'carne' ? `
-          <!-- Gráfico Interactivo TradingView de Vacuno de Carne -->
-          <div style="margin-bottom: 24px;">
-            ${renderTradingChartContainer({
-              id: "chart-carne-tv",
-              titulo: "Cotización Vacuno de Carne: Lonja Salamanca vs Granja (€/kg Canal)",
-              subtitulo: "Pellizca o usa la rueda del ratón para ampliar. Activa o desactiva capas con las casillas.",
-              seriesDefs: seriesCarneTrading,
-              altura: 340
-            })}
-          </div>
-
-          <!-- Tabla de Evolución Mensual: Lonja Carne vs Liquidaciones Granja -->
-          <div style="margin-top: 20px;">
-            <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 12px;">
-              Evolución Mensual: Lonja Salamanca vs Precio Cobrado Granja (€/kg Canal)
-            </h3>
-
-            <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
-              <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
-                <thead>
-                  <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
-                    <th style="padding: 10px 12px;">Mes</th>
-                    <th style="padding: 10px 12px;">Añojo Extra (&lt;350kg)</th>
-                    <th style="padding: 10px 12px;">Añojo Pesado (&gt;350kg)</th>
-                    <th style="padding: 10px 12px;">Ternera Extra</th>
-                    <th style="padding: 10px 12px;">Vaca Desvieje</th>
-                    <th style="padding: 10px 12px;">Cobrado Granja</th>
-                    <th style="padding: 10px 12px;">Composición Lote</th>
-                    <th style="padding: 10px 12px;">Lonja Ponderada</th>
-                    <th style="padding: 10px 12px;">Diferencial Real (Prima)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${
-                    radarCarne.length === 0
-                      ? `<tr><td colspan="9" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin cotizaciones de carne o ventas en el periodo seleccionado. Pulsa "Actualizar Lonja en Vivo" para cargar datos.</td></tr>`
-                      : radarCarne.map(r => {
-                          const dif = r.diferencial_lonja;
-                          const textoDif = dif != null
-                            ? `${dif >= 0 ? '+' : ''}${dif.toFixed(2)} €/kg`
-                            : "—";
-                          const lonjaRefTexto = r.lonja_referencia != null
-                            ? `${r.lonja_referencia.toFixed(2)} €/kg`
-                            : "—";
-                          const mixTexto = r.mix_texto || (r.canales_vendidas > 0 ? `${r.canales_vendidas} cab.` : "Sin ventas");
-
-                          return `
-                            <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
-                              <td style="padding: 10px 12px; font-weight: 700; color: var(--text-main);">${escapeHtml(r.mes)}</td>
-                              <td style="padding: 10px 12px; color: #15803d; font-weight: 700;">${r.anojo_extra_lonja != null ? `${r.anojo_extra_lonja.toFixed(2)} €/kg` : "—"}</td>
-                              <td style="padding: 10px 12px; color: #2563eb; font-weight: 600;">${r.anojo_pesado_lonja != null ? `${r.anojo_pesado_lonja.toFixed(2)} €/kg` : "—"}</td>
-                              <td style="padding: 10px 12px; color: #7c3aed; font-weight: 600;">${r.ternera_extra_lonja != null ? `${r.ternera_extra_lonja.toFixed(2)} €/kg` : "—"}</td>
-                              <td style="padding: 10px 12px; color: #64748b; font-weight: 600;">${r.vaca_desvieje_lonja != null ? `${r.vaca_desvieje_lonja.toFixed(2)} €/kg` : "—"}</td>
-                              <td style="padding: 10px 12px; font-weight: 800; color: ${r.precio_medio_granja ? '#ea580c' : 'var(--text-dim)'};">
-                                ${r.precio_medio_granja != null && r.precio_medio_granja > 0 ? `${r.precio_medio_granja.toFixed(2)} €/kg` : "—"}
-                              </td>
-                              <td style="padding: 10px 12px; font-size: 0.82rem; color: var(--text-main); font-weight: 600;">
-                                ${escapeHtml(mixTexto)}
-                              </td>
-                              <td style="padding: 10px 12px; font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">
-                                ${lonjaRefTexto}
-                              </td>
-                              <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif >= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};" title="Diferencial respecto al precio oficial ponderado según la categoría real vendida">
-                                ${textoDif}
-                              </td>
-                            </tr>
-                          `;
-                        }).join("")
-                  }
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ` : (AppState.subseccionRadar === 'piensos' ? `
-          <!-- Gráfico Interactivo TradingView de Materias Primas y Concentrados -->
-          <div style="margin-bottom: 24px;">
-            ${renderTradingChartContainer({
-              id: "chart-piensos-tv",
-              titulo: "Mercado de Piensos y Cereales: Lonja Salamanca vs Granja (€/t)",
-              subtitulo: "Pellizca para zoom, arrastra o pasa el dedo para consultar el precio exacto en cada fecha.",
-              seriesDefs: seriesPiensosTrading,
-              altura: 340
-            })}
-          </div>
-
-          <!-- Tabla de Evolución Mensual de Cotizaciones e Insumos -->
-          <div style="margin-top: 20px;">
-            <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin-bottom: 12px;">
-              Evolución Mensual: Lonja Salamanca vs Pienso Comprado (€/t)
-            </h3>
-
-            <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
-              <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
-                <thead>
-                  <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
-                    <th style="padding: 10px 12px;">Mes</th>
-                    <th style="padding: 10px 12px;">Cebada Salamanca (€/t)</th>
-                    <th style="padding: 10px 12px;">Maíz Salamanca (€/t)</th>
-                    <th style="padding: 10px 12px;">Pienso Lonja (€/t)</th>
-                    <th style="padding: 10px 12px;">Pienso Granja (€/t)</th>
-                    <th style="padding: 10px 12px;">Volumen Comprado</th>
-                    <th style="padding: 10px 12px;">Diferencial Real vs Lonja</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${
-                    !radarData || radarData.length === 0
-                      ? `<tr><td colspan="7" style="padding: 30px; text-align: center; color: var(--text-muted);">Sin datos de cotización en el periodo seleccionado. Pulsa "Actualizar Lonja en Vivo" para cargar datos.</td></tr>`
-                      : radarData.map(r => {
-                          const dif = (r.pienso_real_t != null && r.pienso_lonja_t != null)
-                            ? Number((r.pienso_real_t - r.pienso_lonja_t).toFixed(1))
-                            : null;
-                          const textoDif = dif != null
-                            ? `${dif >= 0 ? '+' : ''}${dif} €/t`
-                            : "—";
-
-                          return `
-                            <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
-                              <td style="padding: 10px 12px; font-weight: 700; color: var(--text-main);">${escapeHtml(r.mes)}</td>
-                              <td style="padding: 10px 12px; color: #b45309; font-weight: 600;">${r.cebada_lonja_t != null ? `${r.cebada_lonja_t} €/t` : "—"}</td>
-                              <td style="padding: 10px 12px; color: #d97706; font-weight: 600;">${r.maiz_lonja_t != null ? `${r.maiz_lonja_t} €/t` : "—"}</td>
-                              <td style="padding: 10px 12px; color: var(--chart-pienso, #ea580c); font-weight: 700;">${r.pienso_lonja_t != null ? `${r.pienso_lonja_t} €/t` : "—"}</td>
-                              <td style="padding: 10px 12px; font-weight: 800; color: ${r.pienso_real_t ? 'var(--brand-primary)' : 'var(--text-dim)'};">
-                                ${r.pienso_real_t != null && r.pienso_real_t > 0 ? `${r.pienso_real_t} €/t` : "Sin compras"}
-                              </td>
-                              <td style="padding: 10px 12px; color: var(--text-muted);">
-                                ${r.kg_comprados > 0 ? `${formatearKg(r.kg_comprados)} kg` : "—"}
-                              </td>
-                              <td style="padding: 10px 12px; font-weight: 700; color: ${dif != null ? (dif <= 0 ? '#1b5e20' : '#b45309') : 'var(--text-muted)'};">
-                                ${textoDif}
-                              </td>
-                            </tr>
-                          `;
-                        }).join("")
-                  }
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ` : `
-          <!-- Bloque de Timing y Estacionalidad de Venta -->
-          <div style="margin-bottom: 24px;">
-            <div style="margin-bottom: 8px;">
-              <h3 style="font-size: 1.1rem; font-weight: 800; color: var(--brand-primary); margin: 0;">
-                Ciclo Estacional Anual: Lonja de Salamanca (€/kg Canal)
-              </h3>
-              <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0 0;">
-                Sombreado verde: periodo de máxima demanda histórica (Nov-Ene). Compara las curvas de Añojo Extra vs Añojo Pesado.
-              </p>
-            </div>
-            ${renderGraficoEstacionalidadCarne(estacionalidadData)}
-          </div>
-
-          <!-- Simulador Interactivo de Decisión de Salida / Venta -->
-          <div style="margin-top: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
-              <div>
-                <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--brand-primary); margin: 0;">
-                  🧭 Simulador de Decisión de Salida (Timing de Cebo)
-                </h3>
-                <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0 0;">
-                  Calcula el impacto económico de posponer el sacrificio N días: kilos ganados, coste de pienso y riesgo de sobrepeso (&gt;350 kg canal).
-                </p>
-              </div>
-            </div>
-
-            <!-- Formulario de Parámetros del Simulador -->
-            <div style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    Peso Canal Actual (kg)
-                  </label>
-                  <input type="number" id="sim-peso-actual" value="${AppState.simulacionTiming.pesoCanalActual}" step="1" min="150" max="600" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
-                </div>
-
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    Días Extra de Cebo
-                  </label>
-                  <input type="number" id="sim-dias-retraso" value="${AppState.simulacionTiming.diasRetraso}" step="1" min="1" max="90" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
-                </div>
-
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    GMD Vivo Estimada (kg/día)
-                  </label>
-                  <input type="number" id="sim-gmd" value="${AppState.simulacionTiming.gmdVivo}" step="0.05" min="0.5" max="2.5" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
-                </div>
-
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    Coste Pienso (€/día)
-                  </label>
-                  <input type="number" id="sim-coste-pienso" value="${AppState.simulacionTiming.costeDiarioPienso}" step="0.05" min="0.5" max="10.0" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
-                </div>
-
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    Precio Hoy (€/kg Canal)
-                  </label>
-                  <input type="number" id="sim-precio-actual" value="${AppState.simulacionTiming.precioActualKg}" step="0.05" min="2.0" max="12.0" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
-                </div>
-
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    Precio Esperado (€/kg Canal)
-                  </label>
-                  <input type="number" id="sim-precio-futuro" value="${AppState.simulacionTiming.precioEsperadoKg}" step="0.05" min="2.0" max="12.0" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; box-sizing: border-box;" />
-                </div>
-
-                <div>
-                  <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
-                    Tipo / Sexo
-                  </label>
-                  <select id="sim-sexo" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--md-outline-variant, #ccc); font-weight: 700; font-size: 0.95rem; background: var(--md-surface, #fff); box-sizing: border-box;">
-                    <option value="MACHO" ${AppState.simulacionTiming.esMacho ? 'selected' : ''}>Añojo Macho (Rdto ~58%, penaliza &gt;350kg)</option>
-                    <option value="HEMBRA" ${!AppState.simulacionTiming.esMacho ? 'selected' : ''}>Ternera Hembra (Rdto ~56%)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tarjetas de Resultados del Modelo -->
-            ${simulacionTiming ? `
-              <div class="kpis-liquidaciones-grid" style="margin-bottom: 16px;">
-                <div class="kpi-card-tonal">
-                  <div class="kpi-tonal-lbl">Peso Canal Proyectado</div>
-                  <div class="kpi-tonal-val" style="color: var(--brand-primary);">${simulacionTiming.pesoCanalNuevo} kg</div>
-                  <div class="kpi-tonal-sub">+${simulacionTiming.gananciaCanal} kg canal (+${(AppState.simulacionTiming.diasRetraso * AppState.simulacionTiming.gmdVivo).toFixed(1)} kg vivo)</div>
-                </div>
-
-                <div class="kpi-card-tonal">
-                  <div class="kpi-tonal-lbl">Ingreso Marginal Extra</div>
-                  <div class="kpi-tonal-val" style="color: ${simulacionTiming.ingresoMarginal >= 0 ? '#1b5e20' : '#ba1a1a'};">
-                    ${simulacionTiming.ingresoMarginal >= 0 ? '+' : ''}${formatearMoneda(simulacionTiming.ingresoMarginal)} €
-                  </div>
-                  <div class="kpi-tonal-sub">${formatearMoneda(simulacionTiming.ingresoNuevo)} € vs ${formatearMoneda(simulacionTiming.ingresoActual)} € hoy</div>
-                </div>
-
-                <div class="kpi-card-tonal">
-                  <div class="kpi-tonal-lbl">Coste Pienso Adicional</div>
-                  <div class="kpi-tonal-val" style="color: var(--chart-pienso, #ea580c);">-${formatearMoneda(simulacionTiming.costePiensoAcumulado)} €</div>
-                  <div class="kpi-tonal-sub">${AppState.simulacionTiming.diasRetraso} días × ${AppState.simulacionTiming.costeDiarioPienso} €/d</div>
-                </div>
-
-                <div class="kpi-card-tonal" style="border-left: 3px solid ${simulacionTiming.esRentable ? 'var(--brand-primary)' : '#ba1a1a'};">
-                  <div class="kpi-tonal-lbl">Resultado Neto de Decisión</div>
-                  <div class="kpi-tonal-val" style="color: ${simulacionTiming.esRentable ? '#1b5e20' : '#ba1a1a'};">
-                    ${simulacionTiming.margenNetoRetraso >= 0 ? '+' : ''}${formatearMoneda(simulacionTiming.margenNetoRetraso)} €
-                  </div>
-                  <div class="kpi-tonal-sub" style="font-weight: 700; color: ${simulacionTiming.esRentable ? '#1b5e20' : '#ba1a1a'};">
-                    ${simulacionTiming.esRentable ? '✓ Compensa aguantar' : '⚠️ No compensa retrasar'}
-                  </div>
-                </div>
-
-                <div class="kpi-card-tonal">
-                  <div class="kpi-tonal-lbl">Precio de Equilibrio (Break-even)</div>
-                  <div class="kpi-tonal-val" style="color: var(--md-secondary, #b45309);">${simulacionTiming.precioUmbralEquilibrio.toFixed(3)} €/kg</div>
-                  <div class="kpi-tonal-sub">Precio mínimo necesario para no perder</div>
-                </div>
-
-                <div class="kpi-card-tonal">
-                  <div class="kpi-tonal-lbl">Precio Efectivo Aplicado</div>
-                  <div class="kpi-tonal-val">${simulacionTiming.precioFinalEfectivo.toFixed(3)} €/kg</div>
-                  <div class="kpi-tonal-sub">${simulacionTiming.saltaSobrepeso ? 'Añojo Pesado (-0.25€ penaliz.)' : 'Añojo Extra'}</div>
-                </div>
-              </div>
-
-              ${simulacionTiming.saltaSobrepeso ? `
-                <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 12px 14px; font-size: 0.85rem; color: #991b1b; margin-top: 10px;">
-                  <strong>⚠️ Alerta de Salto de Categoría por Sobrepeso (&gt;350 kg):</strong>
-                  El peso proyectado (${simulacionTiming.pesoCanalNuevo} kg canal) supera el umbral de 350 kg. En lonja y matadero pasa a categoría <em>Añojo Pesado</em>, con una penalización aproximada de <strong>-0.25 €/kg</strong> sobre toda la canal (descuento estimado: <strong>-${simulacionTiming.penalizacionSobrepeso} €</strong>).
-                </div>
-              ` : ''}
-            ` : ''}
-          </div>
-        `)}
-      ` : ""))}
     </div>
   `;
 
-  container.innerHTML = html;
-  adjuntarEventosLiquidaciones(container);
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  vincularEventosDashboard();
 }
 
-export function verDetalleLiquidacion(facturaId, pushHistory = true) {
-  const container = document.getElementById("app-container");
-  if (!container) return;
-
-  const factura = obtenerDetalleLiquidacion(facturaId);
-  if (!factura) {
-    console.warn(`[Ventas] Factura #${facturaId} no encontrada`);
-    AppState.facturaSeleccionada = null;
-    renderVistaLiquidaciones();
-    return;
+/**
+ * Renderiza el contenido específico según la pestaña activa.
+ */
+function renderContenidoSeccion(seccion, resumen) {
+  if (seccion === "cebadero") {
+    return renderSeccionCebadero();
   }
-
-  if (pushHistory) {
-    registrarPasoHistorial("liquidaciones", facturaId, `Factura ${factura.numero_factura || facturaId}`, {
-      numero_factura: factura.numero_factura
-    });
+  if (seccion === "tesoreria") {
+    return renderSeccionTesoreria(resumen);
   }
-  AppState.facturaSeleccionada = facturaId;
+  return renderSeccionLiquidaciones(resumen);
+}
 
-  const canales = factura.canales || [];
-  const gastos = factura.gastos || [];
+/**
+ * SECCIÓN 1: LIQUIDACIONES Y VENTAS (Real vs Lonja Salamanca)
+ */
+function renderSeccionLiquidaciones(resumen) {
+  const tieneFacturas = resumen.total_facturas > 0;
+  const primaLonja = resumen.diferencial_lonja_kg;
+  const primaBadge = primaLonja != null
+    ? `<span style="font-size: 0.74rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${primaLonja >= 0 ? 'rgba(34, 197, 94, 0.18)' : 'rgba(239, 68, 68, 0.18)'}; color: ${primaLonja >= 0 ? '#15803d' : '#b91c1c'};">${primaLonja >= 0 ? '▲ +' : '▼ '}${primaLonja.toFixed(2)} €/kg vs Lonja</span>`
+    : "";
 
-  const html = `
-    <div style="max-width: 960px; margin: 0 auto; padding-bottom: 24px;">
-      <!-- Botón Volver y migas -->
-      <div style="margin-bottom: 16px;">
-        <button class="btn-volver btn-volver-liq" id="btn-volver-a-liquidaciones" title="Volver al panel económico">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-          <span>Volver al Análisis Económico</span>
-        </button>
-      </div>
+  const distribucionPesos = obtenerDistribucionPesosCanal(AppState.anioFinanciero, AppState.categoriaFinanciera);
+  const liquidaciones = obtenerLiquidaciones({ anio: AppState.anioFinanciero, categoria: AppState.categoriaFinanciera });
 
-      <!-- Ficha técnica de la Factura -->
-      <div class="ficha-factura-header">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+  return `
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      
+      <!-- Banners de Estado y Conciliación -->
+      ${!AppState.usarEstimacionesLonja && resumen.salidas_sin_factura > 0 ? `
+        <div style="background: rgba(234, 88, 12, 0.08); border-left: 4px solid #ea580c; border-radius: var(--md-shape-sm); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
           <div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="badge-factura" style="font-size: 0.92rem; padding: 4px 10px;">Factura ${escapeHtml(factura.numero_factura)}</span>
-              <span style="font-size: 0.9rem; color: var(--text-muted);">${formatearFecha(factura.fecha_factura)}</span>
-            </div>
-            <div style="font-size: 1.15rem; font-weight: 800; color: var(--brand-primary); margin-top: 6px;">
-              ${escapeHtml(factura.cliente_cooperativa || "GANAVAEX, S.COOP")}
-            </div>
-            ${factura.cif_cliente ? `<div style="font-size: 0.8rem; color: var(--text-muted);">CIF: ${escapeHtml(factura.cif_cliente)}</div>` : ""}
+            <div style="font-weight: 700; font-size: 0.85rem; color: #9a3412;">⚠️ Conciliación: ${resumen.salidas_sin_factura} salidas a matadero en censo sin factura digitalizada</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 1px;">Los ingresos reales corresponden estrictamente a las facturas cargadas en el sistema.</div>
           </div>
-          <div style="text-align: right;">
-            <div class="liquidacion-total" style="font-size: 1.6rem; color: var(--brand-primary);">
-              ${formatearMoneda(factura.total_factura)} €
-            </div>
-            <div style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
-              Base: ${formatearMoneda(factura.base_imponible)} € • IVA (${factura.porcentaje_iva || 10.5}%): ${formatearMoneda(factura.cuota_iva)} €
-            </div>
+          <button id="btn-activar-lonja-prompt" style="padding: 5px 10px; border-radius: var(--md-shape-sm); border: 1px solid #ea580c; background: #ea580c; color: #fff; font-size: 0.76rem; font-weight: 700; cursor: pointer;">
+            Ver con Proyección Lonja
+          </button>
+        </div>
+      ` : ""}
+
+      ${AppState.usarEstimacionesLonja ? `
+        <div style="background: rgba(30, 94, 58, 0.08); border-left: 4px solid var(--md-primary); border-radius: var(--md-shape-sm); padding: 10px 14px; font-size: 0.82rem; color: var(--text-main);">
+          <strong style="color: var(--md-primary);">~ Proyección Lonja Activa:</strong> Se proyectan ${formatearMoneda(resumen.ingresos_estimados)} € para ${resumen.salidas_estimadas} cabezas salientes en censo según las cotizaciones semanales de la Lonja de Salamanca.
+        </div>
+      ` : ""}
+
+      <!-- 4 TARJETAS KPI EJECUTIVAS -->
+      <div class="kpis-liquidaciones-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+        
+        <!-- Facturación Total -->
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Venta Neta Carne</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--chart-carne); margin: 4px 0 2px;">
+            ${formatearMoneda(resumen.ingresos_carne)} €
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${resumen.total_cabezas_carne} cabezas · ${formatearKg(resumen.total_kilos_canal)} kg canal
           </div>
         </div>
 
-        <div class="specs-grid-factura" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--md-outline-variant);">
-          <div>
-            <div class="spec-label">Total Canales</div>
-            <div style="font-weight: 800; font-size: 1.1rem;">${factura.total_cabezas || canales.length} cabezas</div>
+        <!-- Cotización Media vs Lonja -->
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Cotización Canal</span>
+            ${primaBadge}
           </div>
-          <div>
-            <div class="spec-label">Kilos Canal</div>
-            <div style="font-weight: 800; font-size: 1.1rem;">${formatearKg(factura.total_kilos_canal)} kg</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--text-main); margin: 4px 0 2px;">
+            ${resumen.cotizacion_media_canal > 0 ? `${resumen.cotizacion_media_canal.toFixed(2)} €/kg` : '—'}
           </div>
-          <div>
-            <div class="spec-label">Deducciones / Portes</div>
-            <div style="font-weight: 800; font-size: 1.1rem; color: #b45309;">-${formatearMoneda(factura.gastos_total)} €</div>
-          </div>
-          <div>
-            <div class="spec-label">Fecha de Pago</div>
-            <div style="font-weight: 700; font-size: 0.95rem;">${factura.fecha_pago ? formatearFecha(factura.fecha_pago) : "Pendiente"}</div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${resumen.precio_lonja_medio != null ? `Lonja Salamanca: ${resumen.precio_lonja_medio.toFixed(2)} €/kg` : 'Base sin cotización lonja'}
           </div>
         </div>
-      </div>
 
-      <!-- Desglose de Canales Individuales Pesadas (Nivel 3) -->
-      <div class="section-heading" style="margin: 20px 0 10px 0; font-weight: 800; font-size: 1.05rem; color: var(--brand-primary); display: flex; justify-content: space-between; align-items: center;">
-        <span>Desglose de Canales (${canales.length})</span>
-        <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Pesos y cotizaciones individuales</span>
-      </div>
-
-      <div class="canales-table-wrapper" style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 12px; overflow-x: auto;">
-        <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left;">
-          <thead>
-            <tr style="background: var(--md-surface-container-high, #f3f4f6); border-bottom: 1.5px solid var(--md-outline-variant, #e5e7eb);">
-              <th style="padding: 10px 12px;">#</th>
-              <th style="padding: 10px 12px;">Artículo</th>
-              <th style="padding: 10px 12px;">Peso Canal</th>
-              <th style="padding: 10px 12px;">Precio (€/kg)</th>
-              <th style="padding: 10px 12px;">Importe</th>
-              <th style="padding: 10px 12px;">Animal (Crotal)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              canales.length === 0
-                ? `<tr><td colspan="6" style="padding: 20px; text-align: center; color: var(--text-muted);">Sin líneas de canal registradas.</td></tr>`
-                : canales.map(c => {
-                    const c4 = c.crotal_4 || (c.crotal_asignado ? extraer4Digitos(c.crotal_asignado) : null);
-                    return `
-                      <tr style="border-bottom: 1px solid var(--md-outline-variant, #f0f0f0);">
-                        <td style="padding: 10px 12px; font-weight: 700; color: var(--text-muted);">${c.linea_numero || "—"}</td>
-                        <td style="padding: 10px 12px; font-weight: 600;">
-                          ${escapeHtml(c.articulo || "TERNERO CEBO")}
-                          ${c.referencia ? `<span style="font-size: 0.75rem; color: var(--text-muted); display: block;">Ref: ${escapeHtml(c.referencia)}</span>` : ""}
-                        </td>
-                        <td style="padding: 10px 12px; font-weight: 800; color: var(--brand-primary);">${formatearKg(c.peso_canal_kg)} kg</td>
-                        <td style="padding: 10px 12px; font-weight: 700;">${c.precio_unitario != null ? `${Number(c.precio_unitario).toFixed(3)} €` : "—"}</td>
-                        <td style="padding: 10px 12px; font-weight: 800; color: var(--text-main);">${formatearMoneda(c.importe_linea)} €</td>
-                        <td style="padding: 10px 12px;">
-                          ${
-                            c.crotal_asignado
-                              ? `
-                              <button class="clickable-chip chip-animal-link" data-action="select-animal" data-crotal="${escapeHtml(c.crotal_asignado)}" style="padding: 4px 10px; font-size: 0.82rem;">
-                                <span style="font-weight: 800; color: var(--brand-primary);">${escapeHtml(c4 || "Ver")}</span>
-                                <span class="chip-action">Ficha →</span>
-                              </button>
-                              `
-                              : `<span style="color: var(--text-dim); font-size: 0.8rem;">No asignado</span>`
-                          }
-                        </td>
-                      </tr>
-                    `;
-                  }).join("")
-            }
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Deducciones de la cooperativa -->
-      ${gastos.length > 0 ? `
-        <div style="margin-top: 20px;">
-          <div class="section-heading" style="margin-bottom: 8px; font-weight: 800; font-size: 0.95rem; color: var(--text-muted);">
-            Deducciones y Gastos de Cooperativa
+        <!-- Margen por Cabeza -->
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Margen por Cabeza</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: ${resumen.margen_medio_cabeza >= 0 ? '#1b5e20' : '#ba1a1a'}; margin: 4px 0 2px;">
+            ${resumen.margen_medio_cabeza >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_medio_cabeza)} €
           </div>
-          <div style="background: var(--md-surface-container-low, #fff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 8px; padding: 10px 14px;">
-            ${gastos.map(g => `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 0.86rem;">
-                <span style="color: var(--text-main);">${escapeHtml(g.concepto || "Gastos / Portes")}</span>
-                <span style="font-weight: 700; color: #b45309;">-${formatearMoneda(g.importe)} €</span>
-              </div>
-            `).join("")}
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${resumen.ratio_carne_pienso ? `Retorno: ${resumen.ratio_carne_pienso.toFixed(2)}€ carne / 1€ pienso` : 'Sin compras en periodo'}
+          </div>
+        </div>
+
+        <!-- Control de Calidad y Sobrepeso -->
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Peso Medio Canal</span>
+            ${resumen.cabezas_sobrepeso > 0 ? `
+              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.18); color: #b91c1c;">⚠️ ${resumen.cabezas_sobrepeso} sobrepeso</span>
+            ` : `
+              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d;">✓ Rango óptimo</span>
+            `}
+          </div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--text-main); margin: 4px 0 2px;">
+            ${resumen.peso_medio_canal > 0 ? `${resumen.peso_medio_canal.toFixed(1)} kg` : '—'}
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${resumen.cabezas_sobrepeso > 0 ? 'Castigo Lonja >350kg aplicado' : 'Canales en estándar comercial'}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- GRÁFICO INTERACTIVO: PRECIO COBRADO vs LONJA DE SALAMANCA -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        ${renderTradingChartContainer({
+          id: "chart-carne-tv",
+          titulo: "Evolución Precio Cobrado vs Lonja de Salamanca (€/kg Canal)",
+          subtitulo: "Comparativa directa entre el precio real cobrado por la explotación y la cotización oficial de Lonja",
+          seriesDefs: [
+            { id: "precio_granja", label: "Cobrado Granja", color: "#15803d", defaultVisible: true },
+            { id: "anojo_extra", label: "Lonja Añojo Extra", color: "#2563eb", defaultVisible: true },
+            { id: "anojo_pesado", label: "Lonja Añojo Pesado (>350kg)", color: "#9333ea", defaultVisible: false },
+            { id: "ternera_extra", label: "Lonja Ternera Extra", color: "#0891b2", defaultVisible: false },
+            { id: "vaca_desvieje", label: "Lonja Vaca Desvieje", color: "#d97706", defaultVisible: false }
+          ],
+          altura: 320
+        })}
+      </div>
+
+      <!-- CONTROL DE CALIDAD Y DISTRIBUCIÓN DE CANALES -->
+      ${distribucionPesos.length > 0 ? `
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">Estructura de Calidad de Canales</h4>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Clasificación comercial por peso</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px;">
+            ${distribucionPesos.map(d => {
+              const esSobrepeso = d.rango_peso.includes("> 350");
+              const bg = esSobrepeso ? 'rgba(239, 68, 68, 0.08)' : 'var(--md-surface-container-low)';
+              const border = esSobrepeso ? '#fca5a5' : 'var(--md-outline-variant)';
+              const color = esSobrepeso ? '#b91c1c' : 'var(--text-main)';
+              return `
+                <div style="background: ${bg}; border: 1px solid ${border}; border-radius: var(--md-shape-md); padding: 10px 12px;">
+                  <div style="font-size: 0.75rem; font-weight: 700; color: ${color};">${escapeHtml(d.rango_peso)}</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: ${color}; margin: 2px 0;">
+                    ${d.total_canales} cab <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">(${d.porcentaje}%)</span>
+                  </div>
+                  <div style="font-size: 0.76rem; color: var(--text-muted);">
+                    Media: ${d.peso_medio} kg · ${d.precio_medio_kg.toFixed(2)} €/kg
+                  </div>
+                </div>
+              `;
+            }).join("")}
           </div>
         </div>
       ` : ""}
+
+      <!-- LISTADO DE LIQUIDACIONES Y FACTURAS -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">Facturas de Liquidación Auditadas (${liquidaciones.length})</h4>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin: 1px 0 0;">Desglose de cheques y cobros de matadero/cooperativa</p>
+          </div>
+        </div>
+
+        ${liquidaciones.length === 0 ? `
+          <div style="padding: 32px 16px; text-align: center; color: var(--text-muted);">
+            <div style="font-size: 2rem; margin-bottom: 8px;">📂</div>
+            <div style="font-weight: 700; font-size: 0.95rem;">No constan facturas digitalizadas para este periodo</div>
+            <div style="font-size: 0.82rem; margin-top: 4px;">Usa el botón "+ Subir Factura PDF" para cargar la liquidación correspondiente.</div>
+          </div>
+        ` : `
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${liquidaciones.map(liq => `
+              <div class="liquidacion-item-card liquidacion-card" data-factura-id="${liq.id}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); cursor: pointer; transition: all 0.15s ease;">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-weight: 800; font-size: 0.92rem; color: var(--md-primary);">${escapeHtml(liq.numero_factura || `Factura #${liq.id}`)}</span>
+                    <span style="font-size: 0.76rem; color: var(--text-muted);">${formatearFecha(liq.fecha_factura)}</span>
+                  </div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">
+                    ${escapeHtml(liq.cliente_cooperativa || "Liquidación")} · ${liq.total_cabezas || 0} cab · ${formatearKg(liq.total_kilos_canal || 0)} kg canal
+                  </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  <div style="text-align: right;">
+                    <div style="font-size: 1.05rem; font-weight: 800; color: var(--chart-carne);">${formatearMoneda(liq.total_factura)} €</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">${liq.total_kilos_canal > 0 ? `${(liq.base_imponible / liq.total_kilos_canal).toFixed(2)} €/kg` : '—'}</div>
+                  </div>
+                  <button class="btn-ver-canales" style="border: 1px solid var(--md-primary); background: transparent; color: var(--md-primary); border-radius: var(--md-shape-sm); padding: 5px 10px; font-size: 0.76rem; font-weight: 700; cursor: pointer;">
+                    Ver Canales →
+                  </button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </div>
+
     </div>
   `;
-
-  container.innerHTML = html;
-  adjuntarEventosDetalleFactura(container);
-  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function adjuntarEventosLiquidaciones(container) {
-  // Botón Volver
-  const btnVolver = container.querySelector("#btn-volver-desde-ventas");
-  if (btnVolver) {
-    btnVolver.addEventListener("click", () => {
-      if (AppState.historial.length > 0) {
-        const paso = AppState.historial.pop();
-        if (paso.tipo === "movimientos") {
-          window.location.hash = "#movimientos";
-          return;
-        }
-      }
-      window.location.hash = "#movimientos";
-    });
-  }
+/**
+ * SECCIÓN 2: CEBADERO ACTIVO Y SALIDAS (Operativo / Técnico)
+ */
+function renderSeccionCebadero() {
+  const cebadero = obtenerCebaderoActivo();
 
-  // Selector de Año
-  const selAnio = container.querySelector("#sel-anio-financiero");
-  if (selAnio) {
-    selAnio.addEventListener("change", (e) => {
+  return `
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      
+      <!-- 3 TARJETAS KPI DE CEBADERO -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+        
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Animales en Cebo Hoy</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--md-primary); margin: 4px 0 2px;">
+            ${cebadero.total_cabezas} animales
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            Estancia media: ${cebadero.estancia_media_dias} días en corral
+          </div>
+        </div>
+
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Coste Diario de Concentrado</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--chart-pienso); margin: 4px 0 2px;">
+            ${formatearMoneda(cebadero.coste_diario_total)} € / día
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            Acumulado lote actual: ${formatearMoneda(cebadero.coste_acumulado_lote)} €
+          </div>
+        </div>
+
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Salidas Inminentes</span>
+            ${cebadero.cabezas_riesgo_sobrepeso > 0 ? `
+              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.18); color: #b91c1c;">⚠️ Salida Urgente</span>
+            ` : `
+              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d;">🟢 En Crecimiento</span>
+            `}
+          </div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: ${cebadero.cabezas_riesgo_sobrepeso > 0 ? '#b91c1c' : 'var(--text-main)'}; margin: 4px 0 2px;">
+            ${cebadero.cabezas_riesgo_sobrepeso} cabezas
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${cebadero.cabezas_riesgo_sobrepeso > 0 ? 'Riesgo castigo por peso (>335 kg canal)' : 'Sin animales en riesgo de sobrepeso'}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- BANNER DE RECOMENDACIÓN TÉCNICA -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: var(--md-elevation-1);">
+        <div>
+          <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">¿Cuándo mandar los terneros al matadero?</h4>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0;">
+            A partir de 345 kg canal o ~170 días de cebo, el índice de conversión empeora y el sobrepeso (>350kg) se penaliza con -0,25 €/kg.
+          </p>
+        </div>
+        <button id="btn-abrir-simulador-timing" class="btn-primary" style="padding: 8px 16px; border-radius: var(--md-shape-md); font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+          ⏱️ Simular Retraso de Venta
+        </button>
+      </div>
+
+      <!-- LISTA DE ANIMALES EN CEBO -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0 0 12px;">Censo de Animales en Cebadero (${cebadero.animales.length})</h4>
+
+        ${cebadero.animales.length === 0 ? `
+          <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.88rem;">
+            No hay animales registrados actualmente en el corral de cebadero.
+          </div>
+        ` : `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px;">
+            ${cebadero.animales.map(a => {
+              let badgeColor = "#15803d";
+              let badgeBg = "rgba(34, 197, 94, 0.15)";
+              let badgeText = "🟢 En Crecimiento";
+
+              if (a.estado_salida === "SOBREPESO") {
+                badgeColor = "#b91c1c";
+                badgeBg = "rgba(239, 68, 68, 0.18)";
+                badgeText = "🔴 Sobrepeso Inminente";
+              } else if (a.estado_salida === "SACRIFICAR") {
+                badgeColor = "#c2410c";
+                badgeBg = "rgba(234, 88, 12, 0.15)";
+                badgeText = "🟡 Salida Recomendada";
+              }
+
+              return `
+                <div style="background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 12px; display: flex; flex-direction: column; gap: 6px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <button class="chip-crotal-link btn-ver-animal-cebo" data-crotal="${a.crotal}" style="font-size: 0.88rem; font-weight: 800;">
+                      🐄 ${escapeHtml(a.crotal_4)}
+                    </button>
+                    <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor};">
+                      ${badgeText}
+                    </span>
+                  </div>
+
+                  <div style="font-size: 0.8rem; color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px;">
+                    <div>Estancia est.: <strong>${a.dias_estancia_estimados} días</strong></div>
+                    <div>Peso canal est.: <strong>${a.peso_canal_estimado} kg</strong></div>
+                    <div>Sexo: <strong>${escapeHtml(a.sexo || "—")}</strong></div>
+                    <div>Raza: <strong>${escapeHtml(a.raza || "—")}</strong></div>
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `}
+      </div>
+
+    </div>
+  `;
+}
+
+/**
+ * SECCIÓN 3: TESORERÍA Y PIENSO (Cash Flow Real & Proveedores)
+ */
+function renderSeccionTesoreria(resumen) {
+  const serieMensual = obtenerSerieMensualFinanciera(
+    AppState.anioFinanciero,
+    AppState.categoriaFinanciera,
+    AppState.usarEstimacionesLonja
+  );
+  const compras = obtenerComprasAlimento();
+
+  return `
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      
+      <!-- 3 TARJETAS KPI DE TESORERÍA -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+        
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Saldo Neto de Caja</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: ${resumen.margen_bruto_alimentacion >= 0 ? '#1b5e20' : '#ba1a1a'}; margin: 4px 0 2px;">
+            ${resumen.margen_bruto_alimentacion >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_bruto_alimentacion)} €
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            Cobrado: ${formatearMoneda(resumen.ingresos_carne)} € | Pienso: ${formatearMoneda(resumen.gasto_pienso)} €
+          </div>
+        </div>
+
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Coste Medio del Concentrado</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--chart-pienso); margin: 4px 0 2px;">
+            ${resumen.coste_medio_pienso_t > 0 ? `${resumen.coste_medio_pienso_t.toFixed(0)} € / t` : '—'}
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${resumen.coste_medio_pienso_kg > 0 ? `${resumen.coste_medio_pienso_kg.toFixed(3)} €/kg` : 'Sin compras'} en ${resumen.total_compras_pienso} albaranes
+          </div>
+        </div>
+
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Volumen Total Comprado</div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: var(--text-main); margin: 4px 0 2px;">
+            ${formatearKg(resumen.kilos_pienso)} kg
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${resumen.ratio_carne_pienso ? `Ratio: ${resumen.ratio_carne_pienso.toFixed(2)}€ carne / 1€ pienso` : 'Auditoría de compras'}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- GRÁFICO TIJERA AGROPECUARIA: COBROS CARNE vs GASTOS PIENSO -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        ${renderTradingChartContainer({
+          id: "chart-tesoreria-tv",
+          titulo: "Evolución de Tesorería Mensual (Ingresos Carne vs Compras Pienso)",
+          subtitulo: "Flujo de caja bancario mensual y saldo neto operativo de la explotación",
+          seriesDefs: [
+            { id: "ingresos_carne", label: "Cobros Carne (€)", color: "#15803d", defaultVisible: true },
+            { id: "gastos_pienso", label: "Pagos Pienso (€)", color: "#ea580c", defaultVisible: true },
+            { id: "margen_neto", label: "Saldo Neto Mes (€)", color: "#2563eb", defaultVisible: true }
+          ],
+          altura: 300
+        })}
+      </div>
+
+      <!-- TABLA DESGLOSE MENSUAL DE TESORERÍA -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0 0 12px;">Desglose Mensual de Caja (${serieMensual.length} meses)</h4>
+
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: right;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--md-outline-variant); color: var(--text-muted); font-size: 0.76rem; text-transform: uppercase;">
+                <th style="text-align: left; padding: 6px 8px;">Mes</th>
+                <th style="text-align: center; padding: 6px 8px;">Estado</th>
+                <th style="padding: 6px 8px;">Carne (€)</th>
+                <th style="padding: 6px 8px;">Pienso (€)</th>
+                <th style="padding: 6px 8px;">Saldo Neto (€)</th>
+                <th style="padding: 6px 8px;">€/kg Canal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${serieMensual.map(m => {
+                let badgeHtml = "";
+                if (m.estimado) {
+                  badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(148, 163, 184, 0.2); color: #475569; font-weight: 700;">~ Est. (${m.cabezas} cab)</span>`;
+                } else if (m.esReal) {
+                  badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d; font-weight: 800;">✓ Real (${m.cabezas} cab)</span>`;
+                } else if (m.facturas_pendientes) {
+                  badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ ${m.salidas_censo || 0} sal. s/fact</span>`;
+                } else {
+                  badgeHtml = `<span style="font-size: 0.72rem; color: var(--text-muted);">—</span>`;
+                }
+
+                const saldoColor = m.margen_neto >= 0 ? '#1b5e20' : '#ba1a1a';
+
+                return `
+                  <tr style="border-bottom: 1px solid var(--md-outline-variant);">
+                    <td style="text-align: left; font-weight: 700; padding: 7px 8px;">${escapeHtml(m.mes)}</td>
+                    <td style="text-align: center; padding: 7px 8px;">${badgeHtml}</td>
+                    <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-carne);">${formatearMoneda(m.ingresos_carne)} €</td>
+                    <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-pienso);">${formatearMoneda(m.gasto_pienso)} €</td>
+                    <td style="padding: 7px 8px; font-weight: 800; color: ${saldoColor};">${m.margen_neto >= 0 ? '+' : ''}${formatearMoneda(m.margen_neto)} €</td>
+                    <td style="padding: 7px 8px; color: var(--text-muted);">${m.precio_canal_medio != null ? `${m.precio_canal_medio.toFixed(2)} €` : '—'}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- LISTA DE ALBARANES DE PIENSO -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0 0 12px;">Albaranes de Alimentación (${compras.length})</h4>
+
+        ${compras.length === 0 ? `
+          <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.88rem;">
+            No hay compras registradas en este periodo.
+          </div>
+        ` : `
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${compras.slice(0, 15).map(c => `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant);">
+                <div>
+                  <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${escapeHtml(c.alimento || "Pienso")}</div>
+                  <div style="font-size: 0.76rem; color: var(--text-muted);">${formatearFecha(c.fecha)} · ${formatearKg(c.kg)} kg</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-weight: 800; font-size: 0.95rem; color: var(--chart-pienso);">${formatearMoneda(c.importe)} €</div>
+                  <div style="font-size: 0.74rem; color: var(--text-muted);">${c.precio_kg > 0 ? `${c.precio_kg.toFixed(3)} €/kg` : '—'}</div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </div>
+
+    </div>
+  `;
+}
+
+/**
+ * Vincula todos los eventos interactivos del dashboard.
+ */
+function vincularEventosDashboard() {
+  // Selector de Campaña
+  const selectAnio = document.getElementById("select-anio-financiero");
+  if (selectAnio) {
+    selectAnio.addEventListener("change", (e) => {
       AppState.anioFinanciero = e.target.value;
       renderVistaLiquidaciones();
     });
   }
 
-  // Selector de Categoría
-  const selCat = container.querySelector("#sel-categoria-financiera");
-  if (selCat) {
-    selCat.addEventListener("change", (e) => {
-      AppState.categoriaFinanciera = e.target.value;
-      renderVistaLiquidaciones();
-    });
-  }
-
-  // Checkbox de Reconstrucción con Estimaciones Lonja
-  const chkEstimaciones = container.querySelector("#chk-estimaciones-lonja");
-  if (chkEstimaciones) {
-    chkEstimaciones.addEventListener("change", (e) => {
-      AppState.usarEstimacionesLonja = e.target.checked;
-      renderVistaLiquidaciones();
-    });
-  }
-
-  // Inputs del Simulador Interactivo de Timing de Venta
-  const bindSimInput = (selector, key, isFloat = true) => {
-    const el = container.querySelector(selector);
-    if (!el) return;
-    el.addEventListener("change", (e) => {
-      const val = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
-      if (!isNaN(val)) {
-        AppState.simulacionTiming[key] = val;
-        renderVistaLiquidaciones();
-      }
-    });
-  };
-
-  bindSimInput("#sim-peso-actual", "pesoCanalActual", true);
-  bindSimInput("#sim-dias-retraso", "diasRetraso", false);
-  bindSimInput("#sim-gmd", "gmdVivo", true);
-  bindSimInput("#sim-coste-pienso", "costeDiarioPienso", true);
-  bindSimInput("#sim-precio-actual", "precioActualKg", true);
-  bindSimInput("#sim-precio-futuro", "precioEsperadoKg", true);
-
-  const selSexoSim = container.querySelector("#sim-sexo");
-  if (selSexoSim) {
-    selSexoSim.addEventListener("change", (e) => {
-      AppState.simulacionTiming.esMacho = e.target.value === "MACHO";
-      renderVistaLiquidaciones();
-    });
-  }
-
-  // Selector de Perspectiva (Tesorería / Margen Técnico / Radar)
-  container.querySelectorAll(".perspective-pill-btn").forEach(btn => {
+  // Filtros de Línea Productiva (Pills)
+  document.querySelectorAll(".pill-cat-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      AppState.perspectivaFinanciera = btn.dataset.perspectiva;
+      AppState.categoriaFinanciera = btn.dataset.cat || "TODOS";
       renderVistaLiquidaciones();
     });
   });
 
-  // Selección de Animal desde tablas de liquidación o devengo
-  container.querySelectorAll('[data-action="select-animal"]').forEach(el => {
-    el.addEventListener("click", (e) => {
+  // Conmutadores de Modo: Real vs Proyección
+  const btnModoReal = document.getElementById("btn-modo-real");
+  if (btnModoReal) {
+    btnModoReal.addEventListener("click", () => {
+      AppState.usarEstimacionesLonja = false;
+      renderVistaLiquidaciones();
+    });
+  }
+
+  const btnModoProyeccion = document.getElementById("btn-modo-proyeccion");
+  if (btnModoProyeccion) {
+    btnModoProyeccion.addEventListener("click", () => {
+      AppState.usarEstimacionesLonja = true;
+      renderVistaLiquidaciones();
+    });
+  }
+
+  const btnActivarLonjaPrompt = document.getElementById("btn-activar-lonja-prompt");
+  if (btnActivarLonjaPrompt) {
+    btnActivarLonjaPrompt.addEventListener("click", () => {
+      AppState.usarEstimacionesLonja = true;
+      renderVistaLiquidaciones();
+    });
+  }
+
+  // Navegación de Pestañas Principales
+  document.querySelectorAll(".nav-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      AppState.seccionFinanciera = btn.dataset.seccion || "liquidaciones";
+      renderVistaLiquidaciones();
+    });
+  });
+
+  // Click en liquidación para ir a detalle (Nivel 3)
+  document.querySelectorAll(".liquidacion-item-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const fid = card.dataset.facturaId;
+      if (fid) {
+        AppState.facturaSeleccionada = fid;
+        registrarPasoHistorial("ventas", { facturaId: fid });
+        verDetalleLiquidacion(fid, false);
+      }
+    });
+  });
+
+  document.querySelectorAll(".btn-ver-canales").forEach(btn => {
+    btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const crotal = el.dataset.crotal;
+      const card = btn.closest(".liquidacion-item-card");
+      const fid = card ? card.dataset.facturaId : null;
+      if (fid) {
+        AppState.facturaSeleccionada = fid;
+        registrarPasoHistorial("ventas", { facturaId: fid });
+        verDetalleLiquidacion(fid, false);
+      }
+    });
+  });
+
+  // Botón abrir simulador de timing
+  const btnTiming = document.getElementById("btn-abrir-simulador-timing");
+  if (btnTiming) {
+    btnTiming.addEventListener("click", () => {
+      abrirModalSimuladorTiming();
+    });
+  }
+
+  // Enlaces directos a animal desde cebadero
+  document.querySelectorAll(".btn-ver-animal-cebo").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const crotal = btn.dataset.crotal;
       if (crotal) {
-        registrarPasoHistorial("liquidaciones", null, "Liquidaciones");
         seleccionarAnimal(crotal);
       }
     });
   });
 
-  // Toggle de Gráficos SVG
-  const btnToggleCharts = container.querySelector("#btn-toggle-charts");
-  if (btnToggleCharts) {
-    btnToggleCharts.addEventListener("click", () => {
-      AppState.graficosExpandidos = !AppState.graficosExpandidos;
-      renderVistaLiquidaciones();
-    });
-  }
-
-  // Subpestañas (Facturas vs Piensos)
-  container.querySelectorAll(".financial-subtab-btn:not(.radar-subtab-btn)").forEach(btn => {
-    btn.addEventListener("click", () => {
-      AppState.subtabFinanciera = btn.dataset.subtab;
-      renderVistaLiquidaciones();
-    });
-  });
-
-  // Subpestañas de Radar (Carne vs Piensos)
-  container.querySelectorAll(".radar-subtab-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      AppState.subseccionRadar = btn.dataset.radarSubtab;
-      renderVistaLiquidaciones();
-    });
-  });
-
-  // Botón Sincronizar Lonja en Vivo
-  const btnSyncLonja = container.querySelector("#btn-sync-lonja");
-  if (btnSyncLonja) {
-    btnSyncLonja.addEventListener("click", async () => {
-      btnSyncLonja.disabled = true;
-      btnSyncLonja.innerHTML = `<span>⏳ Sincronizando...</span>`;
-      let toast = document.getElementById("pwa-toast");
-      if (!toast) {
-        toast = document.createElement("div");
-        toast.id = "pwa-toast";
-        toast.className = "pwa-toast";
-        document.body.appendChild(toast);
-      }
-      toast.textContent = "🌾 Sincronizando con la Lonja de Salamanca...";
-      toast.style.backgroundColor = "var(--brand-primary)";
-      toast.style.color = "#ffffff";
-      toast.classList.add("pwa-toast--visible");
-
+  // Botón de sincronización
+  const btnSync = document.getElementById("btn-sync-ventas");
+  if (btnSync) {
+    btnSync.addEventListener("click", async () => {
+      btnSync.disabled = true;
+      btnSync.innerHTML = "⏳ Sincronizando...";
       try {
-        const token = localStorage.getItem("campo_pwa_token") || "";
-        const headers = { "Content-Type": "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-
-        const res = await fetch("./api/lonja/sync", {
-          method: "POST",
-          headers
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || `Error (${res.status})`);
-        }
-
-        const data = await res.json();
-        toast.textContent = `✓ ${data.message || "Cotizaciones actualizadas."}`;
-        await sincronizarBaseDatosAhora(token).catch(() => {});
-        setTimeout(() => {
-          toast.classList.remove("pwa-toast--visible");
-          renderVistaLiquidaciones();
-        }, 1200);
+        await sincronizarBaseDatosAhora();
+        renderVistaLiquidaciones();
       } catch (err) {
-        console.error("[Lonja Sync] Error:", err);
-        toast.textContent = `⚠️ Error al sincronizar: ${err.message}`;
-        toast.style.backgroundColor = "var(--md-error, #ba1a1a)";
-        setTimeout(() => toast.classList.remove("pwa-toast--visible"), 4000);
-        btnSyncLonja.disabled = false;
-        btnSyncLonja.innerHTML = `<span>🔄 Reintentar Lonja</span>`;
-      }
-    });
-  }
-
-  // Clic en tarjetas de facturas para ver detalle de canales (Nivel 3)
-  container.querySelectorAll('[data-action="ver-factura"]').forEach(el => {
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const facturaId = el.dataset.facturaId || el.closest('[data-factura-id]')?.dataset.facturaId;
-      if (facturaId) {
-        verDetalleLiquidacion(parseInt(facturaId, 10));
-      }
-    });
-  });
-
-  // Buscador de facturas
-  const txtBusqueda = container.querySelector("#txt-busqueda-liquidaciones");
-  if (txtBusqueda) {
-    txtBusqueda.addEventListener("input", (e) => {
-      AppState.filtroLiquidaciones = e.target.value;
-      renderVistaLiquidaciones();
-    });
-  }
-
-  const btnClear = container.querySelector("#btn-clear-liquidaciones");
-  if (btnClear) {
-    btnClear.addEventListener("click", () => {
-      AppState.filtroLiquidaciones = "";
-      renderVistaLiquidaciones();
-    });
-  }
-
-  // Subir factura PDF
-  const btnSubirPdf = container.querySelector("#btn-subir-factura-pdf");
-  const inputPdf = container.querySelector("#input-subir-pdf-factura");
-  if (btnSubirPdf && inputPdf) {
-    btnSubirPdf.addEventListener("click", () => inputPdf.click());
-    inputPdf.addEventListener("change", async (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (!file) return;
-
-      if (!file.name.toLowerCase().endsWith(".pdf")) {
-        alert("Por favor selecciona un archivo PDF válido.");
-        inputPdf.value = "";
-        return;
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        alert("El archivo excede el tamaño máximo permitido (10 MB).");
-        inputPdf.value = "";
-        return;
-      }
-
-      let toast = document.getElementById("pwa-toast");
-      if (!toast) {
-        toast = document.createElement("div");
-        toast.id = "pwa-toast";
-        toast.className = "pwa-toast";
-        document.body.appendChild(toast);
-      }
-      toast.textContent = `📄 Procesando factura ${file.name}...`;
-      toast.style.backgroundColor = "var(--brand-primary)";
-      toast.style.color = "#ffffff";
-      toast.classList.add("pwa-toast--visible");
-
-      const fd = new FormData();
-      fd.append("file", file);
-
-      try {
-        const token = localStorage.getItem("campo_pwa_token") || "";
-        const headers = {};
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-
-        const res = await fetch("./api/ventas/ingest-pdf", {
-          method: "POST",
-          headers,
-          body: fd,
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.detail || `Error del servidor (${res.status})`);
-        }
-
-        const data = await res.json();
-        toast.textContent = `✓ Factura ${data.numero_factura} subida (${data.total_cabezas} canales). Actualizando...`;
-
-        await sincronizarBaseDatosAhora(token).catch(() => {});
-        setTimeout(() => {
-          toast.classList.remove("pwa-toast--visible");
-          renderVistaLiquidaciones();
-        }, 1500);
-      } catch (err) {
-        console.error("[Ventas] Error subiendo factura PDF:", err);
-        toast.textContent = `⚠️ Error subiendo factura: ${err.message}`;
-        toast.style.backgroundColor = "var(--md-error, #ba1a1a)";
-        setTimeout(() => toast.classList.remove("pwa-toast--visible"), 4000);
+        alert("Error sincronizando base de datos: " + (err.message || err));
       } finally {
-        inputPdf.value = "";
+        btnSync.disabled = false;
+        btnSync.innerHTML = "🔄 Sincronizar";
       }
     });
   }
 
-  // Inicialización de Gráficos Interactivos TradingView (Lightweight Charts)
-  requestAnimationFrame(() => {
-    if (container.querySelector("#chart-carne-tv-canvas") && ultimasSeriesTrading.carne.length > 0) {
-      initTradingChart({
-        containerId: "chart-carne-tv",
-        seriesDefs: ultimasSeriesTrading.carne,
-        altura: 340
-      });
-    }
-
-    if (container.querySelector("#chart-piensos-tv-canvas") && ultimasSeriesTrading.piensos.length > 0) {
-      initTradingChart({
-        containerId: "chart-piensos-tv",
-        seriesDefs: ultimasSeriesTrading.piensos,
-        altura: 340
-      });
-    }
-
-    if (container.querySelector("#chart-tesoreria-tv-canvas") && ultimasSeriesTrading.tesoreria.length > 0) {
-      initTradingChart({
-        containerId: "chart-tesoreria-tv",
-        seriesDefs: ultimasSeriesTrading.tesoreria,
-        altura: 320
-      });
-    }
-  });
+  // Inicializar gráficos TradingView de la sección activa
+  setTimeout(() => {
+    inicializarGraficosActivos();
+  }, 60);
 }
 
-function adjuntarEventosDetalleFactura(container) {
-  const btnVolver = container.querySelector("#btn-volver-a-liquidaciones");
+/**
+ * Inicializa los gráficos interactivos de TradingView según la pestaña activa.
+ */
+function inicializarGraficosActivos() {
+  const seccion = AppState.seccionFinanciera || "liquidaciones";
+
+  if (seccion === "liquidaciones") {
+    const el = document.getElementById("chart-carne-tv");
+    if (!el) return;
+
+    try {
+      const seriesTrading = obtenerSeriesTradingCarne(AppState.anioFinanciero, AppState.usarEstimacionesLonja);
+      ultimasSeriesTrading.carne = seriesTrading;
+
+      const seriesDefs = [
+        { id: "precio_granja", name: "Cobrado Granja (€/kg)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.precio_granja || [], defaultVisible: true },
+        { id: "anojo_extra", name: "Lonja Añojo Extra (€/kg)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_extra || [], defaultVisible: true },
+        { id: "anojo_pesado", name: "Lonja Añojo Pesado (€/kg)", type: "Line", color: "#9333ea", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_pesado || [], defaultVisible: false },
+        { id: "ternera_extra", name: "Lonja Ternera Extra (€/kg)", type: "Line", color: "#0891b2", lineWidth: 2, lineStyle: 2, data: seriesTrading.ternera_extra || [], defaultVisible: false },
+        { id: "vaca_desvieje", name: "Lonja Vaca Desvieje (€/kg)", type: "Line", color: "#d97706", lineWidth: 2, lineStyle: 2, data: seriesTrading.vaca_desvieje || [], defaultVisible: false }
+      ];
+
+      initTradingChart({
+        id: "chart-carne-tv",
+        seriesDefs,
+        precioUnitario: "€/kg"
+      });
+    } catch (e) {
+      console.warn("[TradingChart] Error inicializando gráfico de carne:", e);
+    }
+  } else if (seccion === "tesoreria") {
+    const el = document.getElementById("chart-tesoreria-tv");
+    if (!el) return;
+
+    try {
+      const seriesTrading = obtenerSeriesTradingTesoreria(
+        AppState.anioFinanciero,
+        AppState.categoriaFinanciera,
+        AppState.usarEstimacionesLonja
+      );
+      ultimasSeriesTrading.tesoreria = seriesTrading;
+
+      const seriesDefs = [
+        { id: "ingresos_carne", name: "Cobros Carne (€)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.ingresos_carne || [], defaultVisible: true },
+        { id: "gastos_pienso", name: "Pagos Pienso (€)", type: "Line", color: "#ea580c", lineWidth: 2, data: seriesTrading.gastos_pienso || [], defaultVisible: true },
+        { id: "margen_neto", name: "Saldo Neto Mes (€)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.margen_neto || [], defaultVisible: true }
+      ];
+
+      initTradingChart({
+        id: "chart-tesoreria-tv",
+        seriesDefs,
+        precioUnitario: "€"
+      });
+    } catch (e) {
+      console.warn("[TradingChart] Error inicializando gráfico de tesorería:", e);
+    }
+  }
+}
+
+/**
+ * VISTA DE DETALLE DE LIQUIDACIÓN (NIVEL 3 DE PROFUNDIDAD)
+ */
+export function verDetalleLiquidacion(facturaId, registrarHistorial = true) {
+  const container = document.getElementById("app-container");
+  if (!container) return;
+
+  if (registrarHistorial) {
+    registrarPasoHistorial("ventas", { facturaId });
+  }
+
+  const detalle = obtenerDetalleLiquidacion(facturaId);
+  if (!detalle) {
+    alert("No se encontró la liquidación seleccionada.");
+    AppState.facturaSeleccionada = null;
+    renderVistaLiquidaciones();
+    return;
+  }
+
+  const factura = detalle.factura || detalle;
+  const canales = detalle.canales || (detalle.factura && detalle.factura.canales) || [];
+  const gastos = detalle.gastos || (detalle.factura && detalle.factura.gastos) || [];
+
+  container.innerHTML = `
+    <div class="factura-detail-container" style="max-width: 900px; margin: 0 auto; padding: 16px 12px 60px;">
+      
+      <!-- Barra Superior de Navegación -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <button id="btn-volver-atras-factura" class="btn-volver-liq btn-secondary" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--md-shape-md); cursor: pointer;">
+          ← <span>Volver a Liquidaciones</span>
+        </button>
+        <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">ID Factura: ${escapeHtml(factura.id)}</span>
+      </div>
+
+      <!-- Ficha de Encabezado de Factura -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 18px; box-shadow: var(--md-elevation-1); margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
+          <div>
+            <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Liquidación Oficial</div>
+            <h3 style="font-size: 1.35rem; font-weight: 900; color: var(--md-primary); margin: 2px 0 0;">
+              ${escapeHtml(factura.numero_factura || `Liquidación #${factura.id}`)}
+            </h3>
+            <div style="font-size: 0.84rem; color: var(--text-muted); margin-top: 2px;">
+              ${escapeHtml(factura.cliente_cooperativa || "Liquidación")} · Fecha emisión: ${formatearFecha(factura.fecha_factura)}
+            </div>
+          </div>
+
+          <div style="text-align: right;">
+            <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Total Liquidado</div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: var(--chart-carne); margin-top: 2px;">
+              ${formatearMoneda(factura.total_factura)} €
+            </div>
+            <div style="font-size: 0.76rem; color: var(--text-muted);">
+              Base: ${formatearMoneda(factura.base_imponible)} € · IVA (${factura.porcentaje_iva || 0}%): ${formatearMoneda(factura.cuota_iva || 0)} €
+            </div>
+          </div>
+        </div>
+
+        <!-- Métricas Rápidas de la Factura -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; border-top: 1px solid var(--md-outline-variant); padding-top: 12px;">
+          <div style="background: var(--md-surface-container-low); padding: 8px 10px; border-radius: var(--md-shape-md);">
+            <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Total Cabezas</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-main); margin-top: 2px;">${factura.total_cabezas || canales.length}</div>
+          </div>
+          <div style="background: var(--md-surface-container-low); padding: 8px 10px; border-radius: var(--md-shape-md);">
+            <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Kilos Canal</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-main); margin-top: 2px;">${formatearKg(factura.total_kilos_canal || 0)} kg</div>
+          </div>
+          <div style="background: var(--md-surface-container-low); padding: 8px 10px; border-radius: var(--md-shape-md);">
+            <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Precio Medio</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-main); margin-top: 2px;">
+              ${factura.total_kilos_canal > 0 ? `${(factura.base_imponible / factura.total_kilos_canal).toFixed(2)} €/kg` : '—'}
+            </div>
+          </div>
+          <div style="background: var(--md-surface-container-low); padding: 8px 10px; border-radius: var(--md-shape-md);">
+            <div style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Deducciones</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #b91c1c; margin-top: 2px;">${formatearMoneda(factura.gastos_total || 0)} €</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desglose de Deducciones y Gastos de Matadero -->
+      ${gastos && gastos.length > 0 ? `
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; margin-bottom: 16px; box-shadow: var(--md-elevation-1);">
+          <h4 style="font-size: 0.88rem; font-weight: 800; color: var(--text-main); margin: 0 0 8px;">Deducciones y Gastos de Matadero</h4>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            ${gastos.map(g => `
+              <div style="background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 6px 10px; font-size: 0.78rem;">
+                <span style="color: var(--text-muted);">${escapeHtml(g.concepto || "Gasto")}:</span>
+                <strong style="color: #b91c1c; margin-left: 4px;">-${formatearMoneda(g.importe)} €</strong>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : ""}
+
+      <!-- Tabla de Canales Individuales -->
+      <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
+        <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0 0 12px;">Desglose de Canales (${canales.length})</h4>
+
+        <div style="overflow-x: auto;">
+          <table class="canales-table" style="width: 100%; border-collapse: collapse; font-size: 0.84rem; text-align: right;">
+            <thead>
+              <tr style="border-bottom: 2px solid var(--md-outline-variant); color: var(--text-muted); font-size: 0.76rem; text-transform: uppercase;">
+                <th style="text-align: left; padding: 6px 8px;">Crotal / Tipo</th>
+                <th style="text-align: center; padding: 6px 8px;">Cab</th>
+                <th style="padding: 6px 8px;">Peso Canal</th>
+                <th style="padding: 6px 8px;">€/kg</th>
+                <th style="padding: 6px 8px;">Total Línea</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${canales.map(c => {
+                const crotal4 = c.crotal_asignado ? extraer4Digitos(c.crotal_asignado) : null;
+                const esSobrepeso = c.peso_canal_kg > 350;
+
+                return `
+                  <tr style="border-bottom: 1px solid var(--md-outline-variant);">
+                    <td style="text-align: left; padding: 8px;">
+                      <div style="font-weight: 700; color: var(--text-main);">${escapeHtml(c.articulo || "Canal")}</div>
+                      ${c.crotal_asignado ? `
+                        <button class="chip-crotal-link btn-ver-ficha-canal" data-crotal="${c.crotal_asignado}" style="margin-top: 2px;">
+                          🐄 ${crotal4 || c.crotal_asignado}
+                        </button>
+                      ` : `
+                        <span style="font-size: 0.74rem; color: var(--text-muted);">${c.fecha_salida_lote ? formatearFecha(c.fecha_salida_lote) : ''}</span>
+                      `}
+                    </td>
+                    <td style="text-align: center; padding: 8px; font-weight: 600;">${c.cabezas || 1}</td>
+                    <td style="padding: 8px; font-weight: 700; color: ${esSobrepeso ? '#b91c1c' : 'var(--text-main)'};">
+                      ${c.peso_canal_kg > 1 ? `${c.peso_canal_kg.toFixed(1)} kg` : 'Lote global'}
+                      ${esSobrepeso ? '<div style="font-size: 0.68rem; color: #b91c1c; font-weight: 800;">>350kg</div>' : ''}
+                    </td>
+                    <td style="padding: 8px; color: var(--text-muted);">
+                      ${c.precio_unitario > 0 && c.precio_unitario < 20 ? `${c.precio_unitario.toFixed(3)} €` : '—'}
+                    </td>
+                    <td style="padding: 8px; font-weight: 800; color: var(--chart-carne);">
+                      ${formatearMoneda(c.importe_linea)} €
+                    </td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // Vincular eventos de la vista de detalle
+  const btnVolver = document.getElementById("btn-volver-atras-factura");
   if (btnVolver) {
     btnVolver.addEventListener("click", () => {
       AppState.facturaSeleccionada = null;
@@ -1599,14 +982,128 @@ function adjuntarEventosDetalleFactura(container) {
     });
   }
 
-  container.querySelectorAll('[data-action="select-animal"]').forEach(el => {
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const crotal = el.dataset.crotal;
+  document.querySelectorAll(".btn-ver-ficha-canal").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const crotal = btn.dataset.crotal;
       if (crotal) {
-        registrarPasoHistorial("liquidaciones", AppState.facturaSeleccionada, "Liquidaciones");
         seleccionarAnimal(crotal);
       }
     });
   });
+}
+
+/**
+ * MODAL: CALCULADORA Y SIMULADOR DE TIMING ÓPTIMO DE SACRIFICIO
+ */
+export function abrirModalSimuladorTiming() {
+  const modalContainer = document.getElementById("modal-container") || document.body;
+  const overlay = document.createElement("div");
+  overlay.id = "modal-timing-overlay";
+  overlay.style.position = "fixed";
+  overlay.style.top = "0";
+  overlay.style.left = "0";
+  overlay.style.width = "100%";
+  overlay.style.height = "100%";
+  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+  overlay.style.display = "flex";
+  overlay.style.alignItems = "center";
+  overlay.style.justifyContent = "center";
+  overlay.style.zIndex = "9999";
+  overlay.style.padding = "16px";
+
+  const renderModalContent = () => {
+    const sim = calcularSimulacionTimingVenta(AppState.simulacionTiming);
+
+    return `
+      <div style="background: var(--md-surface-container-lowest); border-radius: var(--md-shape-lg); max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 20px; box-shadow: var(--md-elevation-3);">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0;">Calculadora de Timing de Sacrificio</h3>
+          <button id="btn-cerrar-modal-timing" style="border: none; background: transparent; font-size: 1.4rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+        </div>
+
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+          Simula si compensa aguantar el ternero más días en el cebadero ante la subida de lonja o si el coste de pienso y el sobrepeso (>350kg) reducen tu beneficio.
+        </p>
+
+        <!-- Formulario de Parámetros -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Peso Canal Actual (kg)</label>
+            <input type="number" id="sim-peso-actual" value="${AppState.simulacionTiming.pesoCanalActual}" step="1" style="width: 100%; padding: 7px 10px; border-radius: var(--md-shape-sm); border: 1px solid var(--md-outline-variant); font-size: 0.88rem; font-weight: 700; margin-top: 2px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Días de Retraso</label>
+            <input type="number" id="sim-dias-retraso" value="${AppState.simulacionTiming.diasRetraso}" step="1" style="width: 100%; padding: 7px 10px; border-radius: var(--md-shape-sm); border: 1px solid var(--md-outline-variant); font-size: 0.88rem; font-weight: 700; margin-top: 2px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Precio Actual (€/kg)</label>
+            <input type="number" id="sim-precio-actual" value="${AppState.simulacionTiming.precioActualKg}" step="0.05" style="width: 100%; padding: 7px 10px; border-radius: var(--md-shape-sm); border: 1px solid var(--md-outline-variant); font-size: 0.88rem; font-weight: 700; margin-top: 2px;" />
+          </div>
+          <div>
+            <label style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">Precio Esperado (€/kg)</label>
+            <input type="number" id="sim-precio-esperado" value="${AppState.simulacionTiming.precioEsperadoKg}" step="0.05" style="width: 100%; padding: 7px 10px; border-radius: var(--md-shape-sm); border: 1px solid var(--md-outline-variant); font-size: 0.88rem; font-weight: 700; margin-top: 2px;" />
+          </div>
+        </div>
+
+        <!-- Tarjeta de Resultado Económico -->
+        <div style="background: ${sim.esRentable ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border: 1px solid ${sim.esRentable ? '#86efac' : '#fca5a5'}; border-radius: var(--md-shape-md); padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: ${sim.esRentable ? '#15803d' : '#b91c1c'};">
+              ${sim.esRentable ? '✓ Retraso Rentable' : '⚠️ No Compensa Retrasar'}
+            </span>
+            <span style="font-size: 1.15rem; font-weight: 900; color: ${sim.esRentable ? '#15803d' : '#b91c1c'};">
+              ${sim.margenNetoRetraso >= 0 ? '+' : ''}${sim.margenNetoRetraso.toFixed(2)} € / cab
+            </span>
+          </div>
+
+          <div style="font-size: 0.8rem; color: var(--text-main); margin-top: 6px; line-height: 1.4;">
+            • Peso final estimado: <strong>${sim.pesoCanalNuevo} kg canal</strong> (+${sim.gananciaCanal} kg)<br/>
+            • Coste de pienso extra: <strong>-${sim.costePiensoAcumulado.toFixed(2)} €</strong><br/>
+            ${sim.saltaSobrepeso ? `<strong style="color: #b91c1c;">• Castigo Lonja Sobrepeso (>350kg): -${sim.penalizacionSobrepeso.toFixed(2)} €</strong><br/>` : ''}
+            • Precio mínimo de equilibrio: <strong>${sim.precioUmbralEquilibrio.toFixed(2)} €/kg</strong>
+          </div>
+        </div>
+
+        <button id="btn-cerrar-modal-timing-ok" class="btn-primary" style="width: 100%; padding: 10px; border-radius: var(--md-shape-md); font-weight: 700; cursor: pointer;">
+          Entendido
+        </button>
+
+      </div>
+    `;
+  };
+
+  overlay.innerHTML = renderModalContent();
+  modalContainer.appendChild(overlay);
+
+  const vincularEventosModal = () => {
+    const cerrar = () => {
+      overlay.remove();
+    };
+
+    overlay.querySelector("#btn-cerrar-modal-timing")?.addEventListener("click", cerrar);
+    overlay.querySelector("#btn-cerrar-modal-timing-ok")?.addEventListener("click", cerrar);
+
+    const recomputar = () => {
+      const pAct = parseFloat(overlay.querySelector("#sim-peso-actual").value) || 330;
+      const dRet = parseInt(overlay.querySelector("#sim-dias-retraso").value, 10) || 21;
+      const prAct = parseFloat(overlay.querySelector("#sim-precio-actual").value) || 7.15;
+      const prEsp = parseFloat(overlay.querySelector("#sim-precio-esperado").value) || 7.20;
+
+      AppState.simulacionTiming.pesoCanalActual = pAct;
+      AppState.simulacionTiming.diasRetraso = dRet;
+      AppState.simulacionTiming.precioActualKg = prAct;
+      AppState.simulacionTiming.precioEsperadoKg = prEsp;
+
+      overlay.innerHTML = renderModalContent();
+      vincularEventosModal();
+    };
+
+    overlay.querySelector("#sim-peso-actual")?.addEventListener("change", recomputar);
+    overlay.querySelector("#sim-dias-retraso")?.addEventListener("change", recomputar);
+    overlay.querySelector("#sim-precio-actual")?.addEventListener("change", recomputar);
+    overlay.querySelector("#sim-precio-esperado")?.addEventListener("change", recomputar);
+  };
+
+  vincularEventosModal();
 }
