@@ -1451,9 +1451,13 @@ class CampoDB {
           c.importe_linea,
           COALESCE(c.fecha_salida_lote, f.fecha_factura) as fecha_sacrificio,
           f.numero_factura,
-          f.cliente_cooperativa
+          f.cliente_cooperativa,
+          a.fecha_nacimiento,
+          a.madre_crotal,
+          a.raza
         FROM ventas_canales c
         JOIN ventas_liquidaciones f ON c.factura_id = f.id
+        LEFT JOIN animales a ON c.crotal_asignado = a.crotal
         WHERE ${whereCanales}
         ORDER BY fecha_sacrificio DESC
       `, params);
@@ -1525,6 +1529,19 @@ class CampoDB {
         const gananciaPv = Math.max(0, Number((pesoVivoEst - pesoDestete).toFixed(1)));
         const kgPienso = Math.round(gananciaPv * fcr);
 
+        // Métrica Reina Zootécnica con Error = 0: GMD Canal-Vida (g canal/día)
+        let diasVida = null;
+        let gmdCanalVida = null;
+        if (r.fecha_nacimiento && fSacrificio) {
+          const dNac = new Date(r.fecha_nacimiento);
+          const dSac = new Date(fSacrificio);
+          const diffVida = Math.round((dSac - dNac) / (1000 * 60 * 60 * 24));
+          if (diffVida > 0) {
+            diasVida = diffVida;
+            gmdCanalVida = Math.round((pCanal * 1000) / diffVida);
+          }
+        }
+
         // 3. Determinación de precio de pienso (€/kg)
         let precioPiensoKg = precioPiensoRealExplotacion || 0.315;
         let precioPiensoEstimado = !precioPiensoRealExplotacion;
@@ -1584,7 +1601,14 @@ class CampoDB {
         if (!esHembra && pCanal > 350.0) {
           penalizacionSobrepeso = {
             exceso_kg: Number((pCanal - 350.0).toFixed(1)),
-            coste_penalizacion: Number(((pCanal - 350.0) * 0.45).toFixed(2))
+            coste_penalizacion: Number(((pCanal - 350.0) * 0.45).toFixed(2)),
+            penalizacion_total_lonja: Number((pCanal * 0.32).toFixed(2))
+          };
+        } else if (esHembra && pCanal > 270.0) {
+          penalizacionSobrepeso = {
+            exceso_kg: Number((pCanal - 270.0).toFixed(1)),
+            coste_penalizacion: Number(((pCanal - 270.0) * 0.55).toFixed(2)),
+            penalizacion_total_lonja: Number((pCanal * 0.55).toFixed(2))
           };
         }
 
@@ -1599,10 +1623,14 @@ class CampoDB {
           articulo: r.articulo,
           numero_factura: r.numero_factura,
           fecha_sacrificio: fSacrificio,
+          fecha_nacimiento: r.fecha_nacimiento,
+          madre_crotal: r.madre_crotal,
           peso_canal_kg: pCanal,
           precio_unitario: precioUnit,
           importe_linea: importeLinea,
           dias_cebo: diasCebo,
+          dias_vida: diasVida,
+          gmd_canal_vida: gmdCanalVida,
           peso_vivo_estimado: pesoVivoEst,
           ganancia_peso_vivo: gananciaPv,
           gmd_estimada: gmdEst,
@@ -2283,13 +2311,16 @@ class CampoDB {
     const pesoCanalNuevo = Number((pesoVivoNuevo * rendimiento).toFixed(1));
     const gananciaCanal = Number((pesoCanalNuevo - pesoCanalActual).toFixed(1));
 
+    const umbralSobrepeso = esMacho ? 350.0 : 270.0;
+    const descuentoSobrepeso = params.penalizacionKg != null ? params.penalizacionKg : (esMacho ? 0.25 : 0.55);
+
     let penalizacionSobrepeso = 0;
     let precioFinalEfectivo = precioEsperadoKg;
     let saltaSobrepeso = false;
 
-    if (esMacho && pesoCanalActual <= 350.0 && pesoCanalNuevo > 350.0) {
+    if (pesoCanalActual <= umbralSobrepeso && pesoCanalNuevo > umbralSobrepeso) {
       saltaSobrepeso = true;
-      precioFinalEfectivo = Math.max(0, Number((precioEsperadoKg - 0.25).toFixed(3)));
+      precioFinalEfectivo = Math.max(0, Number((precioEsperadoKg - descuentoSobrepeso).toFixed(3)));
       penalizacionSobrepeso = Number(((precioEsperadoKg - precioFinalEfectivo) * pesoCanalNuevo).toFixed(2));
     }
 
@@ -2412,12 +2443,23 @@ class CampoDB {
 
         let estadoSalida = "OPTIMO";
         let riesgoSobrepeso = false;
-        if (pesoCanalEst > 350) {
+        const umbralMaxCanal = esMacho ? 350 : 270;
+        const umbralAlertaCanal = esMacho ? 335 : 255;
+        const diasEstanciaAlerta = esMacho ? 185 : 155;
+
+        if (pesoCanalEst > umbralMaxCanal) {
           estadoSalida = "SOBREPESO";
           riesgoSobrepeso = true;
-        } else if (pesoCanalEst >= 335 || diasEstanciaEst >= 165) {
+        } else if (pesoCanalEst >= umbralAlertaCanal || diasEstanciaEst >= diasEstanciaAlerta) {
           estadoSalida = "SACRIFICAR";
           riesgoSobrepeso = true;
+        }
+
+        let alertaEdad = null;
+        if (diasVida >= 685) {
+          alertaEdad = "CRITICO_24M"; // Riesgo inminente de pasar a Novillo/Toro B
+        } else if (diasVida >= 350 && diasVida < 365) {
+          alertaEdad = "AVISO_12M"; // Próximo a 12 meses (cambio de Ternera Z a Añojo A)
         }
 
         return {
@@ -2435,7 +2477,8 @@ class CampoDB {
           peso_vivo_estimado: pesoVivoEst,
           peso_canal_estimado: pesoCanalEst,
           estado_salida: estadoSalida,
-          riesgo_sobrepeso: riesgoSobrepeso
+          riesgo_sobrepeso: riesgoSobrepeso,
+          alerta_edad: alertaEdad
         };
       });
 
