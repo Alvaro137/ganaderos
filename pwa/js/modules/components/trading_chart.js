@@ -335,7 +335,9 @@ export function initTradingChart(config) {
       const puntoExacto = data.find(p => p.time === timeHovered);
       let badgeInfo = "";
       if (puntoExacto) {
-        if (puntoExacto.estimado) {
+        if (puntoExacto.facturas_pendientes && (!puntoExacto.value || puntoExacto.value === 0)) {
+          badgeInfo = ` <span class="trading-hud-tag tag-pend" style="font-size: 0.70rem; padding: 1px 5px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ Facturas pendientes</span>`;
+        } else if (puntoExacto.estimado) {
           badgeInfo = ` <span class="trading-hud-tag tag-est" style="font-size: 0.70rem; padding: 1px 5px; border-radius: 4px; background: rgba(148, 163, 184, 0.2); color: #475569; font-weight: 700;">Est.</span>`;
         } else if (puntoExacto.esReal !== false) {
           let detalle = "Real";

@@ -1301,12 +1301,15 @@ class CampoDB {
             kg_pienso: Number(r.kg_pienso || 0),
             esReal: false,
             estimado: false,
-            facturas_pendientes: false
+            facturas_pendientes: true
           });
         } else {
           const item = mapaMeses.get(r.mes);
           item.gasto_pienso = Number(r.gasto || 0);
           item.kg_pienso = Number(r.kg_pienso || 0);
+          if (item.ingresos_carne === 0 && !item.estimado) {
+            item.facturas_pendientes = true;
+          }
         }
       });
 
@@ -1401,14 +1404,15 @@ class CampoDB {
       const mesesOrdenados = Array.from(mapaMeses.values()).sort((a, b) => a.mes.localeCompare(b.mes));
 
       return mesesOrdenados.map(m => {
-        const margen = m.ingresos_carne - m.gasto_pienso;
+        const tieneIngresos = (m.ingresos_carne > 0) || m.estimado;
+        const margen = tieneIngresos ? Number((m.ingresos_carne - m.gasto_pienso).toFixed(2)) : null;
         const precioCanal = mapaPrecios.get(m.mes) || (m.kg_canal > 0 ? Number((m.ingresos_carne / m.kg_canal).toFixed(2)) : null);
         const precioPienso = m.kg_pienso > 0 ? Number((m.gasto_pienso / m.kg_pienso).toFixed(3)) : null;
 
         return {
           ...m,
-          margen_mes: Number(margen.toFixed(2)),
-          margen_neto: Number(margen.toFixed(2)),
+          margen_mes: margen,
+          margen_neto: margen,
           precio_canal_medio: precioCanal,
           precio_pienso_medio: precioPienso
         };
@@ -2173,9 +2177,11 @@ class CampoDB {
         const t = `${s.mes}-01`;
         const tieneVentas = Number(s.ingresos_carne || 0) > 0;
         const tieneCompras = Number(s.gasto_pienso || 0) > 0;
-        const valMargen = s.margen_neto != null 
-          ? Number(s.margen_neto) 
-          : (s.margen_mes != null ? Number(s.margen_mes) : Number((s.ingresos_carne || 0) - (s.gasto_pienso || 0)));
+        const valMargen = (tieneVentas || s.estimado)
+          ? (s.margen_neto != null 
+              ? Number(s.margen_neto) 
+              : (s.margen_mes != null ? Number(s.margen_mes) : Number((s.ingresos_carne || 0) - (s.gasto_pienso || 0))))
+          : null;
 
         ingresos_carne.push({ 
           time: t, 
@@ -2194,12 +2200,14 @@ class CampoDB {
           estimado: Boolean(s.gasto_estimado),
           kg_pienso: s.kg_pienso
         });
-        margen_neto.push({ 
-          time: t, 
-          value: valMargen,
-          esReal: Boolean(s.esReal || tieneCompras),
-          estimado: Boolean(s.estimado || s.gasto_estimado)
-        });
+        if (valMargen != null) {
+          margen_neto.push({ 
+            time: t, 
+            value: valMargen,
+            esReal: Boolean(s.esReal || tieneCompras),
+            estimado: Boolean(s.estimado || s.gasto_estimado)
+          });
+        }
       });
 
       return {
@@ -2436,8 +2444,8 @@ class CampoDB {
       const COSTE_DIARIO_CAB = 2.65;
       const costeDiarioTotal = Number((n * COSTE_DIARIO_CAB).toFixed(2));
       const costeAcumuladoLote = Number((sumaEstancia * COSTE_DIARIO_CAB).toFixed(2));
-      const gmdMediaVivo = n > 0 ? Number((sumaGmdVivo / n).toFixed(2)) : 1.35;
-      const gmdMediaCanal = n > 0 ? Number((sumaGmdCanal / n).toFixed(2)) : 0.78;
+      const gmdMediaVivo = n > 0 ? Number((sumaGmdVivo / n).toFixed(2)) : 0;
+      const gmdMediaCanal = n > 0 ? Number((sumaGmdCanal / n).toFixed(2)) : 0;
 
       return {
         total_cabezas: n,
