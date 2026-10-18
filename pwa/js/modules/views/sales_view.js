@@ -111,7 +111,10 @@ export function renderVistaLiquidaciones() {
             <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); margin: 0;">Centro Financiero y Mercado</h2>
             <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0;">Control de liquidaciones, cebadero activo y cotizaciones de Lonja</p>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button id="btn-info-metodologia" class="btn-info-metodologia" title="Explicación técnica de cálculos, GPD y Lonja" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 0.8rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); color: var(--text-main); cursor: pointer;">
+              ℹ️ <span>Metodología</span>
+            </button>
             <button id="btn-sync-ventas" class="btn-sync-icon" title="Sincronizar base de datos" style="padding: 8px 12px; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-lowest); cursor: pointer;">
               🔄 <span style="font-size: 0.8rem; font-weight: 600;">Sincronizar</span>
             </button>
@@ -226,8 +229,13 @@ function renderSeccionLiquidaciones(resumen) {
       ` : ""}
 
       ${AppState.usarEstimacionesLonja ? `
-        <div style="background: rgba(30, 94, 58, 0.08); border-left: 4px solid var(--md-primary); border-radius: var(--md-shape-sm); padding: 10px 14px; font-size: 0.82rem; color: var(--text-main);">
-          <strong style="color: var(--md-primary);">~ Proyección Lonja Activa:</strong> Se proyectan ${formatearMoneda(resumen.ingresos_estimados)} € para ${resumen.salidas_estimadas} cabezas salientes en censo según las cotizaciones semanales de la Lonja de Salamanca.
+        <div style="background: rgba(30, 94, 58, 0.08); border-left: 4px solid var(--md-primary); border-radius: var(--md-shape-sm); padding: 10px 14px; font-size: 0.82rem; color: var(--text-main); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <strong style="color: var(--md-primary);">~ Proyección Lonja Activa:</strong> Se proyectan ${formatearMoneda(resumen.ingresos_estimados)} € para ${resumen.salidas_estimadas} cabezas salientes en censo según las cotizaciones semanales de la Lonja de Salamanca.
+          </div>
+          <button class="btn-modal-metodologia-trigger" data-section="lonja" style="background: none; border: none; text-decoration: underline; color: var(--md-primary); cursor: pointer; font-size: 0.78rem; font-weight: 700;">
+            ¿Cómo se calcula? →
+          </button>
         </div>
       ` : ""}
 
@@ -393,8 +401,8 @@ function renderSeccionCebadero() {
   return `
     <div style="display: flex; flex-direction: column; gap: 16px;">
       
-      <!-- 3 TARJETAS KPI DE CEBADERO -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+      <!-- 4 TARJETAS KPI DE CEBADERO -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px;">
         
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
           <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Animales en Cebo Hoy</div>
@@ -403,6 +411,19 @@ function renderSeccionCebadero() {
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
             Estancia media: ${cebadero.estancia_media_dias} días en corral
+          </div>
+        </div>
+
+        <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">GPD / GMD Media Lote</span>
+            <button class="btn-modal-metodologia-trigger" data-section="gmd" title="Ver cómo se calcula el GPD" style="background: none; border: none; font-size: 0.82rem; cursor: pointer; padding: 0;">ℹ️</button>
+          </div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: #15803d; margin: 4px 0 2px;">
+            ${cebadero.gmd_media_vivo ? cebadero.gmd_media_vivo.toFixed(2) : '1.35'} kg/día
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            Canal est.: ${cebadero.gmd_media_canal ? cebadero.gmd_media_canal.toFixed(2) : '0.78'} kg/día (Rdto ~58%)
           </div>
         </div>
 
@@ -441,6 +462,7 @@ function renderSeccionCebadero() {
           <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">¿Cuándo mandar los terneros al matadero?</h4>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0;">
             A partir de 345 kg canal o ~170 días de cebo, el índice de conversión empeora y el sobrepeso (>350kg) se penaliza con -0,25 €/kg.
+            <button class="btn-modal-metodologia-trigger" data-section="sobrepeso" style="background: none; border: none; text-decoration: underline; color: var(--md-primary); cursor: pointer; font-size: 0.78rem; font-weight: 700; margin-left: 4px;">Ver reglas técnicas →</button>
           </p>
         </div>
         <button id="btn-abrir-simulador-timing" class="btn-primary" style="padding: 8px 16px; border-radius: var(--md-shape-md); font-size: 0.82rem; font-weight: 700; cursor: pointer;">
@@ -450,7 +472,10 @@ function renderSeccionCebadero() {
 
       <!-- LISTA DE ANIMALES EN CEBO -->
       <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
-        <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0 0 12px;">Censo de Animales en Cebadero (${cebadero.animales.length})</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+          <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">Censo de Animales en Cebadero (${cebadero.animales.length})</h4>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">GMD técnica: ~1,35 kg/d machos · ~1,15 kg/d hembras</span>
+        </div>
 
         ${cebadero.animales.length === 0 ? `
           <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.88rem;">
@@ -473,6 +498,9 @@ function renderSeccionCebadero() {
                 badgeText = "🟡 Salida Recomendada";
               }
 
+              const gmdVivo = a.gmd_vivo_estimada || (a.sexo === 'M' ? 1.35 : 1.15);
+              const gmdCanal = a.gmd_canal_estimada || Number((gmdVivo * 0.58).toFixed(2));
+
               return `
                 <div style="background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); padding: 12px; display: flex; flex-direction: column; gap: 6px;">
                   <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -486,7 +514,9 @@ function renderSeccionCebadero() {
 
                   <div style="font-size: 0.8rem; color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px;">
                     <div>Estancia est.: <strong>${a.dias_estancia_estimados} días</strong></div>
+                    <div>GPD / GMD: <strong style="color: #15803d;">${gmdVivo.toFixed(2)} kg/d</strong></div>
                     <div>Peso canal est.: <strong>${a.peso_canal_estimado} kg</strong></div>
+                    <div>Canal diaria: <strong>${gmdCanal.toFixed(2)} kg/d</strong></div>
                     <div>Sexo: <strong>${escapeHtml(a.sexo || "—")}</strong></div>
                     <div>Raza: <strong>${escapeHtml(a.raza || "—")}</strong></div>
                   </div>
@@ -721,6 +751,23 @@ function vincularEventosDashboard() {
     });
   });
 
+  // Botón abrir modal de metodología técnica
+  const btnMetodologia = document.getElementById("btn-info-metodologia");
+  if (btnMetodologia) {
+    btnMetodologia.addEventListener("click", () => {
+      abrirModalMetodologiaCalculos("todos");
+    });
+  }
+
+  // Disparadores contextuales de secciones de metodología (GMD, Lonja, Sobrepeso, etc.)
+  document.querySelectorAll(".btn-modal-metodologia-trigger").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const sec = btn.dataset.section || "todos";
+      abrirModalMetodologiaCalculos(sec);
+    });
+  });
+
   // Botón abrir simulador de timing
   const btnTiming = document.getElementById("btn-abrir-simulador-timing");
   if (btnTiming) {
@@ -771,7 +818,7 @@ function inicializarGraficosActivos() {
   const seccion = AppState.seccionFinanciera || "liquidaciones";
 
   if (seccion === "liquidaciones") {
-    const el = document.getElementById("chart-carne-tv");
+    const el = document.getElementById("chart-carne-tv-canvas") || document.getElementById("chart-carne-tv");
     if (!el) return;
 
     try {
@@ -779,15 +826,16 @@ function inicializarGraficosActivos() {
       ultimasSeriesTrading.carne = seriesTrading;
 
       const seriesDefs = [
-        { id: "precio_granja", name: "Cobrado Granja (€/kg)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.precio_granja || [], defaultVisible: true },
-        { id: "anojo_extra", name: "Lonja Añojo Extra (€/kg)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_extra || [], defaultVisible: true },
-        { id: "anojo_pesado", name: "Lonja Añojo Pesado (€/kg)", type: "Line", color: "#9333ea", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_pesado || [], defaultVisible: false },
-        { id: "ternera_extra", name: "Lonja Ternera Extra (€/kg)", type: "Line", color: "#0891b2", lineWidth: 2, lineStyle: 2, data: seriesTrading.ternera_extra || [], defaultVisible: false },
-        { id: "vaca_desvieje", name: "Lonja Vaca Desvieje (€/kg)", type: "Line", color: "#d97706", lineWidth: 2, lineStyle: 2, data: seriesTrading.vaca_desvieje || [], defaultVisible: false }
+        { id: "precio_granja", label: "Cobrado Granja", name: "Cobrado Granja (€/kg)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.precio_granja || [], defaultVisible: true, unit: "€/kg" },
+        { id: "anojo_extra", label: "Lonja Añojo Extra", name: "Lonja Añojo Extra (€/kg)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_extra || [], defaultVisible: true, unit: "€/kg" },
+        { id: "anojo_pesado", label: "Lonja Añojo Pesado", name: "Lonja Añojo Pesado (€/kg)", type: "Line", color: "#9333ea", lineWidth: 2, lineStyle: 2, data: seriesTrading.anojo_pesado || [], defaultVisible: false, unit: "€/kg" },
+        { id: "ternera_extra", label: "Lonja Ternera Extra", name: "Lonja Ternera Extra (€/kg)", type: "Line", color: "#0891b2", lineWidth: 2, lineStyle: 2, data: seriesTrading.ternera_extra || [], defaultVisible: false, unit: "€/kg" },
+        { id: "vaca_desvieje", label: "Lonja Vaca Desvieje", name: "Lonja Vaca Desvieje (€/kg)", type: "Line", color: "#d97706", lineWidth: 2, lineStyle: 2, data: seriesTrading.vaca_desvieje || [], defaultVisible: false, unit: "€/kg" }
       ];
 
       initTradingChart({
         id: "chart-carne-tv",
+        containerId: "chart-carne-tv",
         seriesDefs,
         precioUnitario: "€/kg"
       });
@@ -795,7 +843,7 @@ function inicializarGraficosActivos() {
       console.warn("[TradingChart] Error inicializando gráfico de carne:", e);
     }
   } else if (seccion === "tesoreria") {
-    const el = document.getElementById("chart-tesoreria-tv");
+    const el = document.getElementById("chart-tesoreria-tv-canvas") || document.getElementById("chart-tesoreria-tv");
     if (!el) return;
 
     try {
@@ -807,13 +855,14 @@ function inicializarGraficosActivos() {
       ultimasSeriesTrading.tesoreria = seriesTrading;
 
       const seriesDefs = [
-        { id: "ingresos_carne", name: "Cobros Carne (€)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.ingresos_carne || [], defaultVisible: true },
-        { id: "gastos_pienso", name: "Pagos Pienso (€)", type: "Line", color: "#ea580c", lineWidth: 2, data: seriesTrading.gastos_pienso || [], defaultVisible: true },
-        { id: "margen_neto", name: "Saldo Neto Mes (€)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.margen_neto || [], defaultVisible: true }
+        { id: "ingresos_carne", label: "Cobros Carne", name: "Cobros Carne (€)", type: "Line", color: "#15803d", lineWidth: 3, data: seriesTrading.ingresos_carne || [], defaultVisible: true, unit: "€" },
+        { id: "gastos_pienso", label: "Pagos Pienso", name: "Pagos Pienso (€)", type: "Line", color: "#ea580c", lineWidth: 2, data: seriesTrading.gastos_pienso || [], defaultVisible: true, unit: "€" },
+        { id: "margen_neto", label: "Saldo Neto Mes", name: "Saldo Neto Mes (€)", type: "Line", color: "#2563eb", lineWidth: 2, lineStyle: 2, data: seriesTrading.margen_neto || [], defaultVisible: true, unit: "€" }
       ];
 
       initTradingChart({
         id: "chart-tesoreria-tv",
+        containerId: "chart-tesoreria-tv",
         seriesDefs,
         precioUnitario: "€"
       });
@@ -1106,4 +1155,193 @@ export function abrirModalSimuladorTiming() {
   };
 
   vincularEventosModal();
+}
+
+/**
+ * Abre el modal técnico de metodología, fórmulas agronómicas y proyecciones de Lonja.
+ * Proporciona máxima transparencia técnica al usuario ganadero sobre cómo se calculan:
+ * 1. GPD / GMD (Ganancia de Peso Diaria en kg/día vivo y canal).
+ * 2. Proyecciones de facturación con cotizaciones semanales de Lonja de Salamanca.
+ * 3. Costes de ración concentrada y curva de conversión (FCR).
+ * 4. Umbrales críticos y penalizaciones por sobrepeso comercial (>350 kg canal).
+ */
+export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
+  const modalContainer = document.getElementById("modal-container") || document.body;
+
+  // Evitar modales duplicados
+  const previo = document.getElementById("modal-metodologia-overlay");
+  if (previo) previo.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "modal-metodologia-overlay";
+  overlay.style.position = "fixed";
+  overlay.style.top = "0";
+  overlay.style.left = "0";
+  overlay.style.width = "100%";
+  overlay.style.height = "100%";
+  overlay.style.backgroundColor = "rgba(0, 0, 0, 0.55)";
+  overlay.style.display = "flex";
+  overlay.style.alignItems = "center";
+  overlay.style.justifyContent = "center";
+  overlay.style.zIndex = "10000";
+  overlay.style.padding = "16px";
+
+  const renderModalContent = (seccionActiva) => {
+    return `
+      <div style="background: var(--md-surface-container-lowest, #fff); border-radius: var(--md-shape-lg, 16px); max-width: 680px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 22px 20px; box-shadow: var(--md-elevation-4, 0 10px 25px rgba(0,0,0,0.2)); font-family: system-ui, -apple-system, sans-serif;">
+        
+        <!-- CABECERA -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; border-bottom: 1px solid var(--md-outline-variant, #e5e7eb); padding-bottom: 12px;">
+          <div>
+            <h3 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main, #111827); margin: 0; display: flex; align-items: center; gap: 8px;">
+              <span>📐 Metodología y Fórmulas Técnicas</span>
+            </h3>
+            <p style="font-size: 0.8rem; color: var(--text-muted, #6b7280); margin: 3px 0 0;">
+              Transparencia analítica: cómo se calculan el GPD, las valoraciones de Lonja y el cebo
+            </p>
+          </div>
+          <button id="btn-cerrar-modal-metodologia" style="border: none; background: transparent; font-size: 1.6rem; cursor: pointer; color: var(--text-muted, #6b7280); line-height: 1; padding: 0 4px;">&times;</button>
+        </div>
+
+        <!-- SELECTOR DE SECCIONES (TABS) -->
+        <div style="display: flex; gap: 6px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px;">
+          <button class="metodologia-tab-btn ${seccionActiva === 'todos' ? 'active' : ''}" data-tab="todos" style="padding: 6px 12px; border-radius: var(--md-shape-full, 9999px); font-size: 0.76rem; font-weight: 700; border: 1px solid ${seccionActiva === 'todos' ? 'var(--md-primary, #15803d)' : 'var(--md-outline-variant, #e5e7eb)'}; background: ${seccionActiva === 'todos' ? 'var(--md-primary, #15803d)' : 'transparent'}; color: ${seccionActiva === 'todos' ? '#fff' : 'var(--text-main, #111827)'}; cursor: pointer; white-space: nowrap;">
+            📋 Ver Todo
+          </button>
+          <button class="metodologia-tab-btn ${seccionActiva === 'gmd' ? 'active' : ''}" data-tab="gmd" style="padding: 6px 12px; border-radius: var(--md-shape-full, 9999px); font-size: 0.76rem; font-weight: 700; border: 1px solid ${seccionActiva === 'gmd' ? 'var(--md-primary, #15803d)' : 'var(--md-outline-variant, #e5e7eb)'}; background: ${seccionActiva === 'gmd' ? 'var(--md-primary, #15803d)' : 'transparent'}; color: ${seccionActiva === 'gmd' ? '#fff' : 'var(--text-main, #111827)'}; cursor: pointer; white-space: nowrap;">
+            ⚖️ GPD / GMD Cebo
+          </button>
+          <button class="metodologia-tab-btn ${seccionActiva === 'lonja' ? 'active' : ''}" data-tab="lonja" style="padding: 6px 12px; border-radius: var(--md-shape-full, 9999px); font-size: 0.76rem; font-weight: 700; border: 1px solid ${seccionActiva === 'lonja' ? 'var(--md-primary, #15803d)' : 'var(--md-outline-variant, #e5e7eb)'}; background: ${seccionActiva === 'lonja' ? 'var(--md-primary, #15803d)' : 'transparent'}; color: ${seccionActiva === 'lonja' ? '#fff' : 'var(--text-main, #111827)'}; cursor: pointer; white-space: nowrap;">
+            📈 Proyección Lonja
+          </button>
+          <button class="metodologia-tab-btn ${seccionActiva === 'pienso' ? 'active' : ''}" data-tab="pienso" style="padding: 6px 12px; border-radius: var(--md-shape-full, 9999px); font-size: 0.76rem; font-weight: 700; border: 1px solid ${seccionActiva === 'pienso' ? 'var(--md-primary, #15803d)' : 'var(--md-outline-variant, #e5e7eb)'}; background: ${seccionActiva === 'pienso' ? 'var(--md-primary, #15803d)' : 'transparent'}; color: ${seccionActiva === 'pienso' ? '#fff' : 'var(--text-main, #111827)'}; cursor: pointer; white-space: nowrap;">
+            🌾 Ración y Conversión
+          </button>
+          <button class="metodologia-tab-btn ${seccionActiva === 'sobrepeso' ? 'active' : ''}" data-tab="sobrepeso" style="padding: 6px 12px; border-radius: var(--md-shape-full, 9999px); font-size: 0.76rem; font-weight: 700; border: 1px solid ${seccionActiva === 'sobrepeso' ? 'var(--md-primary, #15803d)' : 'var(--md-outline-variant, #e5e7eb)'}; background: ${seccionActiva === 'sobrepeso' ? 'var(--md-primary, #15803d)' : 'transparent'}; color: ${seccionActiva === 'sobrepeso' ? '#fff' : 'var(--text-main, #111827)'}; cursor: pointer; white-space: nowrap;">
+            ⚠️ Regla Sobrepeso
+          </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          
+          <!-- SECCIÓN 1: GPD / GMD -->
+          ${seccionActiva === 'todos' || seccionActiva === 'gmd' ? `
+            <div style="background: var(--md-surface-container-low, #f8fafc); border: 1px solid var(--md-outline-variant, #e2e8f0); border-radius: var(--md-shape-md, 12px); padding: 14px 16px;">
+              <h4 style="font-size: 0.95rem; font-weight: 800; color: #15803d; margin: 0 0 6px; display: flex; align-items: center; gap: 6px;">
+                <span>⚖️ 1. Ganancia de Peso Diaria (GPD / GMD)</span>
+              </h4>
+              <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
+                La <strong>GMD</strong> (Ganancia Media Diaria) o <strong>GPD</strong> mide el ritmo de crecimiento del ternero en kg por día durante su estancia en cebadero. Se calculan dos magnitudes: <strong>peso vivo</strong> (en báscula) y <strong>peso canal</strong> (carne comercial).
+              </p>
+              
+              <div style="background: #fff; border-left: 3px solid #15803d; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-family: monospace; font-size: 0.8rem; color: #0f172a;">
+                <strong>GMD con Pesadas Reales:</strong><br/>
+                GMD (kg/día) = (Peso Báscula Final - Peso Báscula Inicial) / Días transcurridos
+              </div>
+
+              <div style="background: #fff; border-left: 3px solid #2563eb; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
+                <strong>Estándar Técnico para Lotes en Cebo Intensivo:</strong><br/>
+                • <strong>Añojo Cruzado (Macho):</strong> GMD de <strong>1,35 kg/día vivo</strong> con rendimiento canal del <strong>58%</strong> (equivale a <strong>0,78 kg canal/día</strong>). Peso base al destete: 250 kg vivo.<br/>
+                • <strong>Ternera Cruzada (Hembra):</strong> GMD de <strong>1,15 kg/día vivo</strong> con rendimiento canal del <strong>56%</strong> (equivale a <strong>0,64 kg canal/día</strong>). Peso base al destete: 230 kg vivo.<br/>
+                • <strong>Días de estancia en cebo:</strong> Calculados a partir de la edad oficial en censo: <code>Edad (días) - 180 días de cría nodriza</code> (acotado entre 30 y 270 días).
+              </div>
+            </div>
+          ` : ""}
+
+          <!-- SECCIÓN 2: PROYECCIONES LONJA -->
+          ${seccionActiva === 'todos' || seccionActiva === 'lonja' ? `
+            <div style="background: var(--md-surface-container-low, #f8fafc); border: 1px solid var(--md-outline-variant, #e2e8f0); border-radius: var(--md-shape-md, 12px); padding: 14px 16px;">
+              <h4 style="font-size: 0.95rem; font-weight: 800; color: #2563eb; margin: 0 0 6px; display: flex; align-items: center; gap: 6px;">
+                <span>📈 2. Proyección de Facturación con Lonja de Salamanca</span>
+              </h4>
+              <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
+                Cuando el ganadero traslada o vende animales con destino matadero, la salida se anota de inmediato en el Libro Oficial de Movimientos (REGA). Sin embargo, la liquidación en PDF de la cooperativa/matadero suele demorarse semanas. La <strong>Proyección Lonja</strong> valora esas salidas con rigor para no falsear la tesorería.
+              </p>
+
+              <div style="background: #fff; border-left: 3px solid #2563eb; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-family: monospace; font-size: 0.8rem; color: #0f172a;">
+                <strong>Fórmula de Proyección:</strong><br/>
+                Facturación Estimada (€) = Cabezas Salidas × Peso Canal Referencia × Cotización Lonja Semana (€/kg)
+              </div>
+
+              <div style="background: #fff; border-left: 3px solid #6366f1; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
+                <strong>Pesos Canal de Referencia Homologados:</strong><br/>
+                • <strong>Añojo Extra (Cebo Macho):</strong> 290,0 kg canal.<br/>
+                • <strong>Ternera Extra (Cebo Hembra):</strong> 235,0 kg canal.<br/>
+                • <strong>Vaca Desvieje (>24 meses):</strong> 360,0 kg canal.<br/>
+                • <strong>Cotización Oficial:</strong> Extraída de las actas oficiales de la Mesa de Vacuno de Carne de la <em>Lonja Agropecuaria de Salamanca</em>. Se asocia la cotización vigente en la semana exacta de la fecha de salida a matadero.
+              </div>
+            </div>
+          ` : ""}
+
+          <!-- SECCIÓN 3: PIENSO Y CONVERSIÓN -->
+          ${seccionActiva === 'todos' || seccionActiva === 'pienso' ? `
+            <div style="background: var(--md-surface-container-low, #f8fafc); border: 1px solid var(--md-outline-variant, #e2e8f0); border-radius: var(--md-shape-md, 12px); padding: 14px 16px;">
+              <h4 style="font-size: 0.95rem; font-weight: 800; color: #ea580c; margin: 0 0 6px; display: flex; align-items: center; gap: 6px;">
+                <span>🌾 3. Coste de Ración y Curva de Conversión (FCR)</span>
+              </h4>
+              <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
+                El pienso concentrado representa el <strong>70-80% de los costes variables</strong> del cebadero. El coste diario por cabeza se modela en <strong>2,65 €/cab/día</strong> (consumo medio de 8 kg/día a 0,33 €/kg), o se ajusta con el precio real si constan albaranes de compra de pienso en la explotación.
+              </p>
+
+              <div style="background: #fff; border-left: 3px solid #ea580c; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
+                <strong>Índice de Conversión Alimenticia (FCR):</strong><br/>
+                • <strong>Días 0 - 120 (Crecimiento óseo-muscular):</strong> Conversión óptima (~4,8 kg pienso por cada 1 kg de aumento de peso vivo). Margen diario muy positivo.<br/>
+                • <strong>Días 120 - 165 (Enfrascado/acabado):</strong> Conversión media (~6,2 kg pienso / kg vivo).<br/>
+                • <strong>> 170 días (Engrasamiento excesivo):</strong> La conversión empeora a más de 7,5 - 8,0 kg pienso / kg vivo. El coste de alimentar al animal ese día (2,80 - 3,20 €) supera el valor del peso ganado.
+              </div>
+            </div>
+          ` : ""}
+
+          <!-- SECCIÓN 4: SOBREPESO -->
+          ${seccionActiva === 'todos' || seccionActiva === 'sobrepeso' ? `
+            <div style="background: var(--md-surface-container-low, #f8fafc); border: 1px solid var(--md-outline-variant, #e2e8f0); border-radius: var(--md-shape-md, 12px); padding: 14px 16px;">
+              <h4 style="font-size: 0.95rem; font-weight: 800; color: #b91c1c; margin: 0 0 6px; display: flex; align-items: center; gap: 6px;">
+                <span>⚠️ 4. Umbral de Sobrepeso Comercial (>350 kg canal)</span>
+              </h4>
+              <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
+                El mercado de matadero en España exige canales dentro del estándar comercial (260 - 330 kg). Cuando un añojo macho supera los <strong>350 kg de peso canal</strong>, los pliegos comerciales lo reclasifican como <em>Añojo Pesado</em>, aplicando una penalización de <strong>-0,25 €/kg a -0,45 €/kg</strong> sobre la totalidad de la canal.
+              </p>
+
+              <div style="background: #fff; border-left: 3px solid #b91c1c; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
+                <strong>Impacto Económico del Retraso:</strong><br/>
+                Un añojo de 355 kg canal penalizado a -0,25 €/kg sufre un descuento de <strong>-88,75 € por cabeza</strong>. Si además se suma el pienso consumido durante los 20 días extra (~53 €), el ganadero pierde <strong>más de 140 € netos por animal</strong> por no haberlo sacrificado a tiempo.<br/>
+                • <strong>Alerta temprana de la PWA:</strong> Se activa a partir de <strong>335 kg canal estimados</strong> para coordinar el camión y el matadero con margen.
+              </div>
+            </div>
+          ` : ""}
+
+        </div>
+
+        <div style="margin-top: 18px; text-align: right;">
+          <button id="btn-cerrar-modal-metodologia-bottom" class="btn-primary" style="padding: 9px 20px; border-radius: var(--md-shape-md, 8px); font-size: 0.82rem; font-weight: 700; cursor: pointer;">
+            Cerrar Guía Técnica
+          </button>
+        </div>
+
+      </div>
+    `;
+  };
+
+  overlay.innerHTML = renderModalContent(seccionInicial);
+  modalContainer.appendChild(overlay);
+
+  const vincularEventos = (secActual) => {
+    const cerrar = () => overlay.remove();
+    overlay.querySelector("#btn-cerrar-modal-metodologia")?.addEventListener("click", cerrar);
+    overlay.querySelector("#btn-cerrar-modal-metodologia-bottom")?.addEventListener("click", cerrar);
+
+    overlay.querySelectorAll(".metodologia-tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.tab || "todos";
+        overlay.innerHTML = renderModalContent(tab);
+        vincularEventos(tab);
+      });
+    });
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) cerrar();
+    });
+  };
+
+  vincularEventos(seccionInicial);
 }

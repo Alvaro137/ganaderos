@@ -35,6 +35,7 @@ import {
   obtenerDistribucionPesosCanal,
   obtenerCebaderoActivo
 } from '../../pwa/js/modules/db.js';
+import { abrirModalMetodologiaCalculos } from '../../pwa/js/modules/views/sales_view.js';
 
 console.log("==================================================");
 console.log("EJECUTANDO SUITE DE TESTS FRONTEND (NODE.JS)");
@@ -798,6 +799,14 @@ async function runAllTests() {
     assert.strictEqual(ceb.animales[0].estado_salida, 'SACRIFICAR');
 
     delete globalThis.window;
+  });
+
+  await test("Metodología y Cálculos Técnicos: Exportación y parámetros GPD / Lonja", () => {
+    assert.strictEqual(typeof abrirModalMetodologiaCalculos, "function", "abrirModalMetodologiaCalculos debe estar exportado");
+
+    const cebaderoFallback = obtenerCebaderoActivo();
+    assert.strictEqual(typeof cebaderoFallback.gmd_media_vivo, "number");
+    assert.strictEqual(typeof cebaderoFallback.gmd_media_canal, "number");
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

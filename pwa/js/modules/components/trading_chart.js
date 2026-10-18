@@ -55,17 +55,18 @@ export function renderTradingChartContainer(config) {
 
   const checkboxesHtml = seriesDefs.map(s => {
     const checked = s.defaultVisible !== false;
+    const label = s.label || s.name || s.id;
     return `
       <label class="trading-layer-chip ${checked ? 'active' : ''}" data-series-id="${escapeHtml(s.id)}" style="--chip-color: ${s.color};">
         <input type="checkbox" id="${escapeHtml(id)}-chk-${escapeHtml(s.id)}" class="trading-layer-chk" data-series-id="${escapeHtml(s.id)}" ${checked ? 'checked' : ''} />
         <span class="trading-layer-dot" style="background: ${s.color};"></span>
-        <span class="trading-layer-label">${escapeHtml(s.label)}</span>
+        <span class="trading-layer-label">${escapeHtml(label)}</span>
       </label>
     `;
   }).join("");
 
   return `
-    <div class="trading-chart-card" id="${escapeHtml(id)}-card">
+    <div class="trading-chart-card" id="${escapeHtml(id)}-card" data-chart-id="${escapeHtml(id)}">
       <!-- Cabecera del Gráfico: Título y Rango Temporal -->
       <div class="trading-chart-header">
         <div>
@@ -94,7 +95,7 @@ export function renderTradingChartContainer(config) {
 
       <!-- HUD Interactivo: Valores en Tiempo Real del Cursor / Crosshair -->
       <div class="trading-hud-bar" id="${escapeHtml(id)}-hud">
-        <span class="trading-hud-date" id="${escapeHtml(id)}-hud-date">---</span>
+        <span class="trading-hud-date" id="${escapeHtml(id)}-hud-date">📅 ---</span>
         <div class="trading-hud-values" id="${escapeHtml(id)}-hud-values">
           <!-- Valores dinámicos inyectados por el crosshair -->
         </div>
@@ -112,16 +113,20 @@ export function renderTradingChartContainer(config) {
  * @returns {Object|null} Controlador del gráfico
  */
 export function initTradingChart(config) {
+  const containerId = config.containerId || config.id;
   const {
-    containerId,
     seriesDefs = [],
     altura = 300,
     priceFormatter = null
   } = config;
 
   if (typeof window === "undefined" || !document) return null;
+  if (!containerId) {
+    console.warn("[TradingView] containerId no especificado");
+    return null;
+  }
 
-  const canvasEl = document.getElementById(`${containerId}-canvas`);
+  const canvasEl = document.getElementById(`${containerId}-canvas`) || document.getElementById(containerId);
   if (!canvasEl) {
     console.warn(`[TradingView] Contenedor #${containerId}-canvas no encontrado`);
     return null;
@@ -130,7 +135,11 @@ export function initTradingChart(config) {
   // Destruir instancia anterior si existía
   destruirTradingChart(containerId);
 
-  const anchoInicial = canvasEl.clientWidth || 600;
+  let anchoInicial = canvasEl.clientWidth;
+  if (!anchoInicial || anchoInicial <= 0) {
+    anchoInicial = canvasEl.parentElement?.clientWidth || window.innerWidth || 600;
+    if (anchoInicial > 1040) anchoInicial = 1040;
+  }
 
   // Formateador de precios
   const defaultFormatter = (price) => {
@@ -204,10 +213,13 @@ export function initTradingChart(config) {
   seriesDefs.forEach(def => {
     const isArea = def.type === "area";
     const SeriesConstructor = isArea ? AreaSeries : LineSeries;
+    const label = def.label || def.name || def.id;
+    def.label = label;
 
     const seriesOptions = {
       color: def.color || '#15803d',
       lineWidth: def.lineWidth || (isArea ? 2 : 2.5),
+      lineStyle: def.lineStyle != null ? def.lineStyle : 0,
       priceFormat: {
         type: 'custom',
         formatter: (p) => `${Number(p).toFixed(def.decimales != null ? def.decimales : 2)} ${def.unit || '€'}`
@@ -374,8 +386,14 @@ export function initTradingChart(config) {
     actualizarHUD(param.time, param.seriesData);
   });
 
-  // Ajustar escala al contenido
-  chart.timeScale().fitContent();
+  // Ajustar escala al contenido si existen datos registrados
+  let totalPuntos = 0;
+  seriesMap.forEach(({ data }) => { totalPuntos += (data ? data.length : 0); });
+  if (totalPuntos > 0) {
+    try {
+      chart.timeScale().fitContent();
+    } catch (_) {}
+  }
 
   // Gestión de Resize Responsivo
   let resizeObserver = null;
@@ -391,7 +409,7 @@ export function initTradingChart(config) {
   }
 
   // Enlazar eventos de checkboxes de capas
-  const cardEl = document.getElementById(`${containerId}-card`);
+  const cardEl = document.getElementById(containerId) || document.getElementById(`${containerId}-card`);
   if (cardEl) {
     cardEl.querySelectorAll(`.trading-layer-chk`).forEach(chk => {
       chk.addEventListener("change", (e) => {
