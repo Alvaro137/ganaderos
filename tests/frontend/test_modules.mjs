@@ -31,7 +31,9 @@ import {
   calcularSimulacionTimingVenta,
   obtenerResumenFinancieroGlobal,
   obtenerSerieMensualFinanciera,
-  obtenerSeriesTradingTesoreria
+  obtenerSeriesTradingTesoreria,
+  obtenerDistribucionPesosCanal,
+  obtenerCebaderoActivo
 } from '../../pwa/js/modules/db.js';
 
 console.log("==================================================");
@@ -750,6 +752,50 @@ async function runAllTests() {
     assert.deepStrictEqual(llamadas[0], { metodo: 'resumen', anio: '2026', cat: 'CEBO', est: true });
     assert.deepStrictEqual(llamadas[1], { metodo: 'serie', anio: '2026', cat: 'CEBO', est: true });
     assert.deepStrictEqual(llamadas[2], { metodo: 'trading', anio: '2026', cat: 'CEBO', est: true });
+
+    delete globalThis.window;
+  });
+
+  await test("Análisis Operativo: Fallback seguro de distribución de pesos y cebadero activo", () => {
+    const dist = obtenerDistribucionPesosCanal("2026", "CEBO");
+    assert.ok(Array.isArray(dist));
+    assert.strictEqual(dist.length, 0);
+
+    const cebadero = obtenerCebaderoActivo();
+    assert.strictEqual(typeof cebadero, "object");
+    assert.strictEqual(cebadero.total_cabezas, 0);
+    assert.strictEqual(cebadero.cabezas_riesgo_sobrepeso, 0);
+    assert.ok(Array.isArray(cebadero.animales));
+  });
+
+  await test("Análisis Operativo: Mock y propagación en cebadero activo y pesos canal", () => {
+    globalThis.window = {
+      campoDB: {
+        obtenerDistribucionPesosCanal: (anio, cat) => [
+          { rango_peso: '220 - 320 kg (Óptimo)', total_canales: 15, porcentaje: 75.0, peso_medio: 285.4, precio_medio_kg: 7.45 }
+        ],
+        obtenerCebaderoActivo: () => ({
+          total_cabezas: 12,
+          estancia_media_dias: 142,
+          coste_diario_total: 31.80,
+          coste_acumulado_lote: 4515.60,
+          cabezas_riesgo_sobrepeso: 3,
+          animales: [
+            { crotal: 'ES083710104591', crotal_4: '4591', dias_estancia_estimados: 170, estado_salida: 'SACRIFICAR', riesgo_sobrepeso: true }
+          ]
+        })
+      }
+    };
+
+    const dist = obtenerDistribucionPesosCanal("2026", "CEBO");
+    assert.strictEqual(dist.length, 1);
+    assert.strictEqual(dist[0].total_canales, 15);
+    assert.strictEqual(dist[0].peso_medio, 285.4);
+
+    const ceb = obtenerCebaderoActivo();
+    assert.strictEqual(ceb.total_cabezas, 12);
+    assert.strictEqual(ceb.cabezas_riesgo_sobrepeso, 3);
+    assert.strictEqual(ceb.animales[0].estado_salida, 'SACRIFICAR');
 
     delete globalThis.window;
   });
