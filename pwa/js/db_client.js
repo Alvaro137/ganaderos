@@ -2721,7 +2721,7 @@ class CampoDB {
     if (cCrotal) {
       const resMadre = this.ejecutarQuery("SELECT corral, raza FROM animales WHERE crotal = ?", [mCrotal]);
       const corral = resMadre[0] ? resMadre[0].corral : "DUEÑA";
-      const raza = cria_raza || (resMadre[0] ? resMadre[0].raza : "Cruzado");
+      const raza = cria_raza || (resMadre[0] ? resMadre[0].raza : "CONJUNTO MESTIZO");
       const digitos = cCrotal.replace(/\D/g, "");
       const c4 = digitos.length >= 4 ? digitos.slice(-4) : (digitos || cCrotal.slice(-4));
 
@@ -2740,6 +2740,36 @@ class CampoDB {
       }));
     }
     return true;
+  }
+
+  obtenerSiguienteCrotalSugerido() {
+    try {
+      // 1. Mirar últimos partos con crotal de cría oficial español (ES...)
+      const resPartos = this.ejecutarQuery(
+        "SELECT cria_crotal FROM partos WHERE cria_crotal LIKE 'ES%' AND length(cria_crotal) >= 12 ORDER BY id DESC LIMIT 1"
+      );
+      // 2. Mirar últimos nacimientos registrados en la explotación
+      const resAnimales = this.ejecutarQuery(
+        "SELECT crotal FROM animales WHERE crotal LIKE 'ES%' AND length(crotal) >= 12 ORDER BY fecha_nacimiento DESC, crotal DESC LIMIT 1"
+      );
+
+      const ultimo = (resPartos[0] && resPartos[0].cria_crotal) || (resAnimales[0] && resAnimales[0].crotal) || null;
+      if (!ultimo) {
+        return { crotal: "ES220800857601", crotal_4: "7601" };
+      }
+
+      const match = String(ultimo).match(/^(ES\d+?)(\d{4,6})$/);
+      if (match) {
+        const prefijo = match[1];
+        const numStr = match[2];
+        const sigNum = (parseInt(numStr, 10) + 1).toString().padStart(numStr.length, "0");
+        const nuevoCrotal = prefijo + sigNum;
+        return { crotal: nuevoCrotal, crotal_4: sigNum.slice(-4) };
+      }
+      return { crotal: String(ultimo), crotal_4: String(ultimo).slice(-4) };
+    } catch {
+      return { crotal: "ES220800857601", crotal_4: "7601" };
+    }
   }
 }
 
