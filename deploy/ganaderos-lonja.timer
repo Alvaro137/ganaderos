@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer Semanal Lonja de Salamanca (Lunes a las 18:00)
+
+[Timer]
+OnCalendar=Mon *-*-* 18:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

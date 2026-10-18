@@ -18,7 +18,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-DEFAULT_DB = Path(__file__).resolve().parent.parent / "pwa" / "ganaderos_demo.sqlite"
+_prod_db = Path(__file__).resolve().parent.parent / "pwa" / "ganaderos_campo.sqlite"
+_demo_db = Path(__file__).resolve().parent.parent / "pwa" / "ganaderos_demo.sqlite"
+DEFAULT_DB = _prod_db if _prod_db.exists() else _demo_db
 URL_LONJA = "https://www.lasalina.es/Aplicaciones/lonja/Cotizaciones.jsp"
 HTTP_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

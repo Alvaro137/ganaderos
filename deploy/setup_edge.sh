@@ -57,6 +57,47 @@ sudo systemctl daemon-reload
 sudo systemctl enable ganaderos.service
 echo "      [OK] Servicio systemd registrado y habilitado para inicio automático."
 
+# 1b. Configurar unidad y timer de Lonja de Salamanca (lunes 18:00)
+LONJA_SERVICE_DEST="/etc/systemd/system/ganaderos-lonja.service"
+LONJA_TIMER_DEST="/etc/systemd/system/ganaderos-lonja.timer"
+
+echo "      [*] Configurando timer systemd para Lonja de Salamanca..."
+sudo tee "${LONJA_SERVICE_DEST}" > /dev/null <<EOF
+[Unit]
+Description=Sincronizador Semanal Lonja de Salamanca (Ganaderos Campo)
+After=network.target network-online.target ganaderos.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=${CURRENT_USER}
+Group=${CURRENT_GROUP}
+WorkingDirectory=${REPO_DIR}
+Environment=PYTHONUNBUFFERED=1
+ExecStart=${REPO_DIR}/venv/bin/python scripts/sync_lonjas.py
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=${REPO_DIR}/pwa
+NoNewPrivileges=true
+EOF
+
+sudo tee "${LONJA_TIMER_DEST}" > /dev/null <<EOF
+[Unit]
+Description=Timer Semanal Lonja de Salamanca (Lunes a las 18:00)
+
+[Timer]
+OnCalendar=Mon *-*-* 18:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now ganaderos-lonja.timer
+echo "      [OK] Timer de Lonja de Salamanca habilitado (ejecución los lunes 18:00)."
+
 # 2. Inyección automatizada en Caddyfile si existe y no está ya configurado
 echo "[2/5] Comprobando Reverse Proxy Caddy..."
 if [ -f "${CADDYFILE}" ]; then
