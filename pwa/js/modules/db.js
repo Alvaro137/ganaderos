@@ -317,3 +317,10 @@ export function obtenerCebaderoActivo() {
   return db.obtenerCebaderoActivo();
 }
 
+export function obtenerSiguienteCrotalSugerido() {
+  const db = getDB();
+  if (!db || typeof db.obtenerSiguienteCrotalSugerido !== "function") {
+    return { crotal: "ES220800857601", crotal_4: "7601" };
+  }
+  return db.obtenerSiguienteCrotalSugerido();
+}
