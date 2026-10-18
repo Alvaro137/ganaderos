@@ -268,20 +268,15 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(banner).toBeVisible({ timeout: 15000 });
     await banner.click();
 
-    const btnGraficos = page.locator('#btn-toggle-charts');
-    await expect(btnGraficos).toBeVisible({ timeout: 10000 });
-    await btnGraficos.click();
+    const chartCard = page.locator('#chart-carne-tv-card');
+    await expect(chartCard).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#chart-carne-tv-canvas')).toBeVisible({ timeout: 10000 });
 
-    const seccionGraficos = page.locator('.financial-charts-section');
-    await expect(seccionGraficos).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#chart-tesoreria-tv-card')).toBeVisible({ timeout: 5000 });
-
-    await seccionGraficos.scrollIntoViewIfNeeded();
-
+    await chartCard.scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v14_graficos_rentabilidad.png') });
   });
 
-  test('V15. Perspectiva de Margen Técnico de Cebo: Devengo Real y Auditoría vs Lonja Salamanca', async ({ page }) => {
+  test('V15. Pestaña Cebadero Activo: Monitorización de Corral y Alerta de Salida', async ({ page }) => {
     const btnMov = page.locator('[data-tab="movimientos"]:visible');
     await btnMov.click();
 
@@ -289,21 +284,17 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(banner).toBeVisible({ timeout: 15000 });
     await banner.click();
 
-    const btnDevengo = page.locator('.perspective-pill-btn[data-perspectiva="devengo"]');
-    await expect(btnDevengo).toBeVisible({ timeout: 10000 });
-    await btnDevengo.click();
+    const btnCebadero = page.locator('.nav-tab-btn[data-seccion="cebadero"]');
+    await expect(btnCebadero).toBeVisible({ timeout: 10000 });
+    await btnCebadero.click();
 
-    const bannerDevengo = page.locator('.info-banner-devengo');
-    await expect(bannerDevengo).toBeVisible({ timeout: 5000 });
-    await expect(bannerDevengo).toContainText('Perspectiva Técnica de Cebo');
-
-    const tablaAnimales = page.locator('.canales-table');
-    await expect(tablaAnimales).toBeVisible({ timeout: 5000 });
+    const kpiCeb = page.locator('text=Animales en Cebo Hoy');
+    await expect(kpiCeb).toBeVisible({ timeout: 5000 });
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v15_margen_tecnico_cebo.png') });
   });
 
-  test('V16. Perspectiva de Radar de Materias Primas: Curvas Lonja vs Concentrado Granja', async ({ page }) => {
+  test('V16. Simulador Interactivo de Timing de Venta y Retraso de Sacrificio', async ({ page }) => {
     const btnMov = page.locator('[data-tab="movimientos"]:visible');
     await btnMov.click();
 
@@ -311,93 +302,57 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(banner).toBeVisible({ timeout: 15000 });
     await banner.click();
 
-    const btnRadar = page.locator('.perspective-pill-btn[data-perspectiva="radar"]');
-    await expect(btnRadar).toBeVisible({ timeout: 10000 });
-    await btnRadar.click();
+    const btnCebadero = page.locator('.nav-tab-btn[data-seccion="cebadero"]');
+    await expect(btnCebadero).toBeVisible({ timeout: 10000 });
+    await btnCebadero.click();
 
-    const btnSubtabPiensos = page.locator('.radar-subtab-btn[data-radar-subtab="piensos"]');
-    await expect(btnSubtabPiensos).toBeVisible({ timeout: 5000 });
-    await btnSubtabPiensos.click();
-
-    const bannerRadar = page.locator('.info-banner-devengo');
-    await expect(bannerRadar).toBeVisible({ timeout: 5000 });
-    await expect(bannerRadar).toContainText('Radar Analítico de Materias Primas');
-
-    const chartPiensos = page.locator('#chart-piensos-tv-card');
-    await expect(chartPiensos).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#chart-piensos-tv-canvas')).toBeVisible({ timeout: 5000 });
-
-    await chartPiensos.scrollIntoViewIfNeeded();
-    await page.locator('#chart-piensos-tv-canvas').hover();
-
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v16_radar_materias_primas.png') });
-  });
-
-  test('V17. Perspectiva de Radar de Vacuno de Carne y Reconstrucción con Estimaciones Lonja', async ({ page }) => {
-    const btnMov = page.locator('[data-tab="movimientos"]:visible');
-    await btnMov.click();
-
-    const banner = page.locator('.banner-liquidaciones');
-    await expect(banner).toBeVisible({ timeout: 15000 });
-    await banner.click();
-
-    const btnRadar = page.locator('.perspective-pill-btn[data-perspectiva="radar"]');
-    await expect(btnRadar).toBeVisible({ timeout: 10000 });
-    await btnRadar.click();
-
-    const btnSubtabCarne = page.locator('.radar-subtab-btn[data-radar-subtab="carne"]');
-    await expect(btnSubtabCarne).toBeVisible({ timeout: 5000 });
-    await btnSubtabCarne.click();
-
-    const chkEst = page.locator('#chk-estimaciones-lonja');
-    await expect(chkEst).toBeVisible({ timeout: 5000 });
-    await chkEst.check();
-
-    const chartCarne = page.locator('#chart-carne-tv-card');
-    await expect(chartCarne).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#chart-carne-tv-canvas')).toBeVisible({ timeout: 5000 });
-
-    // Probar activación de capa opcional (Añojo Pesado)
-    const chkAnojoPesado = page.locator('#chart-carne-tv-chk-anojo_pesado');
-    if (await chkAnojoPesado.isVisible()) {
-      await chkAnojoPesado.check();
-    }
-
-    await chartCarne.scrollIntoViewIfNeeded();
-    await page.locator('#chart-carne-tv-canvas').hover();
-
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_radar_vacuno_carne.png') });
-
-    const tablaCarne = page.locator('.canales-table-wrapper');
-    if (await tablaCarne.isVisible()) {
-      await tablaCarne.scrollIntoViewIfNeeded();
-      await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_tabla_lonja_carne.png') });
-    }
-  });
-
-  test('V18. Perspectiva de Timing y Estacionalidad de Venta con Simulador Interactivo', async ({ page }) => {
-    const btnMov = page.locator('[data-tab="movimientos"]:visible');
-    await btnMov.click();
-
-    const banner = page.locator('.banner-liquidaciones');
-    await expect(banner).toBeVisible({ timeout: 15000 });
-    await banner.click();
-
-    const btnRadar = page.locator('.perspective-pill-btn[data-perspectiva="radar"]');
-    await expect(btnRadar).toBeVisible({ timeout: 10000 });
-    await btnRadar.click();
-
-    const btnSubtabTiming = page.locator('.radar-subtab-btn[data-radar-subtab="timing"]');
-    await expect(btnSubtabTiming).toBeVisible({ timeout: 5000 });
-    await btnSubtabTiming.click();
+    const btnTiming = page.locator('#btn-abrir-simulador-timing');
+    await expect(btnTiming).toBeVisible({ timeout: 5000 });
+    await btnTiming.click();
 
     const inputDias = page.locator('#sim-dias-retraso');
     await expect(inputDias).toBeVisible({ timeout: 5000 });
 
-    const kpisGrid = page.locator('.kpis-liquidaciones-grid').last();
-    await expect(kpisGrid).toBeVisible({ timeout: 5000 });
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v16_radar_materias_primas.png') });
 
-    await kpisGrid.scrollIntoViewIfNeeded();
+    const btnCerrar = page.locator('#btn-cerrar-modal-timing-ok');
+    if (await btnCerrar.isVisible()) {
+      await btnCerrar.click();
+    }
+  });
+
+  test('V17. Pestaña Tesorería y Proveedores: Cash Flow y Desglose Mensual', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnTesoreria = page.locator('.nav-tab-btn[data-seccion="tesoreria"]');
+    await expect(btnTesoreria).toBeVisible({ timeout: 10000 });
+    await btnTesoreria.click();
+
+    const chartTesoreria = page.locator('#chart-tesoreria-tv-card');
+    await expect(chartTesoreria).toBeVisible({ timeout: 10000 });
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_radar_vacuno_carne.png') });
+  });
+
+  test('V18. Auditoría de Liquidación Nivel 3: Desglose de Canales y Deducciones', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const primeraFactura = page.locator('.liquidacion-item-card').first();
+    await expect(primeraFactura).toBeVisible({ timeout: 10000 });
+    await primeraFactura.click();
+
+    const detalleContainer = page.locator('.factura-detail-container');
+    await expect(detalleContainer).toBeVisible({ timeout: 5000 });
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v18_timing_y_estacionalidad.png') });
   });
@@ -410,20 +365,12 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(banner).toBeVisible({ timeout: 15000 });
     await banner.click();
 
-    // Activar estimaciones de Lonja
-    const chkLonja = page.locator('#chk-estimaciones-lonja');
-    await expect(chkLonja).toBeVisible({ timeout: 10000 });
-    await chkLonja.click();
+    const btnModoProy = page.locator('#btn-modo-proyeccion');
+    await expect(btnModoProy).toBeVisible({ timeout: 10000 });
+    await btnModoProy.click();
 
-    // Abrir gráficos y tabla
-    const btnGraficos = page.locator('#btn-toggle-charts');
-    await expect(btnGraficos).toBeVisible({ timeout: 10000 });
-    await btnGraficos.click();
-
-    const seccionGraficos = page.locator('.financial-charts-section');
-    await expect(seccionGraficos).toBeVisible({ timeout: 5000 });
-
-    await seccionGraficos.scrollIntoViewIfNeeded();
+    const proyBanner = page.locator('text=Proyección Lonja Activa');
+    await expect(proyBanner).toBeVisible({ timeout: 5000 });
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v19_tesoreria_estimaciones_lonja.png') });
   });

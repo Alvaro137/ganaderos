@@ -291,3 +291,27 @@ export function obtenerSeriesTradingTesoreria(anio = null, categoria = null, usa
   }
   return db.obtenerSeriesTradingTesoreria(anio, categoria, usarEstimaciones);
 }
+
+export function obtenerDistribucionPesosCanal(anio = null, categoria = null) {
+  const db = getDB();
+  if (!db || typeof db.obtenerDistribucionPesosCanal !== "function") {
+    return [];
+  }
+  return db.obtenerDistribucionPesosCanal(anio, categoria);
+}
+
+export function obtenerCebaderoActivo() {
+  const db = getDB();
+  if (!db || typeof db.obtenerCebaderoActivo !== "function") {
+    return {
+      total_cabezas: 0,
+      estancia_media_dias: 0,
+      coste_diario_total: 0,
+      coste_acumulado_lote: 0,
+      cabezas_riesgo_sobrepeso: 0,
+      animales: []
+    };
+  }
+  return db.obtenerCebaderoActivo();
+}
+
