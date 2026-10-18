@@ -306,6 +306,8 @@ export function obtenerCebaderoActivo() {
     return {
       total_cabezas: 0,
       estancia_media_dias: 0,
+      gmd_media_vivo: 0,
+      gmd_media_canal: 0,
       coste_diario_total: 0,
       coste_acumulado_lote: 0,
       cabezas_riesgo_sobrepeso: 0,
