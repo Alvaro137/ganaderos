@@ -1982,16 +1982,20 @@ class CampoDB {
     }
   }
 
-  obtenerSeriesTradingCarne(anio = null, usarEstimaciones = false) {
-    if (!this.tieneTablaLonja()) return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja: [] };
+  obtenerSeriesTradingCarne(anio = null, categoria = null, usarEstimaciones = false) {
+    if (typeof categoria === "boolean") {
+      usarEstimaciones = categoria;
+      categoria = null;
+    }
+    if (!this.tieneTablaLonja()) return { anojo_extra: [], anojo_pesado: [], ternera_extra: [], vaca_desvieje: [], precio_granja_cebo: [], precio_granja_vacas: [], precio_granja: [] };
     try {
-      let sqlLonja = "SELECT fecha as time, categoria, precio as value FROM cotizaciones_lonja WHERE mesa = 'CARNE'";
+      let sqlLonja = "SELECT fecha as time, categoria, ROUND(AVG(precio), 3) as value FROM cotizaciones_lonja WHERE mesa = 'CARNE'";
       const paramsLonja = [];
       if (anio && anio !== "TODOS") {
         sqlLonja += " AND substr(fecha, 1, 4) = ?";
         paramsLonja.push(String(anio));
       }
-      sqlLonja += " ORDER BY fecha ASC";
+      sqlLonja += " GROUP BY fecha, categoria ORDER BY fecha ASC";
 
       const rowsLonja = this.ejecutarQuery(sqlLonja, paramsLonja);
 
@@ -2014,8 +2018,8 @@ class CampoDB {
         SELECT 
           COALESCE(vc.fecha_salida_lote, vl.fecha_factura) as time,
           CASE 
-            WHEN vc.articulo LIKE '%TERNER%' THEN 'CEBO'
-            WHEN vc.articulo LIKE '%VACA%' OR vc.articulo LIKE '%TORO%' THEN 'VACA'
+            WHEN vc.articulo LIKE '%TERNER%' OR vc.articulo LIKE '%CEBO%' OR vc.articulo LIKE '%AÑOJO%' OR vc.articulo LIKE '%AOJO%' THEN 'CEBO'
+            WHEN vc.articulo LIKE '%VACA%' OR vc.articulo LIKE '%TORO%' OR vc.articulo LIKE '%DESVIEJE%' THEN 'VACA'
             ELSE 'OTRO'
           END as tipo,
           ROUND(SUM(vc.importe_linea) / SUM(vc.peso_canal_kg), 3) as value,
@@ -2031,6 +2035,13 @@ class CampoDB {
       if (anio && anio !== "TODOS") {
         sqlGranja += " AND substr(COALESCE(vc.fecha_salida_lote, vl.fecha_factura), 1, 4) = ?";
         paramsGranja.push(String(anio));
+      }
+      if (categoria && categoria !== "TODOS") {
+        if (categoria === "CEBO") {
+          sqlGranja += " AND (vc.articulo LIKE '%TERNER%' OR vc.articulo LIKE '%CEBO%' OR vc.articulo LIKE '%AÑOJO%' OR vc.articulo LIKE '%AOJO%')";
+        } else if (categoria === "DESVIEJE") {
+          sqlGranja += " AND (vc.articulo LIKE '%VACA%' OR vc.articulo LIKE '%TORO%' OR vc.articulo LIKE '%DESVIEJE%')";
+        }
       }
       sqlGranja += " GROUP BY time, tipo ORDER BY time ASC";
 
