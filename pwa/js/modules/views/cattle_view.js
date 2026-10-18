@@ -286,7 +286,10 @@ export function ejecutarBusquedaYListar() {
               <span class="crotal-4-digits">${escapeHtml(a.crotal_4)}</span>
               <span class="crotal-full-code">${escapeHtml(a.crotal)}</span>
             </div>
-            <span class="status-pill ${estadoClase}">${estadoTexto}</span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${a.id_electronico ? `<span class="badge-rfid" style="font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; background: rgba(37, 99, 235, 0.12); color: #1d4ed8; font-weight: 800;">RFID</span>` : ""}
+              <span class="status-pill ${estadoClase}">${estadoTexto}</span>
+            </div>
           </div>
           <div class="animal-specs-grid">
             <div>

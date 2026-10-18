@@ -1,5 +1,5 @@
 // Service Worker para Ganaderos Campo (Offline-First)
-const CACHE_NAME = "ganaderos-campo-v42";
+const CACHE_NAME = "ganaderos-campo-v43";
 
 
 const ASSETS = [

@@ -37,7 +37,9 @@ def _cargar_env_file():
                     if key and key not in os.environ:
                         os.environ[key] = val
         except (OSError, UnicodeDecodeError) as e:
-            logging.getLogger("ganaderos.server").warning(f"No se pudo leer .env en {env_path}: {e}")
+            logging.getLogger("ganaderos.server").warning(
+                f"No se pudo leer .env en {env_path}: {e}"
+            )
 
 
 _cargar_env_file()
@@ -52,12 +54,14 @@ class _MemoryBufferHandler(logging.Handler):
         try:
             msg = record.getMessage()
             t_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created))
-            _LOG_BUFFER.append({
-                "timestamp": t_str,
-                "level": record.levelname,
-                "logger": record.name,
-                "message": msg,
-            })
+            _LOG_BUFFER.append(
+                {
+                    "timestamp": t_str,
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": msg,
+                }
+            )
         except Exception:
             pass
 
@@ -159,7 +163,7 @@ def _set_password(new_password: str) -> None:
     if "\n" in new_password or "\r" in new_password:
         raise ValueError("La contraseña no puede contener saltos de línea.")
 
-    escaped_password = new_password.replace('\\', '\\\\').replace('"', '\\"')
+    escaped_password = new_password.replace("\\", "\\\\").replace('"', '\\"')
 
     with _password_lock:
         os.environ["PWA_PASSWORD"] = new_password
@@ -206,8 +210,9 @@ def _set_password(new_password: str) -> None:
             raise
 
 
-
-def generar_auth_token(duracion_dias: int = 30, user_id: str = "usr_admin", rol: str = "admin") -> str:
+def generar_auth_token(
+    duracion_dias: int = 30, user_id: str = "usr_admin", rol: str = "admin"
+) -> str:
     """Emite un token Bearer firmado criptográficamente con HMAC-SHA256, rol y fecha de expiración."""
     expira_en = int(time.time()) + (duracion_dias * 86400)
     nonce = secrets.token_hex(16)
@@ -229,7 +234,9 @@ def extraer_datos_token(token: Optional[str]) -> Optional[dict]:
         partes = token.split(".")
         if len(partes) == 2:
             payload, firma = partes
-            firma_esperada = hmac.new(_get_secret_key().encode(), payload.encode(), hashlib.sha256).hexdigest()
+            firma_esperada = hmac.new(
+                _get_secret_key().encode(), payload.encode(), hashlib.sha256
+            ).hexdigest()
             if hmac.compare_digest(firma, firma_esperada):
                 try:
                     subpartes = payload.split(":")
@@ -399,9 +406,13 @@ def recargar_servicios_dominio(app: FastAPI, db_path: Optional[Path] = None) -> 
             logger.info(f"[Servicios] Conexión y repositorios cargados desde {db_file}")
             return
         except Exception as e:
-            logger.error(f"[Servicios] Error al abrir base de datos en {db_file}: {e}", exc_info=True)
+            logger.error(
+                f"[Servicios] Error al abrir base de datos en {db_file}: {e}", exc_info=True
+            )
             if os.environ.get("APP_ENV") not in ("test", "e2e"):
-                raise RuntimeError(f"Fallo crítico al abrir base de datos de producción: {e}") from e
+                raise RuntimeError(
+                    f"Fallo crítico al abrir base de datos de producción: {e}"
+                ) from e
 
     # Fallback en memoria si no hay base o falló
     app.state.db_conn = None
@@ -439,10 +450,22 @@ TAGS_METADATA = [
     {"name": "Estado", "description": "Liveness y healthcheck del sistema."},
     {"name": "Autenticación", "description": "Sesión segura mediante token Bearer y cookies."},
     {"name": "Base de Datos", "description": "Distribución del archivo binario SQLite relacional."},
-    {"name": "Censo Ganadero", "description": "Consultas del censo con entidades de dominio y validaciones."},
-    {"name": "Sanidad y Retiradas", "description": "Recetas veterinarias y control de tiempos de espera en carne."},
-    {"name": "Mercados y Lonja", "description": "Cotizaciones oficiales de la Lonja Agropecuaria de Salamanca."},
-    {"name": "Asistente IA", "description": "Intent Calling tipado, síntesis ganadera y transcripción Whisper."},
+    {
+        "name": "Censo Ganadero",
+        "description": "Consultas del censo con entidades de dominio y validaciones.",
+    },
+    {
+        "name": "Sanidad y Retiradas",
+        "description": "Recetas veterinarias y control de tiempos de espera en carne.",
+    },
+    {
+        "name": "Mercados y Lonja",
+        "description": "Cotizaciones oficiales de la Lonja Agropecuaria de Salamanca.",
+    },
+    {
+        "name": "Asistente IA",
+        "description": "Intent Calling tipado, síntesis ganadera y transcripción Whisper.",
+    },
 ]
 
 app = FastAPI(
@@ -575,8 +598,10 @@ def _autenticacion_op(
     credentials: Optional[HTTPAuthorizationCredentials],
 ) -> dict:
     """Extrae y valida el token del operador (Bearer, X-Auth-Token o cookie)."""
-    token = credentials.credentials if credentials and credentials.credentials else (
-        request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth")
+    token = (
+        credentials.credentials
+        if credentials and credentials.credentials
+        else (request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth"))
     )
     datos = extraer_datos_token(token)
     if not datos:
@@ -655,7 +680,9 @@ async def set_admin_log_level(
     logging.getLogger("ganaderos").setLevel(nuevo_nivel)
     logging.getLogger("ganaderos.server").setLevel(nuevo_nivel)
 
-    logger.info(f"[Admin] Nivel de log modificado por {datos.get('user_id')} de {prev_str} a {req.level.upper()}")
+    logger.info(
+        f"[Admin] Nivel de log modificado por {datos.get('user_id')} de {prev_str} a {req.level.upper()}"
+    )
 
     return SetLogLevelResponse(
         ok=True,
@@ -670,8 +697,10 @@ async def auth_verify(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ):
     """Verifica si la sesión actual cuenta con credenciales válidas."""
-    token = credentials.credentials if credentials and credentials.credentials else (
-        request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth")
+    token = (
+        credentials.credentials
+        if credentials and credentials.credentials
+        else (request.headers.get("X-Auth-Token") or request.cookies.get("campo_auth"))
     )
     datos = extraer_datos_token(token)
     is_valid = bool(token and datos is not None)
@@ -697,7 +726,9 @@ async def list_auth_users():
     )
 
 
-@app.post("/api/auth/change-password", tags=["Autenticación"], response_model=ChangePasswordResponse)
+@app.post(
+    "/api/auth/change-password", tags=["Autenticación"], response_model=ChangePasswordResponse
+)
 async def change_password(
     req: ChangePasswordRequest,
     request: Request,
@@ -748,7 +779,9 @@ async def auth_login(req: LoginRequest, response: Response):
         if usuario is None:
             # Fallback: operador por defecto (propietario)
             token = generar_auth_token(30, user_id="usr_admin", rol="admin")
-            response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
+            response.set_cookie(
+                key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax"
+            )
             return {
                 "ok": True,
                 "token": token,
@@ -756,7 +789,9 @@ async def auth_login(req: LoginRequest, response: Response):
                 "message": "Autenticación exitosa.",
             }
         token = generar_auth_token(30, user_id=usuario.id, rol=usuario.rol)
-        response.set_cookie(key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax")
+        response.set_cookie(
+            key="campo_auth", value=token, max_age=2592000, httponly=True, samesite="lax"
+        )
         return {
             "ok": True,
             "token": token,
@@ -764,8 +799,6 @@ async def auth_login(req: LoginRequest, response: Response):
             "message": f"Sesión iniciada como {usuario.nombre}.",
         }
     raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
-
-
 
 
 # ============================================================
@@ -779,7 +812,9 @@ async def get_database(authorized: bool = Depends(verify_token)):
     sqlite_file = _buscar_archivo_sqlite()
     if not sqlite_file or not sqlite_file.exists():
         raise HTTPException(status_code=404, detail="Base de datos no encontrada.")
-    return FileResponse(sqlite_file, media_type="application/octet-stream", filename="ganaderos_campo.sqlite")
+    return FileResponse(
+        sqlite_file, media_type="application/octet-stream", filename="ganaderos_campo.sqlite"
+    )
 
 
 @app.get("/api/database/meta", tags=["Base de Datos"], response_model=DatabaseMetaResponse)
@@ -802,7 +837,9 @@ async def get_database_meta(authorized: bool = Depends(verify_token)):
             cur.execute("SELECT COUNT(*) FROM Animales")
             row = cur.fetchone()
             total_animales = row[0] if row else 0
-            cur.execute("SELECT COUNT(*) FROM Animales WHERE Estado = 'Alta' OR Baja = 0 OR Estado IS NULL")
+            cur.execute(
+                "SELECT COUNT(*) FROM Animales WHERE Estado = 'Alta' OR Baja = 0 OR Estado IS NULL"
+            )
             row_act = cur.fetchone()
             total_activos = row_act[0] if row_act else 0
     except Exception as e:
@@ -920,7 +957,11 @@ async def registrar_pesaje_animal(
     )
 
 
-@app.get("/api/censo/tratamientos", tags=["Sanidad y Retiradas"], response_model=List[TratamientoItemResponse])
+@app.get(
+    "/api/censo/tratamientos",
+    tags=["Sanidad y Retiradas"],
+    response_model=List[TratamientoItemResponse],
+)
 async def list_tratamientos_animal(
     crotal: str,
     censo: Optional[CensoService] = Depends(get_censo_service),
@@ -959,19 +1000,28 @@ async def ingest_ventas_pdf(
     if len(contenido) == 0:
         raise HTTPException(status_code=400, detail="El archivo PDF está vacío.")
     if len(contenido) > MAX_PDF_SIZE:
-        raise HTTPException(status_code=413, detail="El archivo excede el tamaño máximo permitido (10 MB).")
+        raise HTTPException(
+            status_code=413, detail="El archivo excede el tamaño máximo permitido (10 MB)."
+        )
     if not contenido.startswith(b"%PDF-"):
-        raise HTTPException(status_code=400, detail="El contenido del archivo no corresponde a un documento PDF válido.")
+        raise HTTPException(
+            status_code=400,
+            detail="El contenido del archivo no corresponde a un documento PDF válido.",
+        )
 
     try:
         datos = parsear_factura_pdf(contenido, nombre_archivo=file.filename)
     except Exception as e:
         logger.error(f"[Ventas] Error parseando PDF {file.filename}: {e}", exc_info=True)
-        raise HTTPException(status_code=422, detail=f"No se pudieron extraer datos de la factura PDF: {e}")
+        raise HTTPException(
+            status_code=422, detail=f"No se pudieron extraer datos de la factura PDF: {e}"
+        )
 
     db_file = _buscar_archivo_sqlite()
     if not db_file:
-        raise HTTPException(status_code=503, detail="Base de datos no localizada para guardar la factura.")
+        raise HTTPException(
+            status_code=503, detail="Base de datos no localizada para guardar la factura."
+        )
 
     w_conn = sqlite3.connect(str(db_file))
     try:
@@ -1002,13 +1052,17 @@ async def sync_lonja_endpoint(
     """Sincroniza en caliente las cotizaciones de la Lonja de Salamanca (vacuno de carne y materias primas)."""
     db_file = _buscar_archivo_sqlite()
     if not db_file:
-        raise HTTPException(status_code=503, detail="Base de datos no localizada para sincronizar la lonja.")
+        raise HTTPException(
+            status_code=503, detail="Base de datos no localizada para sincronizar la lonja."
+        )
 
     from scripts.sync_lonjas import sincronizar_cotizaciones_lonja
 
     loop = asyncio.get_running_loop()
     try:
-        registros = await loop.run_in_executor(None, sincronizar_cotizaciones_lonja, Path(db_file), forzar)
+        registros = await loop.run_in_executor(
+            None, sincronizar_cotizaciones_lonja, Path(db_file), forzar
+        )
     except Exception as e:
         logger.error(f"[Lonja] Error sincronizando lonja: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error al sincronizar lonja: {e}")
@@ -1020,7 +1074,9 @@ async def sync_lonja_endpoint(
     }
 
 
-@app.post("/api/censo/conciliar-moga", tags=["Censo Ganadero"], response_model=MogaConciliacionResponse)
+@app.post(
+    "/api/censo/conciliar-moga", tags=["Censo Ganadero"], response_model=MogaConciliacionResponse
+)
 async def conciliar_censo_moga(
     file: UploadFile = File(...),
     censo: Optional[CensoService] = Depends(get_censo_service),
@@ -1035,14 +1091,23 @@ async def conciliar_censo_moga(
     if len(contenido) == 0:
         raise HTTPException(status_code=400, detail="El archivo CSV está vacío.")
     if len(contenido) > MAX_CSV_SIZE:
-        raise HTTPException(status_code=413, detail="El archivo CSV excede el tamaño máximo permitido (10 MB).")
+        raise HTTPException(
+            status_code=413, detail="El archivo CSV excede el tamaño máximo permitido (10 MB)."
+        )
 
     registros_moga = procesar_csv_moga(contenido)
     if not registros_moga:
-        raise HTTPException(status_code=422, detail="No se encontraron registros de animales válidos en el archivo MoGa.")
+        raise HTTPException(
+            status_code=422,
+            detail="No se encontraron registros de animales válidos en el archivo MoGa.",
+        )
 
     # Incluir todos los animales del censo (activos e históricos/bajas) para detección precisa
-    todos_locales = censo.animal_repo.list_all() if hasattr(censo.animal_repo, "list_all") else censo.list_activos()
+    todos_locales = (
+        censo.animal_repo.list_all()
+        if hasattr(censo.animal_repo, "list_all")
+        else censo.list_activos()
+    )
     animales_locales = [
         {
             "crotal": str(a.crotal),
@@ -1112,12 +1177,16 @@ async def ai_models(authorized: bool = Depends(verify_token)):
 async def ai_synthesize(req: SynthesizeRequest, authorized: bool = Depends(verify_token)):
     """Sintetiza en lenguaje ganadero directo los resultados obtenidos de la base de datos de forma asíncrona."""
     if req.data:
-        sintesis_llm = await sintetizar_respuesta_llm(req.prompt, req.data, modelo_solicitado=req.model_id)
+        sintesis_llm = await sintetizar_respuesta_llm(
+            req.prompt, req.data, modelo_solicitado=req.model_id
+        )
         if sintesis_llm:
             return {"ok": True, "sintesis": sintesis_llm}
 
     n = len(req.data)
-    sintesis = f"Se han obtenido {n} registro{'s' if n != 1 else ''} para la consulta '{req.prompt}'."
+    sintesis = (
+        f"Se han obtenido {n} registro{'s' if n != 1 else ''} para la consulta '{req.prompt}'."
+    )
     return {"ok": True, "sintesis": sintesis}
 
 
@@ -1136,7 +1205,9 @@ async def ai_transcribe(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Configura GROQ_API_KEY en .env")
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        files = {"file": (file.filename or "audio.webm", content, file.content_type or "audio/webm")}
+        files = {
+            "file": (file.filename or "audio.webm", content, file.content_type or "audio/webm")
+        }
         data = {
             "model": "whisper-large-v3-turbo",
             "language": "es",
@@ -1156,8 +1227,12 @@ async def ai_transcribe(file: UploadFile = File(...)):
             if resp.status_code == 200:
                 texto = resp.json().get("text", "").strip()
                 return {"ok": True, "text": texto}
-            logger.warning(f"[AI Transcribe] Error en respuesta de Whisper Groq ({resp.status_code}): {resp.text}")
-            raise HTTPException(status_code=resp.status_code, detail="Error en proveedor de transcripción.")
+            logger.warning(
+                f"[AI Transcribe] Error en respuesta de Whisper Groq ({resp.status_code}): {resp.text}"
+            )
+            raise HTTPException(
+                status_code=resp.status_code, detail="Error en proveedor de transcripción."
+            )
         except httpx.TimeoutException:
             logger.warning("[AI Transcribe] Timeout agotado (15s) al conectar con Whisper Groq.")
             raise HTTPException(
@@ -1166,7 +1241,9 @@ async def ai_transcribe(file: UploadFile = File(...)):
             )
         except httpx.HTTPError as e:
             logger.error(f"[AI Transcribe] Error HTTP de transporte: {e}")
-            raise HTTPException(status_code=502, detail="Error de comunicación con el servicio de voz.")
+            raise HTTPException(
+                status_code=502, detail="Error de comunicación con el servicio de voz."
+            )
 
 
 # ============================================================
@@ -1279,7 +1356,9 @@ async def sync_conciliado(
         raise HTTPException(status_code=503, detail="No hay base de datos maestra disponible.")
 
     actualizados = service.marcar_conciliados([c.model_dump() for c in req.conciliados])
-    logger.info(f"[Sync] {actualizados} registros marcados como conciliados en Access por {datos['user_id']}.")
+    logger.info(
+        f"[Sync] {actualizados} registros marcados como conciliados en Access por {datos['user_id']}."
+    )
     return {
         "ok": True,
         "actualizados": actualizados,
@@ -1341,6 +1420,73 @@ async def sync_import(
         "message": "Censo actualizado consolidado. Los registros de campo se han conservado.",
         **resumen,
     }
+
+
+# ============================================================
+# CONCILIACIÓN OFICIAL MOGA
+# ============================================================
+
+
+@app.get("/api/moga/report", tags=["MoGa"])
+async def moga_report(authorized: bool = Depends(verify_token)):
+    """Genera informe de auditoría entre la base de datos y los ficheros oficiales de MoGa."""
+    from src.application.moga_conciliator import auditar_y_conciliar_moga
+
+    sqlite_file = _buscar_archivo_sqlite()
+    if not sqlite_file or not sqlite_file.exists():
+        raise HTTPException(status_code=404, detail="Base de datos no encontrada.")
+
+    dir_121 = os.environ.get("MOGA_DIR_121", "Example-data/121")
+    dir_122 = os.environ.get("MOGA_DIR_122", "Example-data/122")
+    if not os.path.exists(dir_121) or not os.path.exists(dir_122):
+        raise HTTPException(status_code=404, detail="Directorios de datos MoGa no encontrados.")
+
+    try:
+        with sqlite3.connect(f"file:{sqlite_file.resolve()}?mode=ro", uri=True) as conn:
+            reporte = auditar_y_conciliar_moga(conn, dir_121, dir_122)
+            return {"ok": True, "reporte": reporte}
+    except Exception as e:
+        logger.error(f"[MoGa Report] Error generando informe: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/moga/sync", tags=["MoGa"])
+async def moga_sync(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+):
+    """Aplica la conciliación oficial de MoGa en la base de datos activa."""
+    from src.application.moga_conciliator import aplicar_conciliacion_moga
+
+    datos = _autenticacion_op(request, credentials)
+    if datos["user_id"] != "usr_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo el administrador puede aplicar la conciliación oficial de MoGa.",
+        )
+
+    sqlite_file = _buscar_archivo_sqlite()
+    if not sqlite_file or not sqlite_file.exists():
+        raise HTTPException(status_code=404, detail="Base de datos no encontrada.")
+
+    if sqlite_file.name == "ganaderos_demo.sqlite":
+        raise HTTPException(
+            status_code=400, detail="La base de datos demo no admite mutación persistente."
+        )
+
+    dir_121 = os.environ.get("MOGA_DIR_121", "Example-data/121")
+    dir_122 = os.environ.get("MOGA_DIR_122", "Example-data/122")
+    if not os.path.exists(dir_121) or not os.path.exists(dir_122):
+        raise HTTPException(status_code=404, detail="Directorios de datos MoGa no encontrados.")
+
+    try:
+        with sqlite3.connect(str(sqlite_file)) as conn:
+            resultado = aplicar_conciliacion_moga(conn, dir_121, dir_122)
+            recargar_servicios_dominio(request.app, sqlite_file)
+            return {"ok": True, "resultado": resultado}
+    except Exception as e:
+        logger.error(f"[MoGa Sync] Error aplicando conciliación: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================
