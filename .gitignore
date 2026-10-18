@@ -12,6 +12,8 @@
 *.mdb
 *.accdb
 *.xml
+*.xls
+*.xlsx
 *.pdf
 *.lock
 pwa/*.sqlite
