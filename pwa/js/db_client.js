@@ -729,9 +729,23 @@ class CampoDB {
   }
 
   obtenerComprasAlimento(filtro = "") {
+    const selectCols = `
+      id, fecha, alimento, kg,
+      CASE 
+        WHEN importe > 1000000 AND kg > 0 THEN ROUND(importe / 100000.0, 2)
+        WHEN kg > 0 AND (importe / kg) BETWEEN 100 AND 1000 THEN ROUND(kg * ((importe / kg) / 1000.0), 2)
+        ELSE importe
+      END as importe,
+      CASE 
+        WHEN precio_kg > 1000 AND kg > 0 THEN ROUND(precio_kg / 100000.0, 4)
+        WHEN precio_kg BETWEEN 100 AND 1000 THEN ROUND(precio_kg / 1000.0, 4)
+        ELSE precio_kg
+      END as precio_kg,
+      albaran, proveedor, pagado
+    `;
     if (!filtro || filtro.trim() === "") {
       return this.ejecutarQuery(`
-        SELECT id, fecha, alimento, kg, importe, precio_kg, albaran, proveedor, pagado
+        SELECT ${selectCols}
         FROM compras_alimento
         ORDER BY fecha DESC
         LIMIT 100
@@ -739,7 +753,7 @@ class CampoDB {
     }
     const f = `%${filtro.trim()}%`;
     return this.ejecutarQuery(`
-      SELECT id, fecha, alimento, kg, importe, precio_kg, albaran, proveedor, pagado
+      SELECT ${selectCols}
       FROM compras_alimento
       WHERE alimento LIKE ? OR proveedor LIKE ? OR albaran LIKE ?
       ORDER BY fecha DESC
@@ -941,13 +955,25 @@ class CampoDB {
       `, paramsCanales);
       const c = (resCanales && resCanales.length > 0) ? resCanales[0] : {};
 
-      // 3. Resumen de compras de pienso
+      // 3. Resumen de compras de pienso (con saneamiento defensivo contra escalas anómalas)
       const resCompras = this.ejecutarQuery(`
         SELECT 
           COUNT(*) as total_compras,
-          COALESCE(SUM(importe), 0) as gasto_pienso,
+          COALESCE(SUM(
+            CASE 
+              WHEN importe > 1000000 AND kg > 0 THEN importe / 100000.0
+              WHEN kg > 0 AND (importe / kg) BETWEEN 100 AND 1000 THEN kg * ((importe / kg) / 1000.0)
+              ELSE importe
+            END
+          ), 0) as gasto_pienso,
           COALESCE(SUM(kg), 0) as kg_pienso,
-          ROUND(COALESCE(SUM(importe) / NULLIF(SUM(kg), 0), 0), 4) as coste_medio_kg
+          ROUND(COALESCE(SUM(
+            CASE 
+              WHEN importe > 1000000 AND kg > 0 THEN importe / 100000.0
+              WHEN kg > 0 AND (importe / kg) BETWEEN 100 AND 1000 THEN kg * ((importe / kg) / 1000.0)
+              ELSE importe
+            END
+          ) / NULLIF(SUM(kg), 0), 0), 4) as coste_medio_kg
         FROM compras_alimento
         WHERE ${whereCompras}
       `, paramsCompras);
@@ -1044,7 +1070,13 @@ class CampoDB {
       const rowsCompras = this.ejecutarQuery(`
         SELECT 
           substr(fecha, 1, 7) as mes,
-          COALESCE(SUM(importe), 0) as gasto,
+          COALESCE(SUM(
+            CASE 
+              WHEN importe > 1000000 AND kg > 0 THEN importe / 100000.0
+              WHEN kg > 0 AND (importe / kg) BETWEEN 100 AND 1000 THEN kg * ((importe / kg) / 1000.0)
+              ELSE importe
+            END
+          ), 0) as gasto,
           COALESCE(SUM(kg), 0) as kg_pienso
         FROM compras_alimento
         WHERE ${whereCompras} AND fecha IS NOT NULL
@@ -1714,7 +1746,8 @@ class CampoDB {
           value: Number(r.value),
           kg_total: Number(r.kg_total),
           canales_total: Number(r.canales_total),
-          estimado: false
+          estimado: false,
+          esReal: true
         };
         if (r.tipo === 'CEBO') {
           precio_granja_cebo.push(pt);
@@ -1736,7 +1769,8 @@ class CampoDB {
         value: Number((g.importe / g.kg).toFixed(3)),
         kg_total: g.kg,
         canales_total: g.canales,
-        estimado: false
+        estimado: false,
+        esReal: true
       })).sort((a, b) => a.time.localeCompare(b.time));
 
       if (usarEstimaciones && anojo_extra.length > 0) {
@@ -1748,7 +1782,8 @@ class CampoDB {
               value: pt.value,
               kg_total: 0,
               canales_total: 0,
-              estimado: true
+              estimado: true,
+              esReal: false
             });
           }
         });
@@ -1798,11 +1833,20 @@ class CampoDB {
       let sqlGranja = `
         SELECT 
           fecha as time,
-          ROUND(AVG(CASE WHEN precio_kg > 0 THEN precio_kg * 1000 ELSE (importe / NULLIF(kg, 0)) * 1000 END), 1) as value,
+          ROUND(AVG(
+            CASE 
+              WHEN precio_kg > 0 AND precio_kg <= 2.0 THEN precio_kg * 1000
+              WHEN precio_kg > 100 AND precio_kg <= 1000 THEN precio_kg
+              WHEN importe > 1000000 AND kg > 0 THEN (importe / 100000.0 / kg) * 1000
+              WHEN importe > 0 AND kg > 0 AND (importe / kg) <= 2.0 THEN (importe / kg) * 1000
+              ELSE 320.0
+            END
+          ), 1) as value,
           SUM(kg) as kg_total
         FROM compras_alimento
         WHERE (lower(alimento) LIKE '%pienso%' OR lower(alimento) LIKE '%cebo%' OR lower(alimento) LIKE '%concentrado%')
           AND (precio_kg > 0 OR (importe > 0 AND kg > 0))
+          AND (precio_kg <= 2.0 OR (importe / NULLIF(kg, 0)) <= 2.0 OR precio_kg BETWEEN 100 AND 1000 OR importe > 1000000)
       `;
       const paramsGranja = [];
       if (anio && anio !== "TODOS") {
@@ -1817,7 +1861,8 @@ class CampoDB {
         time: String(r.time).slice(0, 10),
         value: Number(r.value),
         kg_total: Number(r.kg_total),
-        estimado: false
+        estimado: false,
+        esReal: true
       }));
 
       if (usarEstimaciones && pienso_lonja.length > 0) {
@@ -1828,7 +1873,8 @@ class CampoDB {
               time: pt.time,
               value: pt.value,
               kg_total: 0,
-              estimado: true
+              estimado: true,
+              esReal: false
             });
           }
         });
@@ -1857,12 +1903,30 @@ class CampoDB {
       (serie || []).forEach(s => {
         if (!s.mes) return;
         const t = `${s.mes}-01`;
-        ingresos_carne.push({ time: t, value: Number(s.ingresos_carne || 0) });
-        gastos_pienso.push({ time: t, value: Number(s.gasto_pienso || 0) });
+        const tieneVentas = Number(s.ingresos_carne || 0) > 0;
+        const tieneCompras = Number(s.gasto_pienso || 0) > 0;
         const valMargen = s.margen_neto != null 
           ? Number(s.margen_neto) 
           : (s.margen_mes != null ? Number(s.margen_mes) : Number((s.ingresos_carne || 0) - (s.gasto_pienso || 0)));
-        margen_neto.push({ time: t, value: valMargen });
+
+        ingresos_carne.push({ 
+          time: t, 
+          value: Number(s.ingresos_carne || 0),
+          esReal: tieneVentas,
+          cabezas: s.cabezas,
+          kg_canal: s.kg_canal
+        });
+        gastos_pienso.push({ 
+          time: t, 
+          value: Number(s.gasto_pienso || 0),
+          esReal: tieneCompras,
+          kg_pienso: s.kg_pienso
+        });
+        margen_neto.push({ 
+          time: t, 
+          value: valMargen,
+          esReal: tieneVentas || tieneCompras
+        });
       });
 
       return {
