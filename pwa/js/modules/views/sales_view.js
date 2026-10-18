@@ -209,6 +209,46 @@ function renderSeccionLiquidaciones(resumen) {
     ? `<span style="font-size: 0.74rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: ${primaLonja >= 0 ? 'rgba(34, 197, 94, 0.18)' : 'rgba(239, 68, 68, 0.18)'}; color: ${primaLonja >= 0 ? '#15803d' : '#b91c1c'};">${primaLonja >= 0 ? '▲ +' : '▼ '}${primaLonja.toFixed(2)} €/kg vs Lonja</span>`
     : "";
 
+  // Estado vacío limpio si la campaña no tiene facturas digitalizadas y no hay proyección Lonja activa
+  if (!tieneFacturas && (!AppState.usarEstimacionesLonja || resumen.salidas_estimadas === 0)) {
+    return `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        ${resumen.salidas_sin_factura > 0 ? `
+          <div style="background: rgba(234, 88, 12, 0.08); border-left: 4px solid #ea580c; border-radius: var(--md-shape-sm); padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem; color: #9a3412;">⚠️ Conciliación: ${resumen.salidas_sin_factura} salidas a matadero registradas en censo sin factura digitalizada</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">Puedes proyectar la facturación teórica con las cotizaciones semanales de Lonja de Salamanca.</div>
+            </div>
+            <button id="btn-activar-lonja-prompt" style="padding: 7px 12px; border-radius: var(--md-shape-sm); border: 1px solid #ea580c; background: #ea580c; color: #fff; font-size: 0.78rem; font-weight: 700; cursor: pointer;">
+              📈 Ver con Proyección Lonja
+            </button>
+          </div>
+        ` : ""}
+
+        <div class="empty-state-card" style="background: var(--md-surface-container-lowest); border: 1px dashed var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 36px 20px; text-align: center;">
+          <div style="font-size: 2.4rem; margin-bottom: 8px;">📋</div>
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main); margin: 0 0 6px;">
+            Campaña ${escapeHtml(AppState.anioFinanciero)}: Facturas de Venta Pendientes de Digitalizar
+          </h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); max-width: 540px; margin: 0 auto 16px; line-height: 1.45;">
+            No constan liquidaciones oficiales de matadero cargadas para este ejercicio. 
+            Para mantener el rigor contable y no mostrar promedios ni márgenes en 0 € ficticios, los indicadores permanecerán en espera hasta cargar las liquidaciones correspondientes.
+          </p>
+          <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+            <label for="input-subir-factura" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; font-size: 0.84rem; font-weight: 700; border-radius: var(--md-shape-md); cursor: pointer;">
+              <span>+ Subir Factura PDF (${escapeHtml(AppState.anioFinanciero)})</span>
+            </label>
+            ${resumen.salidas_sin_factura > 0 ? `
+              <button id="btn-activar-lonja-empty" style="padding: 9px 16px; font-size: 0.84rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-primary); background: transparent; color: var(--md-primary); cursor: pointer;">
+                📈 Proyectar con Lonja (${resumen.salidas_sin_factura} salidas)
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   const distribucionPesos = obtenerDistribucionPesosCanal(AppState.anioFinanciero, AppState.categoriaFinanciera);
   const liquidaciones = obtenerLiquidaciones({ anio: AppState.anioFinanciero, categoria: AppState.categoriaFinanciera });
 
@@ -244,12 +284,21 @@ function renderSeccionLiquidaciones(resumen) {
         
         <!-- Facturación Total -->
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
-          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Venta Neta Carne</div>
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between;">
+            <span>${AppState.usarEstimacionesLonja ? 'Venta Proyectada' : 'Venta Neta Carne'}</span>
+            ${AppState.usarEstimacionesLonja && resumen.ingresos_estimados > 0 ? `
+              <span style="font-size: 0.68rem; padding: 1px 5px; border-radius: 4px; background: rgba(30, 94, 58, 0.15); color: var(--md-primary); font-weight: 800;">~ Estimación Lonja</span>
+            ` : `
+              <span style="font-size: 0.68rem; padding: 1px 5px; border-radius: 4px; background: rgba(34, 197, 94, 0.15); color: #15803d; font-weight: 800;">✓ Real Facturado</span>
+            `}
+          </div>
           <div style="font-size: 1.55rem; font-weight: 900; color: var(--chart-carne); margin: 4px 0 2px;">
             ${formatearMoneda(resumen.ingresos_carne)} €
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            ${resumen.total_cabezas_carne} cabezas · ${formatearKg(resumen.total_kilos_canal)} kg canal
+            ${AppState.usarEstimacionesLonja && resumen.ingresos_estimados > 0
+              ? `Real: ${formatearMoneda(resumen.ingresos_carne - resumen.ingresos_estimados)} € · Lonja: ${formatearMoneda(resumen.ingresos_estimados)} €`
+              : `${resumen.total_cabezas_carne} cabezas · ${formatearKg(resumen.total_kilos_canal)} kg canal`}
           </div>
         </div>
 
@@ -263,18 +312,20 @@ function renderSeccionLiquidaciones(resumen) {
             ${resumen.cotizacion_media_canal > 0 ? `${resumen.cotizacion_media_canal.toFixed(2)} €/kg` : '—'}
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            ${resumen.precio_lonja_medio != null ? `Lonja Salamanca: ${resumen.precio_lonja_medio.toFixed(2)} €/kg` : 'Base sin cotización lonja'}
+            ${resumen.precio_lonja_medio != null ? `Lonja Salamanca ref: ${resumen.precio_lonja_medio.toFixed(2)} €/kg` : 'Base sin cotización lonja'}
           </div>
         </div>
 
         <!-- Margen por Cabeza -->
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
-          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Margen por Cabeza</div>
-          <div style="font-size: 1.55rem; font-weight: 900; color: ${resumen.margen_medio_cabeza >= 0 ? '#1b5e20' : '#ba1a1a'}; margin: 4px 0 2px;">
-            ${resumen.margen_medio_cabeza >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_medio_cabeza)} €
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+            ${AppState.usarEstimacionesLonja ? 'Margen Proyectado / Cab' : 'Margen Real / Cab'}
+          </div>
+          <div style="font-size: 1.55rem; font-weight: 900; color: ${resumen.total_cabezas_carne === 0 ? 'var(--text-muted)' : (resumen.margen_medio_cabeza >= 0 ? '#1b5e20' : '#ba1a1a')}; margin: 4px 0 2px;">
+            ${resumen.total_cabezas_carne === 0 ? '—' : `${resumen.margen_medio_cabeza >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_medio_cabeza)} €`}
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            ${resumen.ratio_carne_pienso ? `Retorno: ${resumen.ratio_carne_pienso.toFixed(2)}€ carne / 1€ pienso` : 'Sin compras en periodo'}
+            ${resumen.total_cabezas_carne === 0 ? 'Sin cabezas liquidadas en periodo' : (resumen.ratio_carne_pienso ? `Retorno: ${resumen.ratio_carne_pienso.toFixed(2)}€ carne / 1€ pienso` : 'Sin compras en periodo')}
           </div>
         </div>
 
@@ -285,14 +336,14 @@ function renderSeccionLiquidaciones(resumen) {
             ${resumen.cabezas_sobrepeso > 0 ? `
               <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.18); color: #b91c1c;">⚠️ ${resumen.cabezas_sobrepeso} sobrepeso</span>
             ` : `
-              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d;">✓ Rango óptimo</span>
+              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d;">✓ Rango comercial</span>
             `}
           </div>
           <div style="font-size: 1.55rem; font-weight: 900; color: var(--text-main); margin: 4px 0 2px;">
             ${resumen.peso_medio_canal > 0 ? `${resumen.peso_medio_canal.toFixed(1)} kg` : '—'}
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            ${resumen.cabezas_sobrepeso > 0 ? 'Castigo Lonja >350kg aplicado' : 'Canales en estándar comercial'}
+            ${resumen.cabezas_sobrepeso > 0 ? 'Penalización >350kg en liquidación' : 'Canales en estándar comercial'}
           </div>
         </div>
 
@@ -410,7 +461,7 @@ function renderSeccionCebadero() {
             ${cebadero.total_cabezas} animales
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            Estancia media: ${cebadero.estancia_media_dias} días en corral
+            ${cebadero.total_cabezas > 0 ? `Estancia media: ${cebadero.estancia_media_dias} días en corral` : 'Sin animales en corral de cebo'}
           </div>
         </div>
 
@@ -420,28 +471,28 @@ function renderSeccionCebadero() {
             <button class="btn-modal-metodologia-trigger" data-section="gmd" title="Ver cómo se calcula el GPD" style="background: none; border: none; font-size: 0.82rem; cursor: pointer; padding: 0;">ℹ️</button>
           </div>
           <div style="font-size: 1.55rem; font-weight: 900; color: #15803d; margin: 4px 0 2px;">
-            ${cebadero.gmd_media_vivo ? cebadero.gmd_media_vivo.toFixed(2) : '1.35'} kg/día
+            ${cebadero.total_cabezas > 0 ? `${(cebadero.gmd_media_vivo || 1.35).toFixed(2)} kg/día` : '—'}
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            Canal est.: ${cebadero.gmd_media_canal ? cebadero.gmd_media_canal.toFixed(2) : '0.78'} kg/día (Rdto ~58%)
+            ${cebadero.total_cabezas > 0 ? `Canal est.: ${(cebadero.gmd_media_canal || 0.78).toFixed(2)} kg/día (Rdto ~58%)` : 'Sin animales en cebo'}
           </div>
         </div>
 
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
-          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Coste Diario de Concentrado</div>
+          <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Coste Técnico Teórico Concentrado</div>
           <div style="font-size: 1.55rem; font-weight: 900; color: var(--chart-pienso); margin: 4px 0 2px;">
-            ${formatearMoneda(cebadero.coste_diario_total)} € / día
+            ${cebadero.total_cabezas > 0 ? `${formatearMoneda(cebadero.coste_diario_total)} € / día` : '—'}
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            Acumulado lote actual: ${formatearMoneda(cebadero.coste_acumulado_lote)} €
+            ${cebadero.total_cabezas > 0 ? `Modelo zootécnico (FCR × GMD × P). Sin tolvas RFID.` : 'Sin animales en cebo'}
           </div>
         </div>
 
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Salidas Inminentes</span>
+            <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Alerta Teórica Sobrepeso</span>
             ${cebadero.cabezas_riesgo_sobrepeso > 0 ? `
-              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.18); color: #b91c1c;">⚠️ Salida Urgente</span>
+              <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(239, 68, 68, 0.18); color: #b91c1c;">⚠️ Salida Sugerida</span>
             ` : `
               <span style="font-size: 0.72rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d;">🟢 En Crecimiento</span>
             `}
@@ -450,7 +501,7 @@ function renderSeccionCebadero() {
             ${cebadero.cabezas_riesgo_sobrepeso} cabezas
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            ${cebadero.cabezas_riesgo_sobrepeso > 0 ? 'Riesgo castigo por peso (>335 kg canal)' : 'Sin animales en riesgo de sobrepeso'}
+            ${cebadero.cabezas_riesgo_sobrepeso > 0 ? 'Proyección >335 kg canal (alta varianza ±15%)' : 'Sin animales en umbral de sobrepeso'}
           </div>
         </div>
 
@@ -460,8 +511,9 @@ function renderSeccionCebadero() {
       <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; box-shadow: var(--md-elevation-1);">
         <div>
           <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">¿Cuándo mandar los terneros al matadero?</h4>
-          <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0;">
-            A partir de 345 kg canal o ~170 días de cebo, el índice de conversión empeora y el sobrepeso (>350kg) se penaliza con -0,25 €/kg.
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 0; line-height: 1.45;">
+            A partir de 345 kg canal o ~170 días de cebo, la conversión empeora y el sobrepeso (>350kg) se penaliza comercialmente (-0,25 €/kg).
+            <span style="display: block; font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;">*Nota de campo:* Al no disponer de tolvas RFID ni pesajes periódicos, estas cifras son estimaciones zootécnicas con alta varianza individual (±15%). Confirma siempre el peso en báscula antes del envío.</span>
             <button class="btn-modal-metodologia-trigger" data-section="sobrepeso" style="background: none; border: none; text-decoration: underline; color: var(--md-primary); cursor: pointer; font-size: 0.78rem; font-weight: 700; margin-left: 4px;">Ver reglas técnicas →</button>
           </p>
         </div>
@@ -474,7 +526,7 @@ function renderSeccionCebadero() {
       <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; box-shadow: var(--md-elevation-1);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
           <h4 style="font-size: 0.95rem; font-weight: 800; color: var(--text-main); margin: 0;">Censo de Animales en Cebadero (${cebadero.animales.length})</h4>
-          <span style="font-size: 0.78rem; color: var(--text-muted);">GMD técnica: ~1,35 kg/d machos · ~1,15 kg/d hembras</span>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Proyección zootécnica teórica ($FCR \times \text{GMD} \times P$). Varianza individual estimada ±15%.</span>
         </div>
 
         ${cebadero.animales.length === 0 ? `
@@ -486,16 +538,16 @@ function renderSeccionCebadero() {
             ${cebadero.animales.map(a => {
               let badgeColor = "#15803d";
               let badgeBg = "rgba(34, 197, 94, 0.15)";
-              let badgeText = "🟢 En Crecimiento";
+              let badgeText = "🟢 Proyección Crecimiento";
 
               if (a.estado_salida === "SOBREPESO") {
                 badgeColor = "#b91c1c";
                 badgeBg = "rgba(239, 68, 68, 0.18)";
-                badgeText = "🔴 Sobrepeso Inminente";
+                badgeText = "⚠️ Riesgo Teórico Sobrepeso";
               } else if (a.estado_salida === "SACRIFICAR") {
                 badgeColor = "#c2410c";
                 badgeBg = "rgba(234, 88, 12, 0.15)";
-                badgeText = "🟡 Salida Recomendada";
+                badgeText = "⏳ Salida Sugerida (Modelo)";
               }
 
               const gmdVivo = a.gmd_vivo_estimada || (a.sexo === 'M' ? 1.35 : 1.15);
@@ -515,7 +567,7 @@ function renderSeccionCebadero() {
                   <div style="font-size: 0.8rem; color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px;">
                     <div>Estancia est.: <strong>${a.dias_estancia_estimados} días</strong></div>
                     <div>GPD / GMD: <strong style="color: #15803d;">${gmdVivo.toFixed(2)} kg/d</strong></div>
-                    <div>Peso canal est.: <strong>${a.peso_canal_estimado} kg</strong></div>
+                    <div>Peso canal est.: <strong>~${a.peso_canal_estimado} kg</strong> <span style="font-size: 0.68rem; color: var(--text-muted);">(±15%)</span></div>
                     <div>Canal diaria: <strong>${gmdCanal.toFixed(2)} kg/d</strong></div>
                     <div>Sexo: <strong>${escapeHtml(a.sexo || "—")}</strong></div>
                     <div>Raza: <strong>${escapeHtml(a.raza || "—")}</strong></div>
@@ -545,17 +597,39 @@ function renderSeccionTesoreria(resumen) {
   return `
     <div style="display: flex; flex-direction: column; gap: 16px;">
       
+      <!-- Banner de Facturas de Venta Pendientes de Digitalizar -->
+      ${resumen.ingresos_carne === 0 && resumen.gasto_pienso > 0 ? `
+        <div style="background: rgba(234, 88, 12, 0.08); border-left: 4px solid #ea580c; border-radius: var(--md-shape-sm); padding: 12px 14px;">
+          <div style="font-weight: 800; font-size: 0.88rem; color: #9a3412; display: flex; align-items: center; gap: 6px;">
+            <span>⚠️ Facturas de Venta Pendientes de Digitalizar</span>
+          </div>
+          <div style="font-size: 0.82rem; color: var(--text-main); margin-top: 3px; line-height: 1.45;">
+            Constan compras de pienso por <strong>${formatearMoneda(resumen.gasto_pienso)} €</strong> en este ejercicio, pero aún no se han cargado las facturas de venta de carne.
+            <strong>No se muestra un saldo neto negativo en falso</strong> para no aparentar pérdidas irreales en la explotación.
+          </div>
+        </div>
+      ` : ""}
+
       <!-- 3 TARJETAS KPI DE TESORERÍA -->
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
         
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
           <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Saldo Neto de Caja</div>
-          <div style="font-size: 1.55rem; font-weight: 900; color: ${resumen.margen_bruto_alimentacion >= 0 ? '#1b5e20' : '#ba1a1a'}; margin: 4px 0 2px;">
-            ${resumen.margen_bruto_alimentacion >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_bruto_alimentacion)} €
-          </div>
-          <div style="font-size: 0.78rem; color: var(--text-muted);">
-            Cobrado: ${formatearMoneda(resumen.ingresos_carne)} € | Pienso: ${formatearMoneda(resumen.gasto_pienso)} €
-          </div>
+          ${resumen.ingresos_carne === 0 ? `
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--text-muted); margin: 6px 0 2px;">
+              ${resumen.gasto_pienso > 0 ? 'Pendiente Liquidar' : 'Sin Movimientos'}
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">
+              ${resumen.gasto_pienso > 0 ? `Pienso: ${formatearMoneda(resumen.gasto_pienso)} € · Ventas sin facturar` : 'Sin compras ni ventas en periodo'}
+            </div>
+          ` : `
+            <div style="font-size: 1.55rem; font-weight: 900; color: ${resumen.margen_bruto_alimentacion >= 0 ? '#1b5e20' : '#ba1a1a'}; margin: 4px 0 2px;">
+              ${resumen.margen_bruto_alimentacion >= 0 ? '+' : ''}${formatearMoneda(resumen.margen_bruto_alimentacion)} €
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">
+              Cobrado: ${formatearMoneda(resumen.ingresos_carne)} € | Pienso: ${formatearMoneda(resumen.gasto_pienso)} €
+            </div>
+          `}
         </div>
 
         <div style="background: var(--md-surface-container-lowest); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px; box-shadow: var(--md-elevation-1);">
@@ -574,7 +648,9 @@ function renderSeccionTesoreria(resumen) {
             ${formatearKg(resumen.kilos_pienso)} kg
           </div>
           <div style="font-size: 0.78rem; color: var(--text-muted);">
-            ${resumen.ratio_carne_pienso ? `Ratio: ${resumen.ratio_carne_pienso.toFixed(2)}€ carne / 1€ pienso` : 'Auditoría de compras'}
+            ${resumen.ingresos_carne === 0 
+              ? 'Auditoría de compras (ventas pendientes)' 
+              : (resumen.ratio_carne_pienso ? `Ratio: ${resumen.ratio_carne_pienso.toFixed(2)}€ carne / 1€ pienso` : 'Auditoría de compras')}
           </div>
         </div>
 
@@ -618,21 +694,27 @@ function renderSeccionTesoreria(resumen) {
                   badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(148, 163, 184, 0.2); color: #475569; font-weight: 700;">~ Est. (${m.cabezas} cab)</span>`;
                 } else if (m.esReal) {
                   badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d; font-weight: 800;">✓ Real (${m.cabezas} cab)</span>`;
+                } else if (m.salidas_censo > 0) {
+                  badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ ${m.salidas_censo} sal. s/fact</span>`;
                 } else if (m.facturas_pendientes) {
-                  badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ ${m.salidas_censo || 0} sal. s/fact</span>`;
+                  badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ Factura pendiente</span>`;
                 } else {
                   badgeHtml = `<span style="font-size: 0.72rem; color: var(--text-muted);">—</span>`;
                 }
 
-                const saldoColor = m.margen_neto >= 0 ? '#1b5e20' : '#ba1a1a';
+                const tieneMargen = m.margen_neto != null;
+                const saldoColor = tieneMargen ? (m.margen_neto >= 0 ? '#1b5e20' : '#ba1a1a') : 'var(--text-muted)';
+                const saldoTexto = tieneMargen
+                  ? `${m.margen_neto >= 0 ? '+' : ''}${formatearMoneda(m.margen_neto)} €`
+                  : '<span style="font-size: 0.76rem; color: var(--text-muted);">— (Pendiente venta)</span>';
 
                 return `
                   <tr style="border-bottom: 1px solid var(--md-outline-variant);">
                     <td style="text-align: left; font-weight: 700; padding: 7px 8px;">${escapeHtml(m.mes)}</td>
                     <td style="text-align: center; padding: 7px 8px;">${badgeHtml}</td>
-                    <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-carne);">${formatearMoneda(m.ingresos_carne)} €</td>
-                    <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-pienso);">${formatearMoneda(m.gasto_pienso)} €</td>
-                    <td style="padding: 7px 8px; font-weight: 800; color: ${saldoColor};">${m.margen_neto >= 0 ? '+' : ''}${formatearMoneda(m.margen_neto)} €</td>
+                    <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-carne);">${m.ingresos_carne > 0 ? `${formatearMoneda(m.ingresos_carne)} €` : '—'}</td>
+                    <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-pienso);">${m.gasto_pienso > 0 ? `${formatearMoneda(m.gasto_pienso)} €` : '—'}</td>
+                    <td style="padding: 7px 8px; font-weight: 800; color: ${saldoColor};">${saldoTexto}</td>
                     <td style="padding: 7px 8px; color: var(--text-muted);">${m.precio_canal_medio != null ? `${m.precio_canal_medio.toFixed(2)} €` : '—'}</td>
                   </tr>
                 `;
@@ -713,6 +795,14 @@ function vincularEventosDashboard() {
   const btnActivarLonjaPrompt = document.getElementById("btn-activar-lonja-prompt");
   if (btnActivarLonjaPrompt) {
     btnActivarLonjaPrompt.addEventListener("click", () => {
+      AppState.usarEstimacionesLonja = true;
+      renderVistaLiquidaciones();
+    });
+  }
+
+  const btnActivarLonjaEmpty = document.getElementById("btn-activar-lonja-empty");
+  if (btnActivarLonjaEmpty) {
+    btnActivarLonjaEmpty.addEventListener("click", () => {
       AppState.usarEstimacionesLonja = true;
       renderVistaLiquidaciones();
     });
@@ -1283,6 +1373,10 @@ export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
                 El pienso concentrado representa el <strong>70-80% de los costes variables</strong> del cebadero. El coste diario por cabeza se modela en <strong>2,65 €/cab/día</strong> (consumo medio de 8 kg/día a 0,33 €/kg), o se ajusta con el precio real si constan albaranes de compra de pienso en la explotación.
               </p>
 
+              <div style="background: rgba(234, 88, 12, 0.08); border-left: 3px solid #ea580c; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.8rem; color: #9a3412; line-height: 1.45;">
+                <strong>Aclaración de Rigor Zootécnico:</strong> En cebaderos colectivos sin tolvas electrónicas ni comederos individuales con transponder RFID, es fácticamente imposible medir los kilogramos exactos ingeridos por un ternero individual. Todo dato individual atribuido en la aplicación es un <strong>coste técnico zootécnico estimado ($FCR \times \text{GMD} \times P$)</strong> basado en el lote y albaranes de compra verificados, nunca un consumo pesado directo.
+              </div>
+
               <div style="background: #fff; border-left: 3px solid #ea580c; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
                 <strong>Índice de Conversión Alimenticia (FCR):</strong><br/>
                 • <strong>Días 0 - 120 (Crecimiento óseo-muscular):</strong> Conversión óptima (~4,8 kg pienso por cada 1 kg de aumento de peso vivo). Margen diario muy positivo.<br/>
@@ -1301,6 +1395,10 @@ export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
               <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
                 El mercado de matadero en España exige canales dentro del estándar comercial (260 - 330 kg). Cuando un añojo macho supera los <strong>350 kg de peso canal</strong>, los pliegos comerciales lo reclasifican como <em>Añojo Pesado</em>, aplicando una penalización de <strong>-0,25 €/kg a -0,45 €/kg</strong> sobre la totalidad de la canal.
               </p>
+
+              <div style="background: rgba(185, 28, 28, 0.08); border-left: 3px solid #b91c1c; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.8rem; color: #991b1b; line-height: 1.45;">
+                <strong>Varianza de las Proyecciones de Sobrepeso:</strong> Sin báscula de pesaje individual regular en el cebadero, las proyecciones de peso canal se calculan a partir de la edad oficial y la GMD media estándar de la raza, con una <strong>varianza zootécnica estimada de ±15%</strong>. Se deben tomar como una advertencia preventiva para coordinar la salida, no como un peso final certero.
+              </div>
 
               <div style="background: #fff; border-left: 3px solid #b91c1c; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
                 <strong>Impacto Económico del Retraso:</strong><br/>
