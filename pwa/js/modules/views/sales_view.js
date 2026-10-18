@@ -1318,15 +1318,16 @@ export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
           ${seccionActiva === 'todos' || seccionActiva === 'gmd' ? `
             <div style="background: var(--md-surface-container-low, #f8fafc); border: 1px solid var(--md-outline-variant, #e2e8f0); border-radius: var(--md-shape-md, 12px); padding: 14px 16px;">
               <h4 style="font-size: 0.95rem; font-weight: 800; color: #15803d; margin: 0 0 6px; display: flex; align-items: center; gap: 6px;">
-                <span>⚖️ 1. Ganancia de Peso Diaria (GPD / GMD)</span>
+                <span>⚖️ 1. Ganancia Diaria: GMD Canal-Vida vs. GMD Estimada</span>
               </h4>
               <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
-                La <strong>GMD</strong> (Ganancia Media Diaria) o <strong>GPD</strong> mide el ritmo de crecimiento del ternero en kg por día durante su estancia en cebadero. Se calculan dos magnitudes: <strong>peso vivo</strong> (en báscula) y <strong>peso canal</strong> (carne comercial).
+                En ausencia de báscula en vivo en campo, la <strong>métrica reina con error metrológico cero</strong> es la <strong>GMD Canal-Vida</strong>, calculada cruzando los dos únicos registros oficiales certificados: el peso canal en frío del matadero (RD 815/2018) y los días exactos de vida según el censo oficial SITRAN (RIIA/REMO).
               </p>
               
               <div style="background: #fff; border-left: 3px solid #15803d; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-family: monospace; font-size: 0.8rem; color: #0f172a;">
-                <strong>GMD con Pesadas Reales:</strong><br/>
-                GMD (kg/día) = (Peso Báscula Final - Peso Báscula Inicial) / Días transcurridos
+                <strong>GMD Canal-Vida (Error = 0):</strong><br/>
+                GMD Canal-Vida (g/día) = (Peso Canal Fría kg × 1000) / (Fecha Sacrificio - Fecha Nacimiento SITRAN)<br/>
+                <em>Ejemplo: 335 kg canal a los 410 días de vida = 817 g canal/día.</em>
               </div>
 
               <div style="background: #fff; border-left: 3px solid #2563eb; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
@@ -1381,7 +1382,7 @@ export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
                 <strong>Índice de Conversión Alimenticia (FCR):</strong><br/>
                 • <strong>Días 0 - 120 (Crecimiento óseo-muscular):</strong> Conversión óptima (~4,8 kg pienso por cada 1 kg de aumento de peso vivo). Margen diario muy positivo.<br/>
                 • <strong>Días 120 - 165 (Enfrascado/acabado):</strong> Conversión media (~6,2 kg pienso / kg vivo).<br/>
-                • <strong>> 170 días (Engrasamiento excesivo):</strong> La conversión empeora a más de 7,5 - 8,0 kg pienso / kg vivo. El coste de alimentar al animal ese día (2,80 - 3,20 €) supera el valor del peso ganado.
+                • <strong>> 170 días (Engrasamiento excesivo):</strong> La deposición de grasa exige 2,25 a 3,5 veces más energía que el músculo. El IC marginal se dispara a 7,7 - 11,3 kg/kg vivo. El coste de alimentar al animal ese día (2,80 - 4,00 €) supera el valor del peso ganado.
               </div>
             </div>
           ` : ""}
@@ -1390,20 +1391,23 @@ export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
           ${seccionActiva === 'todos' || seccionActiva === 'sobrepeso' ? `
             <div style="background: var(--md-surface-container-low, #f8fafc); border: 1px solid var(--md-outline-variant, #e2e8f0); border-radius: var(--md-shape-md, 12px); padding: 14px 16px;">
               <h4 style="font-size: 0.95rem; font-weight: 800; color: #b91c1c; margin: 0 0 6px; display: flex; align-items: center; gap: 6px;">
-                <span>⚠️ 4. Umbral de Sobrepeso Comercial (>350 kg canal)</span>
+                <span>⚠️ 4. Acantilados Comerciales: Sobrepeso y Saltos de Edad</span>
               </h4>
               <p style="font-size: 0.82rem; color: var(--text-main, #1e293b); line-height: 1.5; margin: 0 0 8px;">
-                El mercado de matadero en España exige canales dentro del estándar comercial (260 - 330 kg). Cuando un añojo macho supera los <strong>350 kg de peso canal</strong>, los pliegos comerciales lo reclasifican como <em>Añojo Pesado</em>, aplicando una penalización de <strong>-0,25 €/kg a -0,45 €/kg</strong> sobre la totalidad de la canal.
+                El mercado de vacuno penaliza drásticamente las canales que cruzan los umbrales máximos, aplicando el descuento a <strong>la totalidad de los kilos de la canal</strong> (no solo al exceso). En el acabado final, <strong>la biología manda siempre sobre la lonja</strong>: retrasar la venta esperando una subida de precios destruye margen.
               </p>
 
               <div style="background: rgba(185, 28, 28, 0.08); border-left: 3px solid #b91c1c; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.8rem; color: #991b1b; line-height: 1.45;">
-                <strong>Varianza de las Proyecciones de Sobrepeso:</strong> Sin báscula de pesaje individual regular en el cebadero, las proyecciones de peso canal se calculan a partir de la edad oficial y la GMD media estándar de la raza, con una <strong>varianza zootécnica estimada de ±15%</strong>. Se deben tomar como una advertencia preventiva para coordinar la salida, no como un peso final certero.
+                <strong>Penalizaciones por Sobrepeso de Canal en Lonja:</strong><br/>
+                • <strong>Añojo Macho (>350 kg canal en Salamanca / >370 kg en Extremadura):</strong> Recorte de <strong>-0,32 €/kg</strong> sobre toda la canal. Pasar de 350 kg (2.166,50 €) a 351 kg (2.060,37 €) supone una <strong>pérdida instantánea de -106,13 €</strong>.<br/>
+                • <strong>Ternera Hembra (>270 kg canal):</strong> Recorte de <strong>-0,55 €/kg</strong> sobre toda la canal. Pasar de 270 kg (1.957,50 €) a 271 kg (1.815,70 €) supone una <strong>pérdida instantánea de -141,80 €</strong>.<br/>
+                • <strong>Umbrales de alerta temprana:</strong> Machos a partir de <strong>335 kg canal / 185 días en cebo</strong>; Hembras a partir de <strong>255 kg canal / 155 días en cebo</strong>.
               </div>
 
-              <div style="background: #fff; border-left: 3px solid #b91c1c; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
-                <strong>Impacto Económico del Retraso:</strong><br/>
-                Un añojo de 355 kg canal penalizado a -0,25 €/kg sufre un descuento de <strong>-88,75 € por cabeza</strong>. Si además se suma el pienso consumido durante los 20 días extra (~53 €), el ganadero pierde <strong>más de 140 € netos por animal</strong> por no haberlo sacrificado a tiempo.<br/>
-                • <strong>Alerta temprana de la PWA:</strong> Se activa a partir de <strong>335 kg canal estimados</strong> para coordinar el camión y el matadero con margen.
+              <div style="background: #fff; border-left: 3px solid #6366f1; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
+                <strong>Discontinuidades Normativas por Edad (Reglamento UE 1308/2013):</strong><br/>
+                • <strong>Umbral de 12 meses:</strong> Paso de Ternera Z a Añojo A (merma de -0,48 €/kg canal). Alerta activa a los 350 días de vida.<br/>
+                • <strong>Umbral de 24 meses:</strong> Paso de Añojo A a Novillo/Toro B. Desplome de cotización de 5,94-6,40 €/kg a 4,21-5,24 €/kg (<strong>quebranto de -300 a -450 € por cabeza</strong>). Alerta crítica activa a partir de los 685 días de vida (22,5 meses).
               </div>
             </div>
           ` : ""}

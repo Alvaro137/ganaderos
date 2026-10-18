@@ -708,6 +708,26 @@ async function runAllTests() {
     assert.ok(res.costePiensoAcumulado === 84.00, `Coste pienso: ${res.costePiensoAcumulado}`);
   });
 
+  await test("Simulador de Timing de Venta: Salto de sobrepeso en hembras (>270 kg canal)", () => {
+    // Ternera de 265 kg canal aguantada 20 días a 1.15 kg/d vivo -> +12.9 kg canal = 277.9 kg (>270 kg)
+    // Penalización en lonja de -0.55 €/kg sobre toda la canal
+    const res = calcularSimulacionTimingVenta({
+      pesoCanalActual: 265.0,
+      diasRetraso: 20,
+      gmdVivo: 1.15,
+      costeDiarioPienso: 2.65,
+      precioActualKg: 7.25,
+      precioEsperadoKg: 7.30,
+      esMacho: false
+    });
+
+    assert.strictEqual(res.saltaSobrepeso, true, "Debe detectar sobrepeso hembra >270 kg");
+    assert.ok(res.pesoCanalNuevo > 270, `Peso nuevo hembra: ${res.pesoCanalNuevo}`);
+    assert.strictEqual(res.precioFinalEfectivo, 6.75, "Precio final efectivo debe restar 0.55 €/kg por penalización de hembras");
+    assert.ok(res.penalizacionSobrepeso > 140, `Penalización hembra: ${res.penalizacionSobrepeso}`);
+    assert.strictEqual(res.esRentable, false, "El sobrepeso en hembra destruye margen y no es rentable");
+  });
+
   // 15. Tests de Tesorería, Filtros de Categoría y Estimación Lonja
   await test("Tesorería: Fallback seguro y estructura de retorno en obtenerResumenFinancieroGlobal", () => {
     const res = obtenerResumenFinancieroGlobal("2026", "CEBO", false);
