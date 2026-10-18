@@ -109,8 +109,16 @@ export function renderVistaLiquidaciones() {
     AppState.anioFinanciero = aniosDisponibles[0] || "TODOS";
   }
 
-  const resumen = obtenerResumenFinancieroGlobal(AppState.anioFinanciero, AppState.categoriaFinanciera);
-  const serieMensual = obtenerSerieMensualFinanciera(AppState.anioFinanciero);
+  const resumen = obtenerResumenFinancieroGlobal(
+    AppState.anioFinanciero, 
+    AppState.categoriaFinanciera, 
+    AppState.usarEstimacionesLonja
+  );
+  const serieMensual = obtenerSerieMensualFinanciera(
+    AppState.anioFinanciero, 
+    AppState.categoriaFinanciera, 
+    AppState.usarEstimacionesLonja
+  );
   const filtro = AppState.filtroLiquidaciones || "";
   const facturas = obtenerLiquidaciones(filtro);
   const comprasPienso = (AppState.subtabFinanciera === "piensos") ? obtenerComprasAlimento(filtro) : [];
@@ -158,7 +166,7 @@ export function renderVistaLiquidaciones() {
     ? obtenerSeriesTradingMateriasPrimas(anioTrading, AppState.usarEstimacionesLonja)
     : null;
   const tradingTesoreria = (AppState.perspectivaFinanciera === "tesoreria" && AppState.graficosExpandidos)
-    ? obtenerSeriesTradingTesoreria(anioTrading)
+    ? obtenerSeriesTradingTesoreria(anioTrading, AppState.categoriaFinanciera, AppState.usarEstimacionesLonja)
     : null;
 
   const seriesCarneTrading = tradingCarne ? [
@@ -399,6 +407,27 @@ export function renderVistaLiquidaciones() {
       </div>
 
       ${AppState.perspectivaFinanciera === "tesoreria" ? `
+        <!-- Banner de Integridad Contable: Salidas sin Factura o Estimaciones Activas -->
+        ${!AppState.usarEstimacionesLonja && resumen.salidas_sin_factura > 0 ? `
+          <div class="info-banner-devengo" style="background: rgba(234, 88, 12, 0.08); border-left: 4px solid #ea580c; border-radius: 8px; padding: 12px 16px; margin: 12px 0 16px 0; color: var(--text-main); font-size: 0.88rem; line-height: 1.45;">
+            <div style="font-weight: 800; color: #c2410c; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+              <span>⚠️</span>
+              <span>Aviso contable: ${resumen.salidas_sin_factura} salidas a matadero sin factura cargada</span>
+            </div>
+            <span>En este periodo se registran salidas oficiales de ganado en el censo pero no constan aún sus facturas de liquidación digitalizadas (ingresos computados en 0,00 €). Marca <strong>"Completar datos con Lonja"</strong> para reconstruir los ingresos estimados según las cotizaciones oficiales de Salamanca.</span>
+          </div>
+        ` : ""}
+
+        ${AppState.usarEstimacionesLonja && (resumen.ingresos_estimados > 0 || resumen.salidas_estimadas > 0) ? `
+          <div class="info-banner-devengo" style="background: rgba(21, 128, 61, 0.08); border-left: 4px solid #15803d; border-radius: 8px; padding: 12px 16px; margin: 12px 0 16px 0; color: var(--text-main); font-size: 0.88rem; line-height: 1.45;">
+            <div style="font-weight: 800; color: #15803d; margin-bottom: 3px; display: flex; align-items: center; gap: 6px;">
+              <span>✓</span>
+              <span>Estimación de Lonja activa: +${formatearMoneda(resumen.ingresos_estimados)} € proyectados (${resumen.salidas_estimadas} cabezas)</span>
+            </div>
+            <span>Los ingresos de periodos sin facturas digitalizadas se han estimado cruzando los movimientos reales de salida a matadero con las cotizaciones semanales oficiales de la Lonja de Salamanca.</span>
+          </div>
+        ` : ""}
+
         <!-- Cuadrícula de 6 KPIs Financieros (Tesorería) -->
         <div class="kpis-liquidaciones-grid">
           <!-- 1. Ingresos Carne -->
@@ -472,6 +501,54 @@ export function renderVistaLiquidaciones() {
               altura: 320
             })}
             ${renderGraficoCotizacionCanal(serieMensual)}
+
+            <!-- Tabla de Detalle Mensual de Tesorería -->
+            ${serieMensual.length > 0 ? `
+              <div class="chart-container-card" style="background: var(--md-surface-container-low, #ffffff); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: var(--md-shape-lg, 16px); padding: 14px 16px; margin-top: 16px; overflow-x: auto;">
+                <div style="font-weight: 800; font-size: 0.94rem; color: var(--brand-primary, #1e3a2b); margin-bottom: 10px;">
+                  📋 Desglose Mensual de Tesorería (${serieMensual.length} periodos)
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: right;">
+                  <thead>
+                    <tr style="border-bottom: 2px solid var(--md-outline-variant, #e5e7eb); color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase;">
+                      <th style="text-align: left; padding: 6px 8px;">Mes</th>
+                      <th style="text-align: center; padding: 6px 8px;">Estado</th>
+                      <th style="padding: 6px 8px;">Carne (€)</th>
+                      <th style="padding: 6px 8px;">Pienso (€)</th>
+                      <th style="padding: 6px 8px;">Saldo (€)</th>
+                      <th style="padding: 6px 8px;">€/kg Canal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${serieMensual.map(m => {
+                      let badgeHtml = "";
+                      if (m.estimado) {
+                        badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(148, 163, 184, 0.2); color: #475569; font-weight: 700;">~ Est. (${m.cabezas} cab)</span>`;
+                      } else if (m.esReal) {
+                        badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d; font-weight: 800;">✓ Real (${m.cabezas} cab)</span>`;
+                      } else if (m.facturas_pendientes) {
+                        badgeHtml = `<span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(234, 88, 12, 0.15); color: #c2410c; font-weight: 700;">⚠️ ${m.salidas_censo || 0} sal. s/fact</span>`;
+                      } else {
+                        badgeHtml = `<span style="font-size: 0.72rem; color: var(--text-muted);">—</span>`;
+                      }
+
+                      const saldoColor = m.margen_neto >= 0 ? '#1b5e20' : '#ba1a1a';
+
+                      return `
+                        <tr style="border-bottom: 1px solid var(--md-outline-variant, #f1f5f9);">
+                          <td style="text-align: left; font-weight: 700; padding: 7px 8px;">${escapeHtml(m.mes)}</td>
+                          <td style="text-align: center; padding: 7px 8px;">${badgeHtml}</td>
+                          <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-carne, #15803d);">${formatearMoneda(m.ingresos_carne)} €</td>
+                          <td style="padding: 7px 8px; font-weight: 600; color: var(--chart-pienso, #ea580c);">${formatearMoneda(m.gasto_pienso)} €</td>
+                          <td style="padding: 7px 8px; font-weight: 800; color: ${saldoColor};">${m.margen_neto >= 0 ? '+' : ''}${formatearMoneda(m.margen_neto)} €</td>
+                          <td style="padding: 7px 8px; color: var(--text-muted);">${m.precio_canal_medio != null ? `${m.precio_canal_medio.toFixed(2)} €` : '—'}</td>
+                        </tr>
+                      `;
+                    }).join("")}
+                  </tbody>
+                </table>
+              </div>
+            ` : ""}
           </div>
         ` : ""}
 
