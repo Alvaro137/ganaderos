@@ -401,5 +401,31 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v18_timing_y_estacionalidad.png') });
   });
+
+  test('V19. Tesorería con Estimación de Lonja Activa y Reconstrucción', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    // Activar estimaciones de Lonja
+    const chkLonja = page.locator('#chk-estimaciones-lonja');
+    await expect(chkLonja).toBeVisible({ timeout: 10000 });
+    await chkLonja.click();
+
+    // Abrir gráficos y tabla
+    const btnGraficos = page.locator('#btn-toggle-charts');
+    await expect(btnGraficos).toBeVisible({ timeout: 10000 });
+    await btnGraficos.click();
+
+    const seccionGraficos = page.locator('.financial-charts-section');
+    await expect(seccionGraficos).toBeVisible({ timeout: 5000 });
+
+    await seccionGraficos.scrollIntoViewIfNeeded();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v19_tesoreria_estimaciones_lonja.png') });
+  });
 });
 

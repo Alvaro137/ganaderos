@@ -27,7 +27,12 @@ import {
   renderGraficoLonjaCarne,
   renderGraficoEstacionalidadCarne
 } from '../../pwa/js/modules/components/charts_svg.js';
-import { calcularSimulacionTimingVenta } from '../../pwa/js/modules/db.js';
+import { 
+  calcularSimulacionTimingVenta,
+  obtenerResumenFinancieroGlobal,
+  obtenerSerieMensualFinanciera,
+  obtenerSeriesTradingTesoreria
+} from '../../pwa/js/modules/db.js';
 
 console.log("==================================================");
 console.log("EJECUTANDO SUITE DE TESTS FRONTEND (NODE.JS)");
@@ -698,6 +703,55 @@ async function runAllTests() {
     assert.strictEqual(res.precioFinalEfectivo, 7.00, "Precio final efectivo debe restar 0.25 €/kg por penalización");
     assert.ok(res.penalizacionSobrepeso > 80, `Penalización total estimada: ${res.penalizacionSobrepeso}`);
     assert.ok(res.costePiensoAcumulado === 84.00, `Coste pienso: ${res.costePiensoAcumulado}`);
+  });
+
+  // 15. Tests de Tesorería, Filtros de Categoría y Estimación Lonja
+  await test("Tesorería: Fallback seguro y estructura de retorno en obtenerResumenFinancieroGlobal", () => {
+    const res = obtenerResumenFinancieroGlobal("2026", "CEBO", false);
+    assert.strictEqual(typeof res, "object");
+    assert.strictEqual(res.ingresos_carne, 0);
+    assert.strictEqual(res.gasto_pienso, 0);
+    assert.strictEqual(res.usar_estimaciones, false);
+    assert.strictEqual(res.salidas_sin_factura, 0);
+  });
+
+  await test("Tesorería: Propagación de parámetros (año, categoría, estimación Lonja) al cliente DB", () => {
+    let llamadas = [];
+    globalThis.window = {
+      campoDB: {
+        obtenerResumenFinancieroGlobal: (anio, cat, est) => {
+          llamadas.push({ metodo: 'resumen', anio, cat, est });
+          return { ingresos_carne: 129894, gasto_pienso: 34819, usar_estimaciones: est };
+        },
+        obtenerSerieMensualFinanciera: (anio, cat, est) => {
+          llamadas.push({ metodo: 'serie', anio, cat, est });
+          return [{ mes: '2026-02', ingresos_carne: 23292, gasto_pienso: 4200, estimado: est }];
+        },
+        obtenerSeriesTradingTesoreria: (anio, cat, est) => {
+          llamadas.push({ metodo: 'trading', anio, cat, est });
+          return { ingresos_carne: [{ time: '2026-02-01', value: 23292, esReal: true, estimado: est }] };
+        }
+      }
+    };
+
+    const res = obtenerResumenFinancieroGlobal("2026", "CEBO", true);
+    assert.strictEqual(res.ingresos_carne, 129894);
+    assert.strictEqual(res.usar_estimaciones, true);
+
+    const serie = obtenerSerieMensualFinanciera("2026", "CEBO", true);
+    assert.strictEqual(serie.length, 1);
+    assert.strictEqual(serie[0].estimado, true);
+
+    const trading = obtenerSeriesTradingTesoreria("2026", "CEBO", true);
+    assert.strictEqual(trading.ingresos_carne.length, 1);
+    assert.strictEqual(trading.ingresos_carne[0].estimado, true);
+
+    assert.strictEqual(llamadas.length, 3);
+    assert.deepStrictEqual(llamadas[0], { metodo: 'resumen', anio: '2026', cat: 'CEBO', est: true });
+    assert.deepStrictEqual(llamadas[1], { metodo: 'serie', anio: '2026', cat: 'CEBO', est: true });
+    assert.deepStrictEqual(llamadas[2], { metodo: 'trading', anio: '2026', cat: 'CEBO', est: true });
+
+    delete globalThis.window;
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

@@ -150,7 +150,7 @@ export function obtenerAniosDisponiblesFinancieros() {
   return db.obtenerAniosDisponiblesFinancieros();
 }
 
-export function obtenerResumenFinancieroGlobal(anio = null, categoria = null) {
+export function obtenerResumenFinancieroGlobal(anio = null, categoria = null, usarEstimaciones = false) {
   const db = getDB();
   if (!db || typeof db.obtenerResumenFinancieroGlobal !== "function") {
     return {
@@ -158,16 +158,19 @@ export function obtenerResumenFinancieroGlobal(anio = null, categoria = null) {
       gasto_pienso: 0,
       margen_bruto_alimentacion: 0,
       ratio_carne_pienso: null,
-      desglose_categorias: []
+      desglose_categorias: [],
+      usar_estimaciones: false,
+      salidas_sin_factura: 0,
+      ingresos_estimados: 0
     };
   }
-  return db.obtenerResumenFinancieroGlobal(anio, categoria);
+  return db.obtenerResumenFinancieroGlobal(anio, categoria, usarEstimaciones);
 }
 
-export function obtenerSerieMensualFinanciera(anio = null) {
+export function obtenerSerieMensualFinanciera(anio = null, categoria = null, usarEstimaciones = false) {
   const db = getDB();
   if (!db || typeof db.obtenerSerieMensualFinanciera !== "function") return [];
-  return db.obtenerSerieMensualFinanciera(anio);
+  return db.obtenerSerieMensualFinanciera(anio, categoria, usarEstimaciones);
 }
 
 export function obtenerMargenTecnicoCebo(anio = null, categoria = null, usarEstimaciones = false) {
@@ -281,10 +284,10 @@ export function obtenerSeriesTradingMateriasPrimas(anio = null, usarEstimaciones
   return db.obtenerSeriesTradingMateriasPrimas(anio, usarEstimaciones);
 }
 
-export function obtenerSeriesTradingTesoreria(anio = null) {
+export function obtenerSeriesTradingTesoreria(anio = null, categoria = null, usarEstimaciones = false) {
   const db = getDB();
   if (!db || typeof db.obtenerSeriesTradingTesoreria !== "function") {
     return { ingresos_carne: [], gastos_pienso: [], margen_neto: [] };
   }
-  return db.obtenerSeriesTradingTesoreria(anio);
+  return db.obtenerSeriesTradingTesoreria(anio, categoria, usarEstimaciones);
 }
