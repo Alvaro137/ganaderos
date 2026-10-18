@@ -871,43 +871,33 @@ class CampoDB {
 
   obtenerAniosDisponiblesFinancieros() {
     try {
-      const aniosVentas = (this.ejecutarQuery(`
-        SELECT DISTINCT substr(fecha_factura, 1, 4) as anio
-        FROM ventas_liquidaciones
-        WHERE fecha_factura IS NOT NULL AND length(fecha_factura) >= 4
-      `) || []).map(r => r.anio);
-
-      const aniosCompras = (this.ejecutarQuery(`
-        SELECT DISTINCT substr(fecha, 1, 4) as anio
-        FROM compras_alimento
-        WHERE fecha IS NOT NULL AND length(fecha) >= 4
-      `) || []).map(r => r.anio);
-
-      let aniosLonja = [];
-      if (this.tieneTablaLonja()) {
-        aniosLonja = (this.ejecutarQuery(`
-          SELECT DISTINCT substr(fecha, 1, 4) as anio
-          FROM cotizaciones_lonja
-          WHERE fecha IS NOT NULL AND length(fecha) >= 4
-        `) || []).map(r => r.anio);
-      }
-
-      const setAnios = new Set([...aniosVentas, ...aniosCompras, ...aniosLonja].filter(Boolean));
-      const lista = Array.from(setAnios).sort((a, b) => b.localeCompare(a));
+      const anios = this.ejecutarQuery(`
+        SELECT DISTINCT anio FROM (
+          SELECT substr(fecha_factura, 1, 4) as anio FROM ventas_liquidaciones WHERE fecha_factura IS NOT NULL AND length(fecha_factura) >= 4
+          UNION
+          SELECT substr(fecha, 1, 4) as anio FROM movimientos WHERE tipo IN ('S', 'V', 'SALIDA', 'VENTA') AND fecha >= '2020-01-01'
+          UNION
+          SELECT substr(fecha, 1, 4) as anio FROM compras_alimento WHERE fecha >= '2020-01-01'
+        ) WHERE anio IS NOT NULL AND length(anio) = 4
+        ORDER BY anio DESC
+      `);
+      const lista = (anios || []).map(r => r.anio);
       return lista.length > 0 ? lista : [new Date().getFullYear().toString()];
     } catch (_) {
       return [new Date().getFullYear().toString()];
     }
   }
 
-  obtenerResumenFinancieroGlobal(anio = null, categoria = null) {
+  obtenerResumenFinancieroGlobal(anio = null, categoria = null, usarEstimaciones = false) {
     try {
       let whereVentas = "1=1";
       let whereCompras = "1=1";
       let whereCanales = "1=1";
+      let whereMov = "m.tipo IN ('S', 'V', 'SALIDA', 'VENTA')";
       const paramsVentas = [];
       const paramsCompras = [];
       const paramsCanales = [];
+      const paramsMov = [];
 
       if (anio && anio !== "TODOS") {
         whereVentas += " AND substr(fecha_factura, 1, 4) = ?";
@@ -916,17 +906,21 @@ class CampoDB {
         paramsCompras.push(String(anio));
         whereCanales += " AND substr(COALESCE(c.fecha_salida_lote, f.fecha_factura), 1, 4) = ?";
         paramsCanales.push(String(anio));
+        whereMov += " AND substr(m.fecha, 1, 4) = ?";
+        paramsMov.push(String(anio));
       }
 
       if (categoria && categoria !== "TODOS") {
         if (categoria === "CEBO") {
           whereCanales += " AND (c.articulo LIKE '%TERNER%' OR c.articulo LIKE '%CEBO%' OR c.articulo LIKE '%AÑOJO%')";
+          whereCompras += " AND (alimento LIKE '%CEBO%' OR alimento LIKE '%T-1%' OR alimento LIKE '%T-2%' OR alimento LIKE '%T-3%' OR alimento LIKE '%CRECIMIENTO%' OR alimento LIKE '%ARRANQUE%' OR alimento LIKE '%BOVITER%' OR alimento LIKE '%BIONA%' OR alimento LIKE '%CEBITER%')";
         } else if (categoria === "DESVIEJE") {
           whereCanales += " AND (c.articulo LIKE '%VACAS%' OR c.articulo LIKE '%TOROS%' OR c.articulo LIKE '%DESVIEJE%')";
+          whereCompras += " AND (alimento LIKE '%PAJA%' OR alimento LIKE '%FORRAJE%')";
         }
       }
 
-      // 1. Resumen de facturas de carne
+      // 1. Resumen de facturas de carne cargadas
       const resVentas = this.ejecutarQuery(`
         SELECT 
           COUNT(DISTINCT id) as total_facturas,
@@ -940,18 +934,18 @@ class CampoDB {
       `, paramsVentas);
       const v = (resVentas && resVentas.length > 0) ? resVentas[0] : {};
 
-      // 2. Resumen de canales
+      // 2. Resumen de canales (sin descartar lotes sin peso individual en el WHERE principal)
       const resCanales = this.ejecutarQuery(`
         SELECT 
           COUNT(*) as canales_contadas,
           COALESCE(SUM(c.cabezas), 0) as cabezas_canales,
-          COALESCE(SUM(c.peso_canal_kg), 0) as kg_canales,
+          COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0) as kg_canales,
           COALESCE(SUM(c.importe_linea), 0) as importe_canales,
-          ROUND(COALESCE(SUM(c.importe_linea) / NULLIF(SUM(c.peso_canal_kg), 0), 0), 3) as precio_medio_canal,
-          ROUND(COALESCE(AVG(c.peso_canal_kg), 0), 1) as peso_medio_canal
+          ROUND(COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.importe_linea ELSE 0 END) / NULLIF(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0), 0), 3) as precio_medio_canal,
+          ROUND(COALESCE(AVG(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE NULL END), 0), 1) as peso_medio_canal
         FROM ventas_canales c
         LEFT JOIN ventas_liquidaciones f ON c.factura_id = f.id
-        WHERE ${whereCanales} AND c.peso_canal_kg > 1
+        WHERE ${whereCanales}
       `, paramsCanales);
       const c = (resCanales && resCanales.length > 0) ? resCanales[0] : {};
 
@@ -979,33 +973,117 @@ class CampoDB {
       `, paramsCompras);
       const alim = (resCompras && resCompras.length > 0) ? resCompras[0] : {};
 
-      const ingresosCarne = (categoria && categoria !== "TODOS") 
+      let ingresosCarne = (categoria && categoria !== "TODOS") 
         ? Number(c.importe_canales || 0)
-        : Number(v.ingresos_totales || 0);
+        : Number(v.base_imponible_total || c.importe_canales || 0);
 
-      const gastoPienso = Number(alim.gasto_pienso || 0);
-      const kilosPienso = Number(alim.kg_pienso || 0);
+      let totalCabezasCarne = (categoria && categoria !== "TODOS")
+        ? Number(c.cabezas_canales || 0)
+        : Number(v.total_cabezas || c.cabezas_canales || 0);
+
+      let totalKilosCanal = Number(c.kg_canales || v.total_kilos_canal || 0);
+      let cotizacionMediaCanal = Number(c.precio_medio_canal || 0);
+      let pesoMedioCanal = Number(c.peso_medio_canal || 0);
+
+      let gastoPienso = Number(alim.gasto_pienso || 0);
+      let kilosPienso = Number(alim.kg_pienso || 0);
+      let costeKgPienso = Number(alim.coste_medio_kg || 0);
+
+      // 4. Salidas de ganado en movimientos sin factura de liquidación
+      const crotalesConFactura = new Set(
+        (this.ejecutarQuery(`
+          SELECT DISTINCT c.crotal_asignado 
+          FROM ventas_canales c
+          LEFT JOIN ventas_liquidaciones f ON c.factura_id = f.id
+          WHERE c.crotal_asignado IS NOT NULL AND ${whereCanales}
+        `, paramsCanales) || []).map(r => r.crotal_asignado)
+      );
+
+      const salidasCenso = this.ejecutarQuery(`
+        SELECT m.fecha, m.crotal, a.sexo,
+               ROUND(julianday(m.fecha) - julianday(a.fecha_nacimiento)) as edad_dias
+        FROM movimientos m
+        LEFT JOIN animales a ON m.crotal = a.crotal
+        WHERE ${whereMov}
+        ORDER BY m.fecha
+      `, paramsMov) || [];
+
+      const salidasSinFactura = salidasCenso.filter(s => {
+        if (crotalesConFactura.has(s.crotal)) return false;
+        const esDesvieje = (s.edad_dias || 0) > 730;
+        if (categoria === "CEBO" && esDesvieje) return false;
+        if (categoria === "DESVIEJE" && !esDesvieje) return false;
+        return true;
+      });
+
+      // 5. Reconstrucción con Lonja si usarEstimaciones === true
+      let ingresosEstimadosLonja = 0;
+      let kgEstimadosLonja = 0;
+      let cabezasEstimadasLonja = 0;
+
+      if (usarEstimaciones && salidasSinFactura.length > 0 && this.tieneTablaLonja()) {
+        salidasSinFactura.forEach(s => {
+          const esDesvieje = (s.edad_dias || 0) > 730;
+          const catLonja = esDesvieje ? 'VACA_DESVIEJE' : (((s.sexo || '').toUpperCase().startsWith('M')) ? 'AÑOJO_EXTRA' : 'TERNERA_EXTRA');
+          const kgEst = esDesvieje ? 360.0 : (((s.sexo || '').toUpperCase().startsWith('M')) ? 290.0 : 235.0);
+
+          const cotiz = this.ejecutarQuery(`
+            SELECT precio FROM cotizaciones_lonja 
+            WHERE categoria = ? AND fecha <= ? 
+            ORDER BY fecha DESC LIMIT 1
+          `, [catLonja, s.fecha]);
+
+          const precioKg = (cotiz && cotiz.length > 0 && cotiz[0].precio > 0) 
+            ? Number(cotiz[0].precio) 
+            : (esDesvieje ? 3.80 : 6.50);
+
+          ingresosEstimadosLonja += (kgEst * precioKg);
+          kgEstimadosLonja += kgEst;
+          cabezasEstimadasLonja += 1;
+        });
+
+        ingresosCarne += ingresosEstimadosLonja;
+        totalKilosCanal += kgEstimadosLonja;
+        totalCabezasCarne += cabezasEstimadasLonja;
+
+        if (totalKilosCanal > 0) {
+          cotizacionMediaCanal = Number((ingresosCarne / totalKilosCanal).toFixed(2));
+        }
+        if (totalCabezasCarne > 0) {
+          pesoMedioCanal = Number((totalKilosCanal / totalCabezasCarne).toFixed(1));
+        }
+      }
+
+      // Estimación de coste de pienso cuando hay kg registrados con importe 0 (ej. histórico 2023-2024)
+      if (usarEstimaciones && gastoPienso === 0 && kilosPienso > 0 && this.tieneTablaLonja()) {
+        const cotizPienso = this.ejecutarQuery(`
+          SELECT ROUND(AVG(precio) / 1000, 4) as p_kg FROM cotizaciones_lonja WHERE categoria = 'PIENSO_CEBO'
+        `);
+        const pKg = (cotizPienso && cotizPienso.length > 0 && cotizPienso[0].p_kg > 0) ? Number(cotizPienso[0].p_kg) : 0.315;
+        gastoPienso = Number((kilosPienso * pKg).toFixed(2));
+        costeKgPienso = pKg;
+      }
+
+      const costeTPienso = Number((costeKgPienso * 1000).toFixed(1));
       const margenBruto = ingresosCarne - gastoPienso;
       const ratioCarnePienso = gastoPienso > 0 ? Number((ingresosCarne / gastoPienso).toFixed(2)) : null;
-      const costeKgPienso = Number(alim.coste_medio_kg || 0);
-      const costeTPienso = Number((costeKgPienso * 1000).toFixed(1));
 
-      // 4. Desglose por categorías (Cebo vs Desvieje)
+      // 6. Desglose por categorías (Cebo vs Desvieje)
       const desgloseCat = this.ejecutarQuery(`
         SELECT 
           CASE 
-            WHEN c.articulo LIKE '%VACAS%' OR c.articulo LIKE '%TOROS%' THEN 'Desvieje'
+            WHEN c.articulo LIKE '%VACAS%' OR c.articulo LIKE '%TOROS%' OR c.articulo LIKE '%DESVIEJE%' THEN 'Desvieje'
             WHEN c.articulo LIKE '%TERNER%' OR c.articulo LIKE '%AÑOJO%' OR c.articulo LIKE '%CEBO%' THEN 'Cebo'
             ELSE 'Otros'
           END as categoria_tipo,
           COUNT(*) as total_canales,
-          COALESCE(SUM(c.peso_canal_kg), 0) as kg_total,
+          COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0) as kg_total,
           COALESCE(SUM(c.importe_linea), 0) as importe_total,
-          ROUND(COALESCE(SUM(c.importe_linea) / NULLIF(SUM(c.peso_canal_kg), 0), 0), 2) as precio_medio_kg,
-          ROUND(COALESCE(AVG(c.peso_canal_kg), 0), 1) as peso_medio
+          ROUND(COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.importe_linea ELSE 0 END) / NULLIF(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0), 0), 2) as precio_medio_kg,
+          ROUND(COALESCE(AVG(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE NULL END), 0), 1) as peso_medio
         FROM ventas_canales c
         LEFT JOIN ventas_liquidaciones f ON c.factura_id = f.id
-        WHERE ${whereCanales} AND c.peso_canal_kg > 1
+        WHERE ${whereCanales}
         GROUP BY categoria_tipo
         ORDER BY importe_total DESC
       `, paramsCanales);
@@ -1014,21 +1092,25 @@ class CampoDB {
         anio_filtro: anio || "TODOS",
         categoria_filtro: categoria || "TODOS",
         total_facturas: Number(v.total_facturas || 0),
-        ingresos_carne: ingresosCarne,
+        ingresos_carne: Number(ingresosCarne.toFixed(2)),
         base_imponible_carne: Number(v.base_imponible_total || 0),
-        total_cabezas_carne: Number(v.total_cabezas || c.cabezas_canales || 0),
-        total_kilos_canal: Number(c.kg_canales || v.total_kilos_canal || 0),
-        cotizacion_media_canal: Number(c.precio_medio_canal || 0),
-        peso_medio_canal: Number(c.peso_medio_canal || 0),
+        total_cabezas_carne: totalCabezasCarne,
+        total_kilos_canal: Number(totalKilosCanal.toFixed(1)),
+        cotizacion_media_canal: cotizacionMediaCanal,
+        peso_medio_canal: pesoMedioCanal,
         total_deducciones_coop: Number(v.total_deducciones || 0),
         total_compras_pienso: Number(alim.total_compras || 0),
-        gasto_pienso: gastoPienso,
+        gasto_pienso: Number(gastoPienso.toFixed(2)),
         kilos_pienso: kilosPienso,
         coste_medio_pienso_kg: costeKgPienso,
         coste_medio_pienso_t: costeTPienso,
-        margen_bruto_alimentacion: margenBruto,
+        margen_bruto_alimentacion: Number(margenBruto.toFixed(2)),
         ratio_carne_pienso: ratioCarnePienso,
-        desglose_categorias: desgloseCat || []
+        desglose_categorias: desgloseCat || [],
+        usar_estimaciones: Boolean(usarEstimaciones),
+        salidas_sin_factura: salidasSinFactura.length,
+        salidas_estimadas: cabezasEstimadasLonja,
+        ingresos_estimados: Number(ingresosEstimadosLonja.toFixed(2))
       };
     } catch (e) {
       console.error("[DB] Error en obtenerResumenFinancieroGlobal:", e);
@@ -1042,30 +1124,65 @@ class CampoDB {
     }
   }
 
-  obtenerSerieMensualFinanciera(anio = null) {
+  obtenerSerieMensualFinanciera(anio = null, categoria = null, usarEstimaciones = false) {
     try {
-      let whereVentas = "1=1";
-      let whereCompras = "1=1";
+      let whereVentas = "f.fecha_factura IS NOT NULL";
+      let whereCompras = "fecha IS NOT NULL";
+      let whereMov = "m.tipo IN ('S', 'V', 'SALIDA', 'VENTA') AND m.fecha IS NOT NULL";
       const paramsVentas = [];
       const paramsCompras = [];
+      const paramsMov = [];
 
       if (anio && anio !== "TODOS") {
-        whereVentas += " AND substr(fecha_factura, 1, 4) = ?";
+        whereVentas += " AND substr(f.fecha_factura, 1, 4) = ?";
         paramsVentas.push(String(anio));
         whereCompras += " AND substr(fecha, 1, 4) = ?";
         paramsCompras.push(String(anio));
+        whereMov += " AND substr(m.fecha, 1, 4) = ?";
+        paramsMov.push(String(anio));
       }
 
-      const rowsVentas = this.ejecutarQuery(`
-        SELECT 
-          substr(fecha_factura, 1, 7) as mes,
-          COALESCE(SUM(total_factura), 0) as ingresos,
-          COALESCE(SUM(total_cabezas), 0) as cabezas,
-          COALESCE(SUM(total_kilos_canal), 0) as kg_canal
-        FROM ventas_liquidaciones
-        WHERE ${whereVentas} AND fecha_factura IS NOT NULL
-        GROUP BY mes
-      `, paramsVentas);
+      if (categoria && categoria !== "TODOS") {
+        if (categoria === "CEBO") {
+          whereCompras += " AND (alimento LIKE '%CEBO%' OR alimento LIKE '%T-1%' OR alimento LIKE '%T-2%' OR alimento LIKE '%T-3%' OR alimento LIKE '%CRECIMIENTO%' OR alimento LIKE '%ARRANQUE%' OR alimento LIKE '%BOVITER%' OR alimento LIKE '%BIONA%' OR alimento LIKE '%CEBITER%')";
+        } else if (categoria === "DESVIEJE") {
+          whereCompras += " AND (alimento LIKE '%PAJA%' OR alimento LIKE '%FORRAJE%')";
+        }
+      }
+
+      let sqlVentas = "";
+      if (categoria && categoria !== "TODOS") {
+        let catCanales = "";
+        if (categoria === "CEBO") {
+          catCanales = " AND (c.articulo LIKE '%TERNER%' OR c.articulo LIKE '%CEBO%' OR c.articulo LIKE '%AÑOJO%')";
+        } else if (categoria === "DESVIEJE") {
+          catCanales = " AND (c.articulo LIKE '%VACAS%' OR c.articulo LIKE '%TOROS%' OR c.articulo LIKE '%DESVIEJE%')";
+        }
+        sqlVentas = `
+          SELECT 
+            substr(f.fecha_factura, 1, 7) as mes,
+            COALESCE(SUM(c.importe_linea), 0) as ingresos,
+            COALESCE(SUM(c.cabezas), 0) as cabezas,
+            COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0) as kg_canal
+          FROM ventas_canales c
+          JOIN ventas_liquidaciones f ON c.factura_id = f.id
+          WHERE ${whereVentas} ${catCanales}
+          GROUP BY mes
+        `;
+      } else {
+        sqlVentas = `
+          SELECT 
+            substr(f.fecha_factura, 1, 7) as mes,
+            COALESCE(SUM(f.base_imponible), 0) as ingresos,
+            COALESCE(SUM(f.total_cabezas), 0) as cabezas,
+            COALESCE(SUM(f.total_kilos_canal), 0) as kg_canal
+          FROM ventas_liquidaciones f
+          WHERE ${whereVentas}
+          GROUP BY mes
+        `;
+      }
+
+      const rowsVentas = this.ejecutarQuery(sqlVentas, paramsVentas);
 
       const rowsCompras = this.ejecutarQuery(`
         SELECT 
@@ -1079,9 +1196,33 @@ class CampoDB {
           ), 0) as gasto,
           COALESCE(SUM(kg), 0) as kg_pienso
         FROM compras_alimento
-        WHERE ${whereCompras} AND fecha IS NOT NULL
+        WHERE ${whereCompras}
         GROUP BY mes
       `, paramsCompras);
+
+      // Salidas de ganado registradas en censo por mes
+      const salidasMes = this.ejecutarQuery(`
+        SELECT substr(m.fecha, 1, 7) as mes,
+               m.fecha, m.crotal, a.sexo,
+               ROUND(julianday(m.fecha) - julianday(a.fecha_nacimiento)) as edad_dias
+        FROM movimientos m
+        LEFT JOIN animales a ON m.crotal = a.crotal
+        WHERE ${whereMov}
+        ORDER BY m.fecha
+      `, paramsMov) || [];
+
+      // Agrupar salidas del censo por mes
+      const salidasPorMes = new Map();
+      salidasMes.forEach(s => {
+        const esDesvieje = (s.edad_dias || 0) > 730;
+        if (categoria === "CEBO" && esDesvieje) return;
+        if (categoria === "DESVIEJE" && !esDesvieje) return;
+
+        if (!salidasPorMes.has(s.mes)) {
+          salidasPorMes.set(s.mes, []);
+        }
+        salidasPorMes.get(s.mes).push(s);
+      });
 
       const mapaMeses = new Map();
 
@@ -1093,7 +1234,10 @@ class CampoDB {
           cabezas: Number(r.cabezas || 0),
           kg_canal: Number(r.kg_canal || 0),
           gasto_pienso: 0,
-          kg_pienso: 0
+          kg_pienso: 0,
+          esReal: Number(r.ingresos || 0) > 0,
+          estimado: false,
+          facturas_pendientes: false
         });
       });
 
@@ -1106,7 +1250,10 @@ class CampoDB {
             cabezas: 0,
             kg_canal: 0,
             gasto_pienso: Number(r.gasto || 0),
-            kg_pienso: Number(r.kg_pienso || 0)
+            kg_pienso: Number(r.kg_pienso || 0),
+            esReal: false,
+            estimado: false,
+            facturas_pendientes: false
           });
         } else {
           const item = mapaMeses.get(r.mes);
@@ -1114,6 +1261,79 @@ class CampoDB {
           item.kg_pienso = Number(r.kg_pienso || 0);
         }
       });
+
+      // Incorporar meses con salidas de ganado en censo
+      salidasPorMes.forEach((listaSalidas, mes) => {
+        if (!mapaMeses.has(mes)) {
+          mapaMeses.set(mes, {
+            mes,
+            ingresos_carne: 0,
+            cabezas: listaSalidas.length,
+            kg_canal: 0,
+            gasto_pienso: 0,
+            kg_pienso: 0,
+            esReal: false,
+            estimado: false,
+            facturas_pendientes: true,
+            salidas_censo: listaSalidas.length
+          });
+        } else {
+          const item = mapaMeses.get(mes);
+          item.salidas_censo = listaSalidas.length;
+          if (item.ingresos_carne === 0 && listaSalidas.length > 0) {
+            item.facturas_pendientes = true;
+          }
+        }
+      });
+
+      // Si usarEstimaciones === true, estimar ingresos con Lonja para meses sin facturas cargadas
+      if (usarEstimaciones && this.tieneTablaLonja()) {
+        mapaMeses.forEach(item => {
+          if (item.ingresos_carne === 0 && item.salidas_censo > 0) {
+            const salidasDelMes = salidasPorMes.get(item.mes) || [];
+            let ingresosEstMes = 0;
+            let kgEstMes = 0;
+
+            salidasDelMes.forEach(s => {
+              const esDesvieje = (s.edad_dias || 0) > 730;
+              const catLonja = esDesvieje ? 'VACA_DESVIEJE' : (((s.sexo || '').toUpperCase().startsWith('M')) ? 'AÑOJO_EXTRA' : 'TERNERA_EXTRA');
+              const kgEst = esDesvieje ? 360.0 : (((s.sexo || '').toUpperCase().startsWith('M')) ? 290.0 : 235.0);
+
+              const cotiz = this.ejecutarQuery(`
+                SELECT precio FROM cotizaciones_lonja 
+                WHERE categoria = ? AND fecha <= ? 
+                ORDER BY fecha DESC LIMIT 1
+              `, [catLonja, s.fecha]);
+
+              const precioKg = (cotiz && cotiz.length > 0 && cotiz[0].precio > 0) 
+                ? Number(cotiz[0].precio) 
+                : (esDesvieje ? 3.80 : 6.50);
+
+              ingresosEstMes += (kgEst * precioKg);
+              kgEstMes += kgEst;
+            });
+
+            if (ingresosEstMes > 0) {
+              item.ingresos_carne = Number(ingresosEstMes.toFixed(2));
+              item.kg_canal = Number(kgEstMes.toFixed(1));
+              item.cabezas = salidasDelMes.length;
+              item.estimado = true;
+              item.esReal = false;
+              item.facturas_pendientes = false;
+            }
+          }
+
+          // Estimar gasto de pienso si hay kg con importe 0
+          if (item.gasto_pienso === 0 && item.kg_pienso > 0) {
+            const cotizPienso = this.ejecutarQuery(`
+              SELECT ROUND(AVG(precio) / 1000, 4) as p_kg FROM cotizaciones_lonja WHERE categoria = 'PIENSO_CEBO'
+            `);
+            const pKg = (cotizPienso && cotizPienso.length > 0 && cotizPienso[0].p_kg > 0) ? Number(cotizPienso[0].p_kg) : 0.315;
+            item.gasto_pienso = Number((item.kg_pienso * pKg).toFixed(2));
+            item.gasto_estimado = true;
+          }
+        });
+      }
 
       const rowsPreciosCanal = this.ejecutarQuery(`
         SELECT 
@@ -1139,8 +1359,8 @@ class CampoDB {
 
         return {
           ...m,
-          margen_mes: margen,
-          margen_neto: margen,
+          margen_mes: Number(margen.toFixed(2)),
+          margen_neto: Number(margen.toFixed(2)),
           precio_canal_medio: precioCanal,
           precio_pienso_medio: precioPienso
         };
@@ -1893,9 +2113,9 @@ class CampoDB {
     }
   }
 
-  obtenerSeriesTradingTesoreria(anio = null) {
+  obtenerSeriesTradingTesoreria(anio = null, categoria = null, usarEstimaciones = false) {
     try {
-      const serie = this.obtenerSerieMensualFinanciera(anio);
+      const serie = this.obtenerSerieMensualFinanciera(anio, categoria, usarEstimaciones);
       const ingresos_carne = [];
       const gastos_pienso = [];
       const margen_neto = [];
@@ -1912,20 +2132,25 @@ class CampoDB {
         ingresos_carne.push({ 
           time: t, 
           value: Number(s.ingresos_carne || 0),
-          esReal: tieneVentas,
+          esReal: Boolean(s.esReal),
+          estimado: Boolean(s.estimado),
+          facturas_pendientes: Boolean(s.facturas_pendientes),
+          salidas_censo: s.salidas_censo || s.cabezas || 0,
           cabezas: s.cabezas,
           kg_canal: s.kg_canal
         });
         gastos_pienso.push({ 
           time: t, 
           value: Number(s.gasto_pienso || 0),
-          esReal: tieneCompras,
+          esReal: tieneCompras && !s.gasto_estimado,
+          estimado: Boolean(s.gasto_estimado),
           kg_pienso: s.kg_pienso
         });
         margen_neto.push({ 
           time: t, 
           value: valMargen,
-          esReal: tieneVentas || tieneCompras
+          esReal: Boolean(s.esReal || tieneCompras),
+          estimado: Boolean(s.estimado || s.gasto_estimado)
         });
       });
 
