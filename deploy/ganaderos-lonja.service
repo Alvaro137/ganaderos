@@ -1,0 +1,16 @@
+[Unit]
+Description=Sincronizador Semanal Lonja de Salamanca (Ganaderos Campo)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=varo
+Group=varo
+WorkingDirectory=/home/varo/ganaderos_pwa
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/varo/ganaderos_pwa/venv/bin/python scripts/sync_lonjas.py
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/varo/ganaderos_pwa/pwa
+NoNewPrivileges=true
