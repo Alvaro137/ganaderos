@@ -443,6 +443,12 @@ export function generarHtmlDetalleAnimal(animal) {
         <div>
           <div class="detail-crotal-big">${escapeHtml(animal.crotal_4)}</div>
           <div class="detail-crotal-full">${escapeHtml(animal.crotal)} ${animal.nombre ? `• ${escapeHtml(animal.nombre)}` : ""}</div>
+          ${animal.id_electronico ? `
+            <div style="margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; background: rgba(37, 99, 235, 0.1); color: #1d4ed8; padding: 3px 8px; border-radius: 6px; font-weight: 700;">
+              🏷️ <span>RFID: ${escapeHtml(animal.id_electronico)}</span>
+              ${animal.tipo_identificacion ? `<span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">(${escapeHtml(animal.tipo_identificacion)})</span>` : ""}
+            </div>
+          ` : ""}
         </div>
         <span class="status-pill ${estadoClase}">${estadoTexto}</span>
       </div>
@@ -509,6 +515,40 @@ export function generarHtmlDetalleAnimal(animal) {
           <div style="margin-top: 4px;">${componenteMadre}</div>
         </div>
       </div>
+
+      ${(animal.fecha_tuberculosis || animal.fecha_lengua_azul || animal.cea_situacion) ? `
+      <div class="spec-section" style="background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 14px 16px; margin: 14px 0 6px 0;">
+        <div style="font-weight: 800; color: var(--md-primary); font-size: 0.95rem; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+          <span>🩺</span> <span>Trazabilidad y Saneamiento Oficial (MoGa)</span>
+        </div>
+        <div class="spec-grid">
+          <div>
+            <div class="spec-label">Campaña Tuberculosis</div>
+            <div class="spec-val" style="font-weight: 700; color: ${animal.fecha_tuberculosis ? '#15803d' : 'var(--text-muted)'};">
+              ${animal.fecha_tuberculosis ? `✓ ${formatearFecha(animal.fecha_tuberculosis)}` : 'Sin actuación'}
+            </div>
+          </div>
+          <div>
+            <div class="spec-label">Vacunación Lengua Azul</div>
+            <div class="spec-val" style="font-weight: 700; color: ${animal.fecha_lengua_azul ? '#15803d' : 'var(--text-muted)'};">
+              ${animal.fecha_lengua_azul ? `✓ ${formatearFecha(animal.fecha_lengua_azul)}` : 'Sin vacunación'}
+            </div>
+          </div>
+          <div>
+            <div class="spec-label">CEA Oficial Situación</div>
+            <div class="spec-val" style="font-weight: 700;">
+              ${escapeHtml(animal.cea_situacion || 'ES371261100121')} ${animal.cea_situacion && animal.cea_situacion.endsWith('122') ? '<span style="font-size: 0.75rem; color: #ea580c; font-weight: 800;">(Cebadero)</span>' : '<span style="font-size: 0.75rem; color: #15803d; font-weight: 800;">(Dehesa)</span>'}
+            </div>
+          </div>
+          <div>
+            <div class="spec-label">CEA de Nacimiento</div>
+            <div class="spec-val" style="font-weight: 600; color: var(--text-muted);">
+              ${escapeHtml(animal.cea_nacimiento || 'ES371261100121')}
+            </div>
+          </div>
+        </div>
+      </div>
+      ` : ""}
 
       ${animal.liquidacion_canal ? `
       <div class="spec-section" style="background: var(--md-surface-container-low); border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-lg); padding: 16px; margin: 16px 0 6px 0;">
