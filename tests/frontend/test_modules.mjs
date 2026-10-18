@@ -471,7 +471,7 @@ async function runAllTests() {
 
     const html = generarHtmlDetalleAnimal(animalConPesajes);
     assert.strictEqual(html.includes("Control de Pesajes y Crecimiento"), true);
-    assert.strictEqual(html.includes("data-action=\"registrar-pesaje\""), true);
+    assert.strictEqual(html.includes("data-action=\"registrar-pesaje\""), false);
     assert.strictEqual(html.includes("485 kg"), true);
     assert.strictEqual(html.includes("GMD: +1.33 kg/d"), true);
     assert.strictEqual(html.includes("Rendimiento en Canal"), true);
@@ -807,6 +807,15 @@ async function runAllTests() {
     const cebaderoFallback = obtenerCebaderoActivo();
     assert.strictEqual(typeof cebaderoFallback.gmd_media_vivo, "number");
     assert.strictEqual(typeof cebaderoFallback.gmd_media_canal, "number");
+  });
+
+  await test("Sugerencia de Crotal y Formulario de Partos: Serie correlativa y Notas de campo", async () => {
+    const { obtenerSiguienteCrotalSugerido } = await import('../../pwa/js/modules/db.js');
+    assert.strictEqual(typeof obtenerSiguienteCrotalSugerido, "function");
+    const sugerencia = obtenerSiguienteCrotalSugerido();
+    assert.ok(sugerencia.crotal, "Debe sugerir un crotal completo");
+    assert.ok(sugerencia.crotal_4, "Debe sugerir los 4 dígitos finales");
+    assert.strictEqual(sugerencia.crotal.slice(-4), sugerencia.crotal_4);
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

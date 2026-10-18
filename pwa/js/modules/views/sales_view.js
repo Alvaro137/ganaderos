@@ -1331,8 +1331,8 @@ export function abrirModalMetodologiaCalculos(seccionInicial = "todos") {
 
               <div style="background: #fff; border-left: 3px solid #2563eb; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.8rem; color: #0f172a; line-height: 1.45;">
                 <strong>Estándar Técnico para Lotes en Cebo Intensivo:</strong><br/>
-                • <strong>Añojo Cruzado (Macho):</strong> GMD de <strong>1,35 kg/día vivo</strong> con rendimiento canal del <strong>58%</strong> (equivale a <strong>0,78 kg canal/día</strong>). Peso base al destete: 250 kg vivo.<br/>
-                • <strong>Ternera Cruzada (Hembra):</strong> GMD de <strong>1,15 kg/día vivo</strong> con rendimiento canal del <strong>56%</strong> (equivale a <strong>0,64 kg canal/día</strong>). Peso base al destete: 230 kg vivo.<br/>
+                • <strong>Añojo Conjunto Mestizo (Macho):</strong> GMD de <strong>1,35 kg/día vivo</strong> con rendimiento canal del <strong>58%</strong> (equivale a <strong>0,78 kg canal/día</strong>). Peso base al destete: 250 kg vivo.<br/>
+                • <strong>Ternera Conjunto Mestizo (Hembra):</strong> GMD de <strong>1,15 kg/día vivo</strong> con rendimiento canal del <strong>56%</strong> (equivale a <strong>0,64 kg canal/día</strong>). Peso base al destete: 230 kg vivo.<br/>
                 • <strong>Días de estancia en cebo:</strong> Calculados a partir de la edad oficial en censo: <code>Edad (días) - 180 días de cría nodriza</code> (acotado entre 30 y 270 días).
               </div>
             </div>

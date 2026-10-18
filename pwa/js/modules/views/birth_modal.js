@@ -5,7 +5,7 @@
  */
 
 import { escapeHtml, extraer4Digitos } from '../config.js';
-import { buscarAnimales, registrarPartoOptimista } from '../db.js';
+import { buscarAnimales, registrarPartoOptimista, obtenerSiguienteCrotalSugerido } from '../db.js';
 import { guardarMutacionLocal, sincronizarOutboxConServidor } from '../outbox.js';
 import { obtenerUsuarioActual } from '../auth.js';
 
@@ -33,11 +33,15 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
     seleccionMadreActual = {
       crotal: madreCrotal,
       crotal_4: madre4 || extraer4Digitos(madreCrotal),
-      raza: madreRaza || "Cruzado"
+      raza: madreRaza || "Conjunto Mestizo"
     };
   } else {
     seleccionMadreActual = null;
   }
+
+  const sugerenciaCrotal = obtenerSiguienteCrotalSugerido();
+  const sugeridoFull = sugerenciaCrotal.crotal;
+  const sugerido4 = sugerenciaCrotal.crotal_4;
 
   const hoyStr = new Date().toISOString().split("T")[0];
 
@@ -143,7 +147,7 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
           <select 
             id="select-raza-cria" 
             style="width: 100%; height: 48px; padding: 0 12px; font-size: 1rem; border: 1px solid var(--border-color, #ccc); border-radius: 8px; box-sizing: border-box; background: var(--input-bg, #fff);">
-            <option value="Cruzado" ${seleccionMadreActual && seleccionMadreActual.raza === 'Cruzado' ? 'selected' : ''}>Cruzado (Carne)</option>
+            <option value="Conjunto Mestizo" ${!seleccionMadreActual || seleccionMadreActual.raza === 'Conjunto Mestizo' || seleccionMadreActual.raza === 'Cruzado' ? 'selected' : ''}>Conjunto Mestizo</option>
             <option value="Limusín" ${seleccionMadreActual && seleccionMadreActual.raza.includes('Limus') ? 'selected' : ''}>Limusín</option>
             <option value="Charolés" ${seleccionMadreActual && seleccionMadreActual.raza.includes('Charol') ? 'selected' : ''}>Charolés</option>
             <option value="Morucho" ${seleccionMadreActual && seleccionMadreActual.raza.includes('Moruch') ? 'selected' : ''}>Morucho</option>
@@ -162,11 +166,13 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
           <input 
             type="text" 
             id="input-cria-crotal" 
-            placeholder="Ej: C-${seleccionMadreActual ? seleccionMadreActual.crotal_4 : '1045'} o crotal oficial" 
+            placeholder="Ej: ${sugeridoFull} (o ${sugerido4})" 
+            title="Siguiente crotal según serie correlativa: ${sugeridoFull}"
+            aria-label="Crotal de la cría (siguiente de la serie: ${sugeridoFull})"
             style="width: 100%; height: 48px; padding: 0 12px; font-size: 1rem; border: 1px solid var(--border-color, #ccc); border-radius: 8px; box-sizing: border-box;"
           />
           <span style="font-size: 0.75rem; color: #777; margin-top: 4px; display: block;">
-            Si se indica crotal, la cría se añade de inmediato al censo activo.
+            Siguiente sugerido según serie correlativa: <strong>${sugeridoFull}</strong> (o <strong>${sugerido4}</strong>). Si se indica, la cría se añade de inmediato al censo activo.
           </span>
         </div>
 
@@ -178,7 +184,9 @@ export function abrirModalRegistroParto({ madreCrotal = "", madre4 = "", madreRa
           <input 
             type="text" 
             id="input-incidencias" 
-            placeholder="Ej: Parto asistido, ternero fuerte, etc." 
+            placeholder="Colorada dueña, cojo 2345, ..." 
+            title="Colorada dueña, cojo 2345, ..."
+            aria-label="Colorada dueña, cojo 2345, ..."
             style="width: 100%; height: 48px; padding: 0 12px; font-size: 0.95rem; border: 1px solid var(--border-color, #ccc); border-radius: 8px; box-sizing: border-box;"
           />
         </div>
