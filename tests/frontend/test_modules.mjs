@@ -838,6 +838,30 @@ async function runAllTests() {
     assert.strictEqual(sugerencia.crotal.slice(-4), sugerencia.crotal_4);
   });
 
+  await test("Trading Charts: Separación de Cebo y Vacas Desvieje y soporte de HistogramSeries", async () => {
+    const { obtenerSeriesTradingCarne } = await import('../../pwa/js/modules/db.js');
+    const { renderTradingChartContainer } = await import('../../pwa/js/modules/components/trading_chart.js');
+
+    // Verificar estructura de retorno de series de trading carne
+    const resCarne = obtenerSeriesTradingCarne("2026", "TODOS", false);
+    assert.ok(Array.isArray(resCarne.precio_granja_cebo), "Debe incluir serie separada de cebo");
+    assert.ok(Array.isArray(resCarne.precio_granja_vacas), "Debe incluir serie separada de vacas");
+    assert.ok(Array.isArray(resCarne.anojo_extra), "Debe incluir cotizaciones lonja añojo");
+
+    // Verificar contenedor con defaultRange 1Y y series de histograma
+    const htmlContenedor = renderTradingChartContainer({
+      id: "chart-test-tv",
+      titulo: "Test Chart",
+      seriesDefs: [
+        { id: "margen_neto", label: "Saldo Neto Mes", color: "#16a34a", defaultVisible: true }
+      ],
+      defaultRange: "1Y"
+    });
+
+    assert.ok(htmlContenedor.includes('class="tv-range-btn active" data-chart-id="chart-test-tv" data-range="1Y"'), "El botón 1A debe estar activo por defecto");
+    assert.ok(htmlContenedor.includes('id="chart-test-tv-canvas"'), "Debe incluir el contenedor canvas del gráfico");
+  });
+
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);
   console.log("==================================================");
 
