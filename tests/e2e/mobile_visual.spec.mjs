@@ -374,5 +374,36 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v19_tesoreria_estimaciones_lonja.png') });
   });
+
+  test('V20. Modal Técnico de Metodología y Fórmulas de Cálculo (GPD, Lonja, Sobrepeso)', async ({ page }) => {
+    const btnMov = page.locator('[data-tab="movimientos"]:visible');
+    await btnMov.click();
+
+    const banner = page.locator('.banner-liquidaciones');
+    await expect(banner).toBeVisible({ timeout: 15000 });
+    await banner.click();
+
+    const btnMetodologia = page.locator('#btn-info-metodologia');
+    await expect(btnMetodologia).toBeVisible({ timeout: 10000 });
+    await btnMetodologia.click();
+
+    const modalOverlay = page.locator('#modal-metodologia-overlay');
+    await expect(modalOverlay).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=Metodología y Fórmulas Técnicas')).toBeVisible();
+
+    // Comprobar que explica GPD / GMD
+    await expect(page.locator('text=Ganancia de Peso Diaria')).toBeVisible();
+
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v20_modal_metodologia.png') });
+
+    // Cambiar a la pestaña de Lonja
+    const tabLonja = page.locator('.metodologia-tab-btn[data-tab="lonja"]');
+    await tabLonja.click();
+    await expect(page.locator('text=Proyección de Facturación con Lonja de Salamanca')).toBeVisible();
+
+    // Cerrar modal
+    await page.locator('#btn-cerrar-modal-metodologia').click();
+    await expect(modalOverlay).toBeHidden();
+  });
 });
 
