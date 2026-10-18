@@ -772,28 +772,42 @@ class CampoDB {
     return this._tieneVentas;
   }
 
-  obtenerLiquidaciones(filtro = "") {
+  obtenerLiquidaciones(opciones = "") {
     try {
-      if (!filtro || filtro.trim() === "") {
-        return this.ejecutarQuery(`
-          SELECT id, numero_factura, fecha_factura, fecha_pago, cliente_cooperativa,
-                 total_cabezas, total_kilos_canal, base_imponible, porcentaje_iva, cuota_iva,
-                 gastos_total, total_factura, archivo_origen
-          FROM ventas_liquidaciones
-          ORDER BY fecha_factura DESC, id DESC
-        `) || [];
+      let filtro = "";
+      let anio = "TODOS";
+      let categoria = "TODOS";
+
+      if (typeof opciones === "string") {
+        filtro = opciones;
+      } else if (opciones && typeof opciones === "object") {
+        filtro = opciones.filtro || "";
+        anio = opciones.anio || "TODOS";
+        categoria = opciones.categoria || "TODOS";
       }
-      const f = `%${filtro.trim()}%`;
+
+      let whereClause = "1=1";
+      const params = [];
+
+      if (filtro && filtro.trim() !== "") {
+        const f = `%${filtro.trim()}%`;
+        whereClause += " AND (COALESCE(numero_factura, '') LIKE ? OR COALESCE(cliente_cooperativa, '') LIKE ? OR COALESCE(fecha_factura, '') LIKE ?)";
+        params.push(f, f, f);
+      }
+
+      if (anio && anio !== "TODOS") {
+        whereClause += " AND substr(fecha_factura, 1, 4) = ?";
+        params.push(String(anio));
+      }
+
       return this.ejecutarQuery(`
         SELECT id, numero_factura, fecha_factura, fecha_pago, cliente_cooperativa,
                total_cabezas, total_kilos_canal, base_imponible, porcentaje_iva, cuota_iva,
                gastos_total, total_factura, archivo_origen
         FROM ventas_liquidaciones
-        WHERE COALESCE(numero_factura, '') LIKE ? 
-           OR COALESCE(cliente_cooperativa, '') LIKE ? 
-           OR COALESCE(fecha_factura, '') LIKE ?
+        WHERE ${whereClause}
         ORDER BY fecha_factura DESC, id DESC
-      `, [f, f, f]) || [];
+      `, params) || [];
     } catch (_) {
       return [];
     }
@@ -934,15 +948,16 @@ class CampoDB {
       `, paramsVentas);
       const v = (resVentas && resVentas.length > 0) ? resVentas[0] : {};
 
-      // 2. Resumen de canales (sin descartar lotes sin peso individual en el WHERE principal)
+      // 2. Resumen de canales (filtrando lotes globales para métricas de peso y precio unitario)
       const resCanales = this.ejecutarQuery(`
         SELECT 
           COUNT(*) as canales_contadas,
           COALESCE(SUM(c.cabezas), 0) as cabezas_canales,
-          COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0) as kg_canales,
+          COALESCE(SUM(CASE WHEN c.peso_canal_kg > 50 THEN c.peso_canal_kg ELSE 0 END), 0) as kg_canales,
           COALESCE(SUM(c.importe_linea), 0) as importe_canales,
-          ROUND(COALESCE(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.importe_linea ELSE 0 END) / NULLIF(SUM(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE 0 END), 0), 0), 3) as precio_medio_canal,
-          ROUND(COALESCE(AVG(CASE WHEN c.peso_canal_kg > 1 THEN c.peso_canal_kg ELSE NULL END), 0), 1) as peso_medio_canal
+          ROUND(COALESCE(SUM(CASE WHEN c.peso_canal_kg > 50 AND (c.importe_linea / c.peso_canal_kg) < 20.0 THEN c.importe_linea ELSE 0 END) / NULLIF(SUM(CASE WHEN c.peso_canal_kg > 50 AND (c.importe_linea / c.peso_canal_kg) < 20.0 THEN c.peso_canal_kg ELSE 0 END), 0), 0), 3) as precio_medio_canal,
+          ROUND(COALESCE(AVG(CASE WHEN c.peso_canal_kg > 50 THEN c.peso_canal_kg ELSE NULL END), 0), 1) as peso_medio_canal,
+          COUNT(CASE WHEN c.peso_canal_kg > 350 THEN 1 ELSE NULL END) as cabezas_sobrepeso
         FROM ventas_canales c
         LEFT JOIN ventas_liquidaciones f ON c.factura_id = f.id
         WHERE ${whereCanales}
@@ -1066,7 +1081,36 @@ class CampoDB {
 
       const costeTPienso = Number((costeKgPienso * 1000).toFixed(1));
       const margenBruto = ingresosCarne - gastoPienso;
+      const margenCabeza = totalCabezasCarne > 0 ? Number((margenBruto / totalCabezasCarne).toFixed(2)) : 0;
       const ratioCarnePienso = gastoPienso > 0 ? Number((ingresosCarne / gastoPienso).toFixed(2)) : null;
+
+      // Benchmark de Lonja de Salamanca
+      let precioLonjaMedio = null;
+      let diferencialLonja = null;
+      if (this.tieneTablaLonja()) {
+        try {
+          let whereLonja = "mesa = 'CARNE'";
+          const pLonja = [];
+          if (categoria === "DESVIEJE") {
+            whereLonja += " AND categoria = 'VACA_DESVIEJE'";
+          } else {
+            whereLonja += " AND categoria = 'AÑOJO_EXTRA'";
+          }
+          if (anio && anio !== "TODOS") {
+            whereLonja += " AND substr(fecha, 1, 4) = ?";
+            pLonja.push(String(anio));
+          }
+          const resLonja = this.ejecutarQuery(`
+            SELECT ROUND(AVG(precio), 2) as p_lonja FROM cotizaciones_lonja WHERE ${whereLonja}
+          `, pLonja);
+          if (resLonja && resLonja.length > 0 && resLonja[0].p_lonja > 0) {
+            precioLonjaMedio = Number(resLonja[0].p_lonja);
+            if (cotizacionMediaCanal > 0) {
+              diferencialLonja = Number((cotizacionMediaCanal - precioLonjaMedio).toFixed(2));
+            }
+          }
+        } catch (_) {}
+      }
 
       // 6. Desglose por categorías (Cebo vs Desvieje)
       const desgloseCat = this.ejecutarQuery(`
@@ -1098,6 +1142,9 @@ class CampoDB {
         total_kilos_canal: Number(totalKilosCanal.toFixed(1)),
         cotizacion_media_canal: cotizacionMediaCanal,
         peso_medio_canal: pesoMedioCanal,
+        cabezas_sobrepeso: Number(c.cabezas_sobrepeso || 0),
+        precio_lonja_medio: precioLonjaMedio,
+        diferencial_lonja_kg: diferencialLonja,
         total_deducciones_coop: Number(v.total_deducciones || 0),
         total_compras_pienso: Number(alim.total_compras || 0),
         gasto_pienso: Number(gastoPienso.toFixed(2)),
@@ -1105,6 +1152,7 @@ class CampoDB {
         coste_medio_pienso_kg: costeKgPienso,
         coste_medio_pienso_t: costeTPienso,
         margen_bruto_alimentacion: Number(margenBruto.toFixed(2)),
+        margen_medio_cabeza: margenCabeza,
         ratio_carne_pienso: ratioCarnePienso,
         desglose_categorias: desgloseCat || [],
         usar_estimaciones: Boolean(usarEstimaciones),
@@ -2263,6 +2311,139 @@ class CampoDB {
       precioFinalEfectivo,
       precioUmbralEquilibrio
     };
+  }
+
+  obtenerDistribucionPesosCanal(anio = null, categoria = null) {
+    try {
+      let whereClause = "peso_canal_kg > 50 AND (importe_linea / peso_canal_kg) < 20.0";
+      const params = [];
+
+      if (anio && anio !== "TODOS") {
+        whereClause += " AND factura_id IN (SELECT id FROM ventas_liquidaciones WHERE substr(fecha_factura, 1, 4) = ?)";
+        params.push(String(anio));
+      }
+
+      if (categoria && categoria !== "TODOS") {
+        if (categoria === "CEBO") {
+          whereClause += " AND (articulo LIKE '%TERNER%' OR articulo LIKE '%CEBO%' OR articulo LIKE '%AÑOJO%')";
+        } else if (categoria === "DESVIEJE") {
+          whereClause += " AND (articulo LIKE '%VACAS%' OR articulo LIKE '%TOROS%' OR articulo LIKE '%DESVIEJE%')";
+        }
+      }
+
+      const rows = this.ejecutarQuery(`
+        SELECT 
+          CASE 
+            WHEN peso_canal_kg < 220 THEN '< 220 kg (Ligera)'
+            WHEN peso_canal_kg BETWEEN 220 AND 319.99 THEN '220 - 320 kg (Óptimo)'
+            WHEN peso_canal_kg BETWEEN 320 AND 349.99 THEN '320 - 350 kg (Límite Añojo)'
+            ELSE '> 350 kg (Sobrepeso Penalizado)'
+          END AS rango_peso,
+          COUNT(*) as total_canales,
+          ROUND(AVG(peso_canal_kg), 1) as peso_medio,
+          ROUND(COALESCE(SUM(importe_linea) / NULLIF(SUM(peso_canal_kg), 0), 0), 3) as precio_medio_kg,
+          ROUND(SUM(importe_linea), 2) as importe_acumulado
+        FROM ventas_canales
+        WHERE ${whereClause}
+        GROUP BY rango_peso
+        ORDER BY MIN(peso_canal_kg) ASC
+      `, params) || [];
+
+      const totalCanales = rows.reduce((acc, r) => acc + (Number(r.total_canales) || 0), 0);
+
+      return rows.map(r => ({
+        rango_peso: r.rango_peso,
+        total_canales: Number(r.total_canales || 0),
+        porcentaje: totalCanales > 0 ? Number(((Number(r.total_canales || 0) / totalCanales) * 100).toFixed(1)) : 0,
+        peso_medio: Number(r.peso_medio || 0),
+        precio_medio_kg: Number(r.precio_medio_kg || 0),
+        importe_acumulado: Number(r.importe_acumulado || 0)
+      }));
+    } catch (e) {
+      console.error("[DB] Error en obtenerDistribucionPesosCanal:", e);
+      return [];
+    }
+  }
+
+  obtenerCebaderoActivo() {
+    try {
+      const rows = this.ejecutarQuery(`
+        SELECT 
+          a.crotal, 
+          a.crotal_4, 
+          a.fecha_nacimiento, 
+          a.sexo, 
+          a.raza, 
+          a.corral,
+          ROUND(JULIANDAY('now') - JULIANDAY(a.fecha_nacimiento)) as dias_vida
+        FROM animales a
+        WHERE (a.estado = 'A' OR a.estado = 'ALTA')
+          AND (a.corral LIKE '%CEBAD%' OR a.corral LIKE '%122%' OR a.corral LIKE '%CEBO%')
+        ORDER BY dias_vida DESC
+      `) || [];
+
+      const animales = rows.map(r => {
+        const diasVida = Number(r.dias_vida || 0);
+        const diasEstanciaEst = Math.max(30, Math.min(270, diasVida - 180));
+        const esMacho = (r.sexo || "").toUpperCase().startsWith("M");
+        const gmd = esMacho ? 1.35 : 1.15;
+        const pesoDesteteVivo = esMacho ? 250 : 230;
+        const pesoVivoEst = Number((pesoDesteteVivo + (diasEstanciaEst * gmd)).toFixed(1));
+        const rendimiento = esMacho ? 0.58 : 0.56;
+        const pesoCanalEst = Number((pesoVivoEst * rendimiento).toFixed(1));
+
+        let estadoSalida = "OPTIMO";
+        let riesgoSobrepeso = false;
+        if (pesoCanalEst > 350) {
+          estadoSalida = "SOBREPESO";
+          riesgoSobrepeso = true;
+        } else if (pesoCanalEst >= 335 || diasEstanciaEst >= 165) {
+          estadoSalida = "SACRIFICAR";
+          riesgoSobrepeso = true;
+        }
+
+        return {
+          crotal: r.crotal,
+          crotal_4: r.crotal_4 || (r.crotal ? r.crotal.slice(-4) : "—"),
+          fecha_nacimiento: r.fecha_nacimiento,
+          sexo: r.sexo,
+          raza: r.raza,
+          corral: r.corral,
+          dias_vida: diasVida,
+          dias_estancia_estimados: diasEstanciaEst,
+          peso_vivo_estimado: pesoVivoEst,
+          peso_canal_estimado: pesoCanalEst,
+          estado_salida: estadoSalida,
+          riesgo_sobrepeso: riesgoSobrepeso
+        };
+      });
+
+      const n = animales.length;
+      const sumaEstancia = animales.reduce((acc, a) => acc + a.dias_estancia_estimados, 0);
+      const cabezasRiesgo = animales.filter(a => a.riesgo_sobrepeso).length;
+      const COSTE_DIARIO_CAB = 2.65;
+      const costeDiarioTotal = Number((n * COSTE_DIARIO_CAB).toFixed(2));
+      const costeAcumuladoLote = Number((sumaEstancia * COSTE_DIARIO_CAB).toFixed(2));
+
+      return {
+        total_cabezas: n,
+        estancia_media_dias: n > 0 ? Math.round(sumaEstancia / n) : 0,
+        coste_diario_total: costeDiarioTotal,
+        coste_acumulado_lote: costeAcumuladoLote,
+        cabezas_riesgo_sobrepeso: cabezasRiesgo,
+        animales
+      };
+    } catch (e) {
+      console.error("[DB] Error en obtenerCebaderoActivo:", e);
+      return {
+        total_cabezas: 0,
+        estancia_media_dias: 0,
+        coste_diario_total: 0,
+        coste_acumulado_lote: 0,
+        cabezas_riesgo_sobrepeso: 0,
+        animales: []
+      };
+    }
   }
 
   obtenerMovimientos(params = {}) {
