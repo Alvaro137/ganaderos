@@ -2382,14 +2382,24 @@ class CampoDB {
         ORDER BY dias_vida DESC
       `) || [];
 
+      let sumaEstancia = 0;
+      let sumaGmdVivo = 0;
+      let sumaGmdCanal = 0;
+
       const animales = rows.map(r => {
         const diasVida = Number(r.dias_vida || 0);
         const diasEstanciaEst = Math.max(30, Math.min(270, diasVida - 180));
         const esMacho = (r.sexo || "").toUpperCase().startsWith("M");
-        const gmd = esMacho ? 1.35 : 1.15;
-        const pesoDesteteVivo = esMacho ? 250 : 230;
-        const pesoVivoEst = Number((pesoDesteteVivo + (diasEstanciaEst * gmd)).toFixed(1));
+        const gmdVivo = esMacho ? 1.35 : 1.15;
         const rendimiento = esMacho ? 0.58 : 0.56;
+        const gmdCanal = Number((gmdVivo * rendimiento).toFixed(2));
+
+        sumaEstancia += diasEstanciaEst;
+        sumaGmdVivo += gmdVivo;
+        sumaGmdCanal += gmdCanal;
+
+        const pesoDesteteVivo = esMacho ? 250 : 230;
+        const pesoVivoEst = Number((pesoDesteteVivo + (diasEstanciaEst * gmdVivo)).toFixed(1));
         const pesoCanalEst = Number((pesoVivoEst * rendimiento).toFixed(1));
 
         let estadoSalida = "OPTIMO";
@@ -2411,6 +2421,9 @@ class CampoDB {
           corral: r.corral,
           dias_vida: diasVida,
           dias_estancia_estimados: diasEstanciaEst,
+          gmd_vivo_estimada: gmdVivo,
+          gmd_canal_estimada: gmdCanal,
+          rendimiento_canal: rendimiento,
           peso_vivo_estimado: pesoVivoEst,
           peso_canal_estimado: pesoCanalEst,
           estado_salida: estadoSalida,
@@ -2419,15 +2432,18 @@ class CampoDB {
       });
 
       const n = animales.length;
-      const sumaEstancia = animales.reduce((acc, a) => acc + a.dias_estancia_estimados, 0);
       const cabezasRiesgo = animales.filter(a => a.riesgo_sobrepeso).length;
       const COSTE_DIARIO_CAB = 2.65;
       const costeDiarioTotal = Number((n * COSTE_DIARIO_CAB).toFixed(2));
       const costeAcumuladoLote = Number((sumaEstancia * COSTE_DIARIO_CAB).toFixed(2));
+      const gmdMediaVivo = n > 0 ? Number((sumaGmdVivo / n).toFixed(2)) : 1.35;
+      const gmdMediaCanal = n > 0 ? Number((sumaGmdCanal / n).toFixed(2)) : 0.78;
 
       return {
         total_cabezas: n,
         estancia_media_dias: n > 0 ? Math.round(sumaEstancia / n) : 0,
+        gmd_media_vivo: gmdMediaVivo,
+        gmd_media_canal: gmdMediaCanal,
         coste_diario_total: costeDiarioTotal,
         coste_acumulado_lote: costeAcumuladoLote,
         cabezas_riesgo_sobrepeso: cabezasRiesgo,
