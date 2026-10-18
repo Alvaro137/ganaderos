@@ -230,13 +230,16 @@ export function calcularSimulacionTimingVenta(params = {}) {
   const pesoCanalNuevo = Number((pesoVivoNuevo * rendimiento).toFixed(1));
   const gananciaCanal = Number((pesoCanalNuevo - pesoCanalActual).toFixed(1));
 
+  const umbralSobrepeso = esMacho ? 350.0 : 270.0;
+  const descuentoSobrepeso = params.penalizacionKg != null ? params.penalizacionKg : (esMacho ? 0.25 : 0.55);
+
   let penalizacionSobrepeso = 0;
   let precioFinalEfectivo = precioEsperadoKg;
   let saltaSobrepeso = false;
 
-  if (esMacho && pesoCanalActual <= 350.0 && pesoCanalNuevo > 350.0) {
+  if (pesoCanalActual <= umbralSobrepeso && pesoCanalNuevo > umbralSobrepeso) {
     saltaSobrepeso = true;
-    precioFinalEfectivo = Math.max(0, Number((precioEsperadoKg - 0.25).toFixed(3)));
+    precioFinalEfectivo = Math.max(0, Number((precioEsperadoKg - descuentoSobrepeso).toFixed(3)));
     penalizacionSobrepeso = Number(((precioEsperadoKg - precioFinalEfectivo) * pesoCanalNuevo).toFixed(2));
   }
 
