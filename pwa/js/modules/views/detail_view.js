@@ -23,7 +23,6 @@ import { renderVistaAnimales } from './cattle_view.js';
 import { abrirModalRegistroParto } from './birth_modal.js';
 import { renderVistaLiquidaciones, verDetalleLiquidacion } from './sales_view.js';
 import { renderVistaMovimientos } from './movements_view.js';
-import { abrirModalRegistroPesaje } from './weighing_modal.js';
 
 
 function adjuntarEventosDetalle(contenedor) {
@@ -51,15 +50,6 @@ function adjuntarEventosDetalle(contenedor) {
       const c4 = btn.getAttribute("data-madre-4") || btn.dataset.madre4;
       const raza = btn.getAttribute("data-madre-raza") || btn.dataset.madreRaza;
       abrirModalRegistroParto({ madreCrotal: crotal, madre4: c4, madreRaza: raza });
-    });
-  });
-  contenedor.querySelectorAll('[data-action="registrar-pesaje"]').forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      const crotal = btn.getAttribute("data-crotal") || btn.dataset.crotal;
-      const c4 = btn.getAttribute("data-crotal-4") || btn.dataset.crotal4;
-      abrirModalRegistroPesaje({ crotal, crotal_4: c4 });
     });
   });
   contenedor.querySelectorAll('[data-action="ver-factura"]').forEach((btn) => {
@@ -386,9 +376,8 @@ export function generarHtmlDetalleAnimal(animal) {
 
   const esHembra = !animal.sexo || ['H', 'V'].includes(animal.sexo.trim().toUpperCase()[0]);
   const descSexo = (animal.sexo === 'M' || animal.sexo === 'Machos') ? 'Macho' : esHembra ? 'Hembra' : escapeHtml(animal.sexo || 'N/D');
-  const htmlPesajes = (!animal.pesajes || animal.pesajes.length === 0)
-    ? `<div class="empty-notice" style="padding: 14px; text-align: center; color: var(--text-dim); background: var(--bg-surface-soft, #f9fafb); border-radius: 8px;">Sin pesajes registrados en báscula.</div>`
-    : `<div class="pesajes-list" style="display: flex; flex-direction: column; gap: 8px;">` +
+  const htmlPesajes = (animal.pesajes && animal.pesajes.length > 0)
+    ? `<div class="pesajes-list" style="display: flex; flex-direction: column; gap: 8px;">` +
       animal.pesajes.slice().reverse().map(p => `
         <div class="pesaje-item-card" style="background: var(--md-surface-container-low, #f8faf8); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div>
@@ -402,7 +391,8 @@ export function generarHtmlDetalleAnimal(animal) {
             </div>
           </div>
         </div>
-      `).join("") + `</div>`;
+      `).join("") + `</div>`
+    : "";
 
   const htmlTratamientos = (!animal.tratamientos || animal.tratamientos.length === 0)
     ? ""
@@ -593,14 +583,13 @@ export function generarHtmlDetalleAnimal(animal) {
       </div>
       ` : ""}
 
+      ${(animal.pesajes && animal.pesajes.length > 0) ? `
       <!-- Control de Pesajes y Crecimiento -->
-      <div class="section-heading" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
-        <span>Control de Pesajes y Crecimiento (${animal.pesajes ? animal.pesajes.length : 0})</span>
-        <button class="btn-registrar-parto-detail" data-action="registrar-pesaje" data-crotal="${escapeHtml(animal.crotal)}" data-crotal-4="${escapeHtml(animal.crotal_4)}">
-          <span>➕ Añadir Pesaje</span>
-        </button>
+      <div class="section-heading" style="margin-top: 20px;">
+        <span>Control de Pesajes y Crecimiento (${animal.pesajes.length})</span>
       </div>
       <div>${htmlPesajes}</div>
+      ` : ""}
 
       <!-- Tratamientos Sanitarios -->
       ${htmlTratamientos}
