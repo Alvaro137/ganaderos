@@ -14,6 +14,7 @@ import {
   createChart,
   LineSeries,
   AreaSeries,
+  createSeriesMarkers,
   CrosshairMode
 } from '../../vendor/lightweight-charts.mjs';
 import { escapeHtml } from '../config.js';
@@ -223,10 +224,11 @@ export function initTradingChart(config) {
 
     const series = chart.addSeries(SeriesConstructor, seriesOptions);
 
-    // Filtrar y ordenar datos válidos
+    // Filtrar y ordenar datos válidos preservando metadatos (esReal, estimado, etc.)
     const dataLimpia = (def.data || [])
       .filter(d => d && d.time && d.value != null && !isNaN(d.value))
       .map(d => ({
+        ...d,
         time: String(d.time).slice(0, 10),
         value: Number(d.value)
       }))
@@ -243,7 +245,35 @@ export function initTradingChart(config) {
     });
 
     if (dataUnica.length > 0) {
-      series.setData(dataUnica);
+      series.setData(dataUnica.map(d => ({ time: d.time, value: d.value })));
+
+      // Generar marcadores visuales para distinguir datos reales de interpolaciones
+      if (def.showMarkers !== false) {
+        try {
+          const markers = [];
+          const esTransaccion = def.id.includes('granja') || def.id.includes('ingresos') || def.id.includes('gastos') || def.id.includes('margen') || def.showMarkers === true;
+
+          if (esTransaccion) {
+            dataUnica.forEach(d => {
+              if (!d.estimado && d.esReal !== false) {
+                markers.push({
+                  time: d.time,
+                  position: 'inBar',
+                  color: def.color || '#ea580c',
+                  shape: 'circle',
+                  size: 1
+                });
+              }
+            });
+          }
+
+          if (markers.length > 0) {
+            createSeriesMarkers(series, markers);
+          }
+        } catch (err) {
+          console.warn("[TradingView] No se pudieron aplicar marcadores a la serie:", def.id, err);
+        }
+      }
     }
 
     const isVisible = def.defaultVisible !== false;
@@ -289,11 +319,32 @@ export function initTradingChart(config) {
         ? `${Number(val).toFixed(def.decimales != null ? def.decimales : 2)} ${def.unit || '€'}`
         : "—";
 
+      // Detectar si en esta fecha exacta hay un dato real de granja o tesorería
+      const puntoExacto = data.find(p => p.time === timeHovered);
+      let badgeInfo = "";
+      if (puntoExacto) {
+        if (puntoExacto.estimado) {
+          badgeInfo = ` <span class="trading-hud-tag tag-est" style="font-size: 0.70rem; padding: 1px 5px; border-radius: 4px; background: rgba(148, 163, 184, 0.2); color: #475569; font-weight: 700;">Est.</span>`;
+        } else if (puntoExacto.esReal !== false) {
+          let detalle = "Real";
+          if (puntoExacto.canales_total != null && puntoExacto.canales_total > 0) {
+            detalle = `${puntoExacto.canales_total} can.`;
+          } else if (puntoExacto.cabezas != null && puntoExacto.cabezas > 0) {
+            detalle = `${puntoExacto.cabezas} cab.`;
+          } else if (puntoExacto.kg_total != null && puntoExacto.kg_total > 0) {
+            detalle = `${Math.round(puntoExacto.kg_total).toLocaleString('es-ES')} kg`;
+          }
+          badgeInfo = ` <span class="trading-hud-tag tag-real" style="font-size: 0.70rem; padding: 1px 5px; border-radius: 4px; background: rgba(34, 197, 94, 0.18); color: #15803d; font-weight: 800;">✓ ${detalle}</span>`;
+        }
+      } else if (timeHovered && (def.id.includes('granja') || def.id.includes('ingresos') || def.id.includes('gastos'))) {
+        badgeInfo = ` <span class="trading-hud-tag tag-interp" style="font-size: 0.68rem; padding: 1px 4px; border-radius: 4px; background: rgba(203, 213, 225, 0.3); color: #64748b;">(interp.)</span>`;
+      }
+
       itemsHtml.push(`
         <span class="trading-hud-item" style="color: ${def.color};">
           <span class="trading-hud-bullet">●</span>
           <span class="trading-hud-name">${escapeHtml(def.shortLabel || def.label)}:</span>
-          <strong>${valTexto}</strong>
+          <strong>${valTexto}</strong>${badgeInfo}
         </span>
       `);
     });

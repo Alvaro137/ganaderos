@@ -439,6 +439,14 @@ def leer_compras_alimento(cur: pyodbc.Cursor) -> list[dict[str, Any]]:
     for f in filas:
         kg = float(f[3]) if f[3] is not None else 0.0
         importe = float(f[4]) if f[4] is not None else 0.0
+
+        # Saneamiento defensivo contra anomalías de escala históricas en Access
+        if importe > 1000000 and kg > 0 and 0.10 <= (importe / 100000.0) / kg <= 2.0:
+            importe = round(importe / 100000.0, 2)
+        elif kg > 0 and 100.0 <= (importe / kg) <= 1000.0:
+            precio_real_t = importe / kg
+            importe = round(kg * (precio_real_t / 1000.0), 2)
+
         precio_kg = round(importe / kg, 4) if kg > 0 and importe > 0 else 0.0
 
         compras.append({
