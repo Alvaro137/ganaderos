@@ -899,20 +899,33 @@ function vincularEventosDashboard() {
   }
 
   // Inicializar gráficos TradingView de la sección activa
-  setTimeout(() => {
-    inicializarGraficosActivos();
-  }, 60);
+  if (typeof requestAnimationFrame !== "undefined") {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        inicializarGraficosActivos();
+      }, 50);
+    });
+  } else {
+    setTimeout(() => {
+      inicializarGraficosActivos();
+    }, 60);
+  }
 }
 
 /**
  * Inicializa los gráficos interactivos de TradingView según la pestaña activa.
  */
-function inicializarGraficosActivos() {
+function inicializarGraficosActivos(reintento = 0) {
   const seccion = AppState.seccionFinanciera || "liquidaciones";
 
   if (seccion === "liquidaciones") {
     const el = document.getElementById("chart-carne-tv-canvas") || document.getElementById("chart-carne-tv");
-    if (!el) return;
+    if (!el) {
+      if (reintento < 3) {
+        setTimeout(() => inicializarGraficosActivos(reintento + 1), 100);
+      }
+      return;
+    }
 
     try {
       const seriesTrading = obtenerSeriesTradingCarne(
@@ -943,7 +956,12 @@ function inicializarGraficosActivos() {
     }
   } else if (seccion === "tesoreria") {
     const el = document.getElementById("chart-tesoreria-tv-canvas") || document.getElementById("chart-tesoreria-tv");
-    if (!el) return;
+    if (!el) {
+      if (reintento < 3) {
+        setTimeout(() => inicializarGraficosActivos(reintento + 1), 100);
+      }
+      return;
+    }
 
     try {
       const seriesTrading = obtenerSeriesTradingTesoreria(

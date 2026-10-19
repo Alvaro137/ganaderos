@@ -139,9 +139,11 @@ export function initTradingChart(config) {
 
   let anchoInicial = canvasEl.clientWidth;
   if (!anchoInicial || anchoInicial <= 0) {
-    anchoInicial = canvasEl.parentElement?.clientWidth || window.innerWidth || 600;
-    if (anchoInicial > 1040) anchoInicial = 1040;
+    const parent = canvasEl.closest('.trading-chart-card') || canvasEl.parentElement;
+    anchoInicial = parent?.clientWidth || (typeof window !== "undefined" && window.innerWidth ? Math.max(window.innerWidth - 32, 280) : 600);
   }
+  if (anchoInicial > 1040) anchoInicial = 1040;
+  if (anchoInicial < 260) anchoInicial = 260;
 
   // Formateador de precios
   const defaultFormatter = (price) => {
@@ -270,11 +272,11 @@ export function initTradingChart(config) {
         series.setData(dataUnica.map(d => ({ time: d.time, value: d.value })));
       }
 
-      // Generar marcadores visuales para distinguir datos reales de interpolaciones
-      if (def.showMarkers !== false) {
+      // Generar marcadores visuales para distinguir datos reales de interpolaciones (no soportado en HistogramSeries)
+      if (def.showMarkers !== false && !isHistogram) {
         try {
           const markers = [];
-          const esTransaccion = def.id.includes('granja') || def.id.includes('ingresos') || def.id.includes('gastos') || def.id.includes('margen') || def.showMarkers === true;
+          const esTransaccion = def.id.includes('granja') || def.id.includes('ingresos') || def.id.includes('gastos') || def.showMarkers === true;
 
           if (esTransaccion) {
             dataUnica.forEach(d => {
@@ -399,10 +401,14 @@ export function initTradingChart(config) {
     actualizarHUD(param.time, param.seriesData);
   });
 
+  // Ajustar escala base al contenido (garantiza renderizado y cálculo de coordenadas)
+  try {
+    chart.timeScale().fitContent();
+  } catch (_) {}
+
   // Ajustar escala al contenido o al rango por defecto (evita aplastar 150 meses en 800px)
   const defRange = config.defaultRange || "1Y";
   const maxTimeStr = obtenerUltimoTiempo();
-  let rangoAplicado = false;
 
   if (maxTimeStr && defRange !== "ALL") {
     const maxDate = new Date(maxTimeStr);
@@ -413,19 +419,16 @@ export function initTradingChart(config) {
     else if (defRange === "1Y") fromDate.setFullYear(fromDate.getFullYear() - 1);
 
     const fromStr = fromDate.toISOString().slice(0, 10);
-    try {
-      chart.timeScale().setVisibleRange({ from: fromStr, to: maxTimeStr });
-      rangoAplicado = true;
-    } catch (_) {}
-  }
-
-  if (!rangoAplicado) {
-    let totalPuntos = 0;
-    seriesMap.forEach(({ data }) => { totalPuntos += (data ? data.length : 0); });
-    if (totalPuntos > 0) {
+    const aplicarRango = () => {
       try {
-        chart.timeScale().fitContent();
+        chart.timeScale().setVisibleRange({ from: fromStr, to: maxTimeStr });
       } catch (_) {}
+    };
+
+    if (typeof requestAnimationFrame !== "undefined") {
+      requestAnimationFrame(aplicarRango);
+    } else {
+      aplicarRango();
     }
   }
 
@@ -440,6 +443,9 @@ export function initTradingChart(config) {
       }
     });
     resizeObserver.observe(canvasEl);
+    if (canvasEl.parentElement) {
+      resizeObserver.observe(canvasEl.parentElement);
+    }
   }
 
   // Enlazar eventos de checkboxes de capas
