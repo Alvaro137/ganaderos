@@ -335,6 +335,7 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
 
     const chartTesoreria = page.locator('#chart-tesoreria-tv-card');
     await expect(chartTesoreria).toBeVisible({ timeout: 10000 });
+    await chartTesoreria.scrollIntoViewIfNeeded();
 
     await page.screenshot({ path: path.join(ARTIFACT_DIR, 'mobile_v17_radar_vacuno_carne.png') });
   });
@@ -404,6 +405,16 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     // Cerrar modal
     await page.locator('#btn-cerrar-modal-metodologia').click();
     await expect(modalOverlay).toBeHidden();
+  });
+
+  test('V21. Navegación Directa Móvil a Ventas desde Barra Inferior', async ({ page }) => {
+    const btnVentasMobile = page.locator('.mobile-tab-bar [data-tab="ventas"]');
+    await expect(btnVentasMobile).toBeVisible({ timeout: 10000 });
+    await btnVentasMobile.click();
+
+    const chartCard = page.locator('#chart-carne-tv-card');
+    await expect(chartCard).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#chart-carne-tv-canvas')).toBeVisible({ timeout: 10000 });
   });
 });
 
