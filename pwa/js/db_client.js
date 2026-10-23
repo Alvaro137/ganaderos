@@ -225,12 +225,31 @@ class CampoDB {
         "Authorization": `Bearer ${token}`,
         "X-Auth-Token": token
       };
-      const resp = await fetch("./api/database", { headers });
+      // cache: "no-store" evita que el navegador reutilice una copia antigua del
+      // SQLite (uvicorn envía ETag/Last-Modified y Chrome aplica frescura
+      // heurística, mostrando liquidaciones desfasadas durante horas).
+      const resp = await fetch("./api/database", { headers, cache: "no-store" });
       if (resp.ok) {
         const newBuf = await resp.arrayBuffer();
         await guardarBaseDatosLocal(newBuf);
         console.log("[DB] Censo local actualizado en segundo plano en IndexedDB.");
-        this._reemplazarBaseDatosEnCaliente(newBuf);
+        const hotOk = this._reemplazarBaseDatosEnCaliente(newBuf);
+
+        // Mantener actualizado el mtime de referencia para que la comprobación
+        // de novedades (/api/database/meta) no siga avisando de una actualización
+        // ya descargada en segundo plano.
+        const lastMod = resp.headers.get("last-modified");
+        const mtimeServidor = lastMod ? Math.floor(new Date(lastMod).getTime() / 1000) : null;
+        if (hotOk && mtimeServidor) {
+          setStoredDBMeta({
+            mtime: mtimeServidor,
+            mtime_iso: new Date(lastMod).toISOString(),
+            descargado_en: new Date().toISOString(),
+            total_animales: this.contarAnimales("", false),
+            filename: "ganaderos_campo.sqlite"
+          });
+        }
+
         appendSyncHistory({
           accion: "Sincronización en segundo plano",
           estado: "Éxito",
@@ -253,7 +272,7 @@ class CampoDB {
       headers["X-Auth-Token"] = token;
     }
     try {
-      const resp = await fetch("./api/database/meta", { headers });
+      const resp = await fetch("./api/database/meta", { headers, cache: "no-store" });
       if (!resp.ok) {
         if (resp.status === 401) return { ok: false, razon: "auth_required" };
         return { ok: false, razon: "error_servidor", status: resp.status };
@@ -307,13 +326,15 @@ class CampoDB {
 
     let serverMeta = null;
     try {
-      const metaResp = await fetch("./api/database/meta", { headers });
+      const metaResp = await fetch("./api/database/meta", { headers, cache: "no-store" });
       if (metaResp.ok) {
         serverMeta = await metaResp.json();
       }
     } catch (_) {}
 
-    const resp = await fetch("./api/database", { headers });
+    // Descarga forzada (botón "Sincronizar"): sin caché HTTP para no reutilizar
+    // un binario anterior a la última ingesta de facturas.
+    const resp = await fetch("./api/database", { headers, cache: "no-store" });
     if (!resp.ok) {
       appendSyncHistory({ accion: "Descarga manual", estado: "Error", detalle: `Fallo HTTP ${resp.status}` });
       if (resp.status === 401) throw new Error("AUTH_REQUIRED");
@@ -386,7 +407,7 @@ class CampoDB {
 
     let response;
     try {
-      response = await fetch("./api/database", { headers });
+      response = await fetch("./api/database", { headers, cache: "no-store" });
     } catch (netErr) {
       throw new Error("SIN_CONEXION_INICIAL");
     }
@@ -409,9 +430,13 @@ class CampoDB {
     this._cargarMetadatos();
 
     const countInit = this.contarAnimales("", false);
+    // Guardar como mtime de referencia el del fichero servido (no "ahora"):
+    // así /api/database/meta detecta correctamente futuras actualizaciones.
+    const lastMod = response.headers.get("last-modified");
+    const mtimeServidor = lastMod ? Math.floor(new Date(lastMod).getTime() / 1000) : null;
     setStoredDBMeta({
-      mtime: Math.floor(Date.now() / 1000),
-      mtime_iso: new Date().toISOString(),
+      mtime: mtimeServidor || Math.floor(Date.now() / 1000),
+      mtime_iso: mtimeServidor ? new Date(lastMod).toISOString() : new Date().toISOString(),
       descargado_en: new Date().toISOString(),
       total_animales: countInit,
       filename: "ganaderos_campo.sqlite"

@@ -106,6 +106,9 @@ class TestFastAPI(unittest.TestCase):
         resp = self.client.get("/api/database")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.headers.get("content-type"), "application/octet-stream")
+        self.assertEqual(
+            resp.headers.get("cache-control"), "no-store, no-cache, must-revalidate, max-age=0"
+        )
         self.assertIn("ganaderos_campo.sqlite", resp.headers.get("content-disposition", ""))
         self.assertGreater(len(resp.content), 1024)
 
@@ -239,6 +242,9 @@ class TestFastAPI(unittest.TestCase):
         self.assertIn("size_bytes", data)
         self.assertIn("filename", data)
         self.assertIsInstance(data["mtime"], int)
+        self.assertEqual(
+            resp.headers.get("cache-control"), "no-store, no-cache, must-revalidate, max-age=0"
+        )
         self.assertGreater(data["size_bytes"], 0)
 
     def test_lonja_sync_endpoint(self):
