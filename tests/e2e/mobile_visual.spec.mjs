@@ -405,7 +405,8 @@ test.describe('Pruebas E2E y Capturas Visuales Móviles', () => {
     await expect(modalOverlay).toBeHidden();
   });
 
-  test('V21. Navegación Directa Móvil a Ventas desde Barra Inferior', async ({ page }) => {
+  test('V21. Navegación Directa Móvil a Ventas desde Barra Inferior', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Prueba exclusiva para dispositivos móviles (< 768px)');
     const btnVentasMobile = page.locator('.mobile-tab-bar [data-tab="ventas"]');
     await expect(btnVentasMobile).toBeVisible({ timeout: 10000 });
     await btnVentasMobile.click();
