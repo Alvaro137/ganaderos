@@ -36,11 +36,13 @@ def _parse_float(val: Optional[str]) -> Optional[float]:
 def _normalizar_fecha_iso(fecha_str: Optional[str]) -> Optional[str]:
     if not fecha_str:
         return None
-    try:
-        dt = datetime.strptime(fecha_str.strip(), "%d/%m/%Y")
-        return dt.strftime("%Y-%m-%d")
-    except ValueError:
-        return None
+    s = str(fecha_str).strip()
+    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
 
 
 def _parsear_texto_factura_individual(text: str, nombre_archivo: str = "factura.pdf") -> Dict[str, Any]:
@@ -217,6 +219,51 @@ def guardar_liquidacion_en_bd(conn: sqlite3.Connection, datos: Dict[str, Any]) -
     """
     cur = conn.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ventas_liquidaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero_factura TEXT UNIQUE NOT NULL,
+            fecha_factura TEXT,
+            fecha_pago TEXT,
+            cliente_cooperativa TEXT DEFAULT 'GANAVAEX, S.COOP',
+            cif_cliente TEXT DEFAULT 'F37335411',
+            total_cabezas REAL,
+            total_kilos_canal REAL,
+            base_imponible REAL,
+            porcentaje_iva REAL DEFAULT 10.50,
+            cuota_iva REAL,
+            gastos_total REAL,
+            total_factura REAL,
+            archivo_origen TEXT
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ventas_canales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            factura_id INTEGER REFERENCES ventas_liquidaciones(id) ON DELETE CASCADE,
+            linea_numero INTEGER,
+            articulo TEXT,
+            cabezas REAL DEFAULT 1.0,
+            peso_canal_kg REAL,
+            precio_unitario REAL,
+            importe_linea REAL,
+            referencia TEXT,
+            fecha_salida_lote TEXT,
+            crotal_asignado TEXT
+        );
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ventas_gastos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            factura_id INTEGER REFERENCES ventas_liquidaciones(id) ON DELETE CASCADE,
+            concepto TEXT,
+            importe REAL
+        );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ventas_factura ON ventas_canales(factura_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ventas_crotal ON ventas_canales(crotal_asignado);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas_liquidaciones(fecha_factura);")
 
     def _insertar_una_factura(d: Dict[str, Any]) -> int:
         cur.execute(

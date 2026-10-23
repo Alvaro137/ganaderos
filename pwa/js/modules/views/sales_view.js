@@ -113,16 +113,13 @@ export function renderVistaLiquidaciones() {
             <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0;">Control de liquidaciones, cebadero activo y cotizaciones de Lonja</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-            <button id="btn-sincronizar-datos" title="Descargar del servidor las liquidaciones y el censo más recientes" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 0.8rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); color: var(--text-main); cursor: pointer;">
-              ↻ <span>Sincronizar</span>
-            </button>
             <button id="btn-info-metodologia" class="btn-info-metodologia" title="Explicación técnica de cálculos, GPD y Lonja" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 0.8rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); color: var(--text-main); cursor: pointer;">
               ℹ️ <span>Metodología</span>
             </button>
-            <label for="input-subir-factura" id="btn-subir-factura-pdf" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 0.82rem; font-weight: 700; border-radius: var(--md-shape-md); cursor: pointer;">
+            <button id="btn-subir-factura-pdf" class="btn-primary" type="button" title="Subir factura de liquidación en formato PDF" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 0.82rem; font-weight: 700; border-radius: var(--md-shape-md); cursor: pointer;">
               <span>+ Subir Factura PDF</span>
-              <input type="file" id="input-subir-factura" accept="application/pdf" style="display: none;" />
-            </label>
+            </button>
+            <input type="file" id="input-subir-factura" accept="application/pdf" style="display: none;" />
           </div>
         </div>
 
@@ -293,9 +290,9 @@ function renderSeccionLiquidaciones(resumen) {
             Para mantener el rigor contable y no mostrar promedios ni márgenes en 0 € ficticios, los indicadores permanecerán en espera hasta cargar las liquidaciones correspondientes.
           </p>
           <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-            <label for="input-subir-factura" class="btn-primary" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; font-size: 0.84rem; font-weight: 700; border-radius: var(--md-shape-md); cursor: pointer;">
+            <button id="btn-subir-factura-empty" class="btn-primary" type="button" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; font-size: 0.84rem; font-weight: 700; border-radius: var(--md-shape-md); cursor: pointer;">
               <span>+ Subir Factura PDF (${escapeHtml(AppState.anioFinanciero)})</span>
-            </label>
+            </button>
             ${resumen.salidas_sin_factura > 0 ? `
               <button id="btn-activar-lonja-empty" style="padding: 9px 16px; font-size: 0.84rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-primary); background: transparent; color: var(--md-primary); cursor: pointer;">
                 📈 Proyectar con Lonja (${resumen.salidas_sin_factura} salidas)
@@ -828,38 +825,20 @@ function vincularEventosDashboard() {
     });
   }
 
-  // Sincronización manual: descarga el SQLite vigente del servidor
-  const btnSyncDatos = document.getElementById("btn-sincronizar-datos");
-  if (btnSyncDatos) {
-    btnSyncDatos.addEventListener("click", async () => {
-      const textoOriginal = btnSyncDatos.innerHTML;
-      btnSyncDatos.disabled = true;
-      btnSyncDatos.textContent = "⏳ Sincronizando...";
-      try {
-        const token = localStorage.getItem("campo_pwa_token") || "";
-        await sincronizarBaseDatosAhora(token);
-        renderVistaLiquidaciones();
-        dispararToast("Liquidaciones y censo actualizados desde el servidor.");
-      } catch (err) {
-        console.error("[Ventas] Error sincronizando datos:", err);
-        const msg = String(err && err.message ? err.message : err);
-        if (msg.startsWith("MUTACIONES_PENDIENTES")) {
-          dispararToast("Hay registros locales sin subir: resuélvelos en el badge de sincronización antes de descargar.", true);
-        } else if (msg === "SIN_CONEXION") {
-          dispararToast("Sin conexión: no se pueden descargar datos nuevos.", true);
-        } else if (msg === "AUTH_REQUIRED") {
-          dispararToast("Sesión caducada: vuelve a iniciar sesión.", true);
-        } else {
-          dispararToast(`No se pudo sincronizar: ${msg}`, true);
-        }
-        btnSyncDatos.disabled = false;
-        btnSyncDatos.innerHTML = textoOriginal;
-      }
-    });
-  }
-
   // Subir factura PDF: ingestión en servidor + descarga del censo actualizado
   const inputPdf = document.getElementById("input-subir-factura");
+  const btnSubirPdf = document.getElementById("btn-subir-factura-pdf");
+  if (btnSubirPdf && inputPdf) {
+    btnSubirPdf.addEventListener("click", () => {
+      inputPdf.click();
+    });
+  }
+  const btnSubirEmpty = document.getElementById("btn-subir-factura-empty");
+  if (btnSubirEmpty && inputPdf) {
+    btnSubirEmpty.addEventListener("click", () => {
+      inputPdf.click();
+    });
+  }
   if (inputPdf) {
     inputPdf.addEventListener("change", async (e) => {
       const file = e.target.files && e.target.files[0];
@@ -878,7 +857,11 @@ function vincularEventosDashboard() {
 
       dispararToast(`📄 Procesando ${file.name}...`);
       const token = localStorage.getItem("campo_pwa_token") || "";
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        headers["X-Auth-Token"] = token;
+      }
       const fd = new FormData();
       fd.append("file", file);
 
