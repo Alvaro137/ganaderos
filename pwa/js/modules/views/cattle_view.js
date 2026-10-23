@@ -94,7 +94,7 @@ export function renderVistaGanado() {
 
           </button>
 
-          <button class="ganado-segment-btn ${subTab === 'movimientos' ? 'active' : ''}" data-subtab="movimientos" data-tab="movimientos" style="flex: 1; padding: 8px 14px; border-radius: var(--md-shape-full, 9999px); border: none; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; background: ${subTab === 'movimientos' ? 'var(--brand-primary, #1e3a2b)' : 'transparent'}; color: ${subTab === 'movimientos' ? '#ffffff' : 'var(--text-main, #0f172a)'}; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <button class="ganado-segment-btn ${subTab === 'movimientos' ? 'active' : ''}" data-subtab="movimientos" style="flex: 1; padding: 8px 14px; border-radius: var(--md-shape-full, 9999px); border: none; font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; background: ${subTab === 'movimientos' ? 'var(--brand-primary, #1e3a2b)' : 'transparent'}; color: ${subTab === 'movimientos' ? '#ffffff' : 'var(--text-main, #0f172a)'}; display: flex; align-items: center; justify-content: center; gap: 6px;">
 
             <span>🔄 Movimientos</span>
 
