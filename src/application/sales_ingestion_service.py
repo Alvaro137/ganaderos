@@ -1,6 +1,3 @@
-"""Servicio de aplicación para procesar e ingestar facturas PDF de liquidaciones de venta (GANAVAEX)."""
-from __future__ import annotations
-
 import io
 import logging
 import re
@@ -46,18 +43,8 @@ def _normalizar_fecha_iso(fecha_str: Optional[str]) -> Optional[str]:
         return None
 
 
-def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nombre_archivo: str = "factura.pdf") -> Dict[str, Any]:
-    """Parsea una factura de liquidación en PDF (GANAVAEX) extrayendo cabecera, canales y deducciones."""
-    if isinstance(stream_or_path, bytes):
-        reader = pypdf.PdfReader(io.BytesIO(stream_or_path))
-    elif isinstance(stream_or_path, io.BytesIO):
-        reader = pypdf.PdfReader(stream_or_path)
-    else:
-        reader = pypdf.PdfReader(str(stream_or_path))
-
-    # Extraer texto de todas las páginas de la factura
-    text = "\n".join([page.extract_text() or "" for page in reader.pages])
-
+def _parsear_texto_factura_individual(text: str, nombre_archivo: str = "factura.pdf") -> Dict[str, Any]:
+    """Parsea el texto de una factura individual de GANAVAEX."""
     m_fact = re.search(r"Factura\s*(?:CABEZAS\s*)?([A-Z0-9\s/]+?)\s*NIF", text)
     if m_fact:
         num_factura = m_fact.group(1).replace("\n", " ").strip()
@@ -94,10 +81,14 @@ def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nom
     lineas_gastos: List[Dict[str, Any]] = []
 
     regex_animal = re.compile(
-        r"^(TERNERO CEBO|TERNERA CEBO|VACAS O TOROS|LIQ MAYOR IMPORTE[^\d]+)\s+([0-9.,]+)\s+([0-9.,]+)\s*(\d{2})\s+([0-9.,]+)$"
+        r"^(TERNERO CEBO|TERNERA CEBO|VACAS O TOROS|LIQ MAYOR IMPORTE[^\d]+)\s+"
+        r"([0-9.,]+?)\s+"
+        r"([0-9.,]+?)"
+        r"(?:001|002|010|029|032|\d{3})"
+        r"(?:\s+([0-9.,]+))?$"
     )
     regex_gasto = re.compile(
-        r"^(PORTES/GASTOS COMPENSACION|GASTOS\s*<12 meses|GASTOS>24meses|A CTA GASTOS COOP[^\n-]+|ANIMAL >350 KG)\s*(.*)$"
+        r"^(PORTES/GASTOS COMPENSACION|GASTOS\s*<12 meses|GASTOS>24meses|A CTA GASTOS COOP[^\n-]+|ANIMAL >350 KG|URGENCIA)\s*(.*)$"
     )
 
     linea_idx = 1
@@ -105,7 +96,7 @@ def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nom
         line_clean = raw_line.strip()
         m_anim = regex_animal.match(line_clean)
         if m_anim:
-            art, imp_uds, precio_str, ref, cab_str = m_anim.groups()
+            art, imp_uds, precio_str, cab_str = m_anim.groups()
             m_split = re.match(r"^([0-9.,]+?\.\d{2})([0-9.,]+?\.\d{3})$", imp_uds)
             if m_split:
                 importe_str, uds_str = m_split.groups()
@@ -113,20 +104,17 @@ def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nom
                 importe_str = imp_uds
                 uds_str = None
 
-            cabezas_val = _parse_float(cab_str) or 1.0
+            cabezas_val = _parse_float(cab_str) if cab_str else 1.0
             peso_val = _parse_float(uds_str)
             precio_val = _parse_float(precio_str)
             importe_val = _parse_float(importe_str)
 
-            # En facturas oficiales de vacuno, 'uds' indica los kg de la canal individual
-            # (normalmente entre 150 y 550 kg por cabeza).
-            # Si 'uds' es 1.0 o el peso promedio por cabeza es inferior a 50 kg (ej. lote de 16 terneros
-            # facturado como '1.000 uds' o ajustes globales), NO es peso canal en kg sino unidad de lote.
+            # Si 'uds' es 1.0 o el peso promedio por cabeza es inferior a 50 kg (ej. lote facturado
+            # como '1.000 uds' o ajustes globales), NO es peso canal en kg sino unidad de lote.
             if peso_val is not None:
                 if peso_val < 50.0 or (cabezas_val > 1 and (peso_val / cabezas_val) < 50.0):
                     peso_val = None
                     if precio_val is not None and precio_val > 50.0 and cabezas_val > 0:
-                        # Si no hay peso canal, el precio unitario corresponde al precio por cabeza
                         precio_val = round(importe_val / cabezas_val, 2) if importe_val else None
 
             lineas_animales.append(
@@ -136,7 +124,7 @@ def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nom
                     "importe_linea": importe_val,
                     "peso_canal_kg": peso_val,
                     "precio_unitario": precio_val,
-                    "referencia": ref,
+                    "referencia": "001",
                     "cabezas": cabezas_val,
                 }
             )
@@ -178,104 +166,157 @@ def parsear_factura_pdf(stream_or_path: Union[str, Path, io.BytesIO, bytes], nom
     }
 
 
+def parsear_todas_las_facturas_pdf(
+    stream_or_path: Union[str, Path, io.BytesIO, bytes], nombre_archivo: str = "factura.pdf"
+) -> List[Dict[str, Any]]:
+    """Parsea un PDF extrayendo todas las facturas contenidas (soportando PDFs multi-página con varias facturas)."""
+    if isinstance(stream_or_path, bytes):
+        reader = pypdf.PdfReader(io.BytesIO(stream_or_path))
+    elif isinstance(stream_or_path, io.BytesIO):
+        reader = pypdf.PdfReader(stream_or_path)
+    else:
+        reader = pypdf.PdfReader(str(stream_or_path))
+
+    paginas_con_factura = []
+    for i, p in enumerate(reader.pages):
+        txt = p.extract_text() or ""
+        if "GANAVAEX" in txt and ("PAGOS C DUERO" in txt or "Factura" in txt):
+            paginas_con_factura.append((i, txt))
+
+    if len(paginas_con_factura) > 1 and all("Factura" in t for _, t in paginas_con_factura):
+        facturas = []
+        for idx, txt in paginas_con_factura:
+            data = _parsear_texto_factura_individual(txt, nombre_archivo=f"{nombre_archivo}#p{idx+1}")
+            facturas.append(data)
+        return facturas
+
+    # Factura única
+    full_text = "\n".join([page.extract_text() or "" for page in reader.pages])
+    return [_parsear_texto_factura_individual(full_text, nombre_archivo=nombre_archivo)]
+
+
+def parsear_factura_pdf(
+    stream_or_path: Union[str, Path, io.BytesIO, bytes], nombre_archivo: str = "factura.pdf"
+) -> Dict[str, Any]:
+    """Parsea una factura de liquidación en PDF (GANAVAEX).
+    Si el documento contiene múltiples facturas, devuelve la principal con 'otras_facturas'.
+    """
+    facturas = parsear_todas_las_facturas_pdf(stream_or_path, nombre_archivo=nombre_archivo)
+    if not facturas:
+        raise ValueError("No se encontraron datos de factura en el archivo PDF proporcionado.")
+
+    resultado = facturas[0]
+    if len(facturas) > 1:
+        resultado["otras_facturas"] = facturas[1:]
+    return resultado
+
+
 def guardar_liquidacion_en_bd(conn: sqlite3.Connection, datos: Dict[str, Any]) -> int:
-    """Guarda o actualiza de forma atómica una liquidación y sus canales/gastos en la BD SQLite."""
+    """Guarda o actualiza de forma atómica una liquidación y sus canales/gastos en la BD SQLite.
+    Si contiene 'otras_facturas', las persiste también dentro de la misma transacción.
+    """
     cur = conn.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
 
-    # Verificar si ya existe
-    cur.execute(
-        "SELECT id FROM ventas_liquidaciones WHERE numero_factura = ?",
-        (datos["numero_factura"],),
-    )
-    row = cur.fetchone()
+    def _insertar_una_factura(d: Dict[str, Any]) -> int:
+        cur.execute(
+            "SELECT id FROM ventas_liquidaciones WHERE numero_factura = ?",
+            (d["numero_factura"],),
+        )
+        row = cur.fetchone()
 
-    if row:
-        factura_id = row[0]
-        cur.execute(
-            """
-            UPDATE ventas_liquidaciones
-            SET fecha_factura = ?, fecha_pago = ?, cliente_cooperativa = ?, cif_cliente = ?,
-                total_cabezas = ?, total_kilos_canal = ?, base_imponible = ?, porcentaje_iva = ?,
-                cuota_iva = ?, gastos_total = ?, total_factura = ?, archivo_origen = ?
-            WHERE id = ?
-            """,
-            (
-                datos["fecha_factura"],
-                datos["fecha_pago"],
-                datos["cliente_cooperativa"],
-                datos["cif_cliente"],
-                datos["total_cabezas"],
-                datos["total_kilos_canal"],
-                datos["base_imponible"],
-                datos["porcentaje_iva"],
-                datos["cuota_iva"],
-                datos["gastos_total"],
-                datos["total_factura"],
-                datos["archivo_origen"],
-                factura_id,
-            ),
-        )
-        cur.execute("DELETE FROM ventas_canales WHERE factura_id = ?", (factura_id,))
-        cur.execute("DELETE FROM ventas_gastos WHERE factura_id = ?", (factura_id,))
-    else:
-        cur.execute(
-            """
-            INSERT INTO ventas_liquidaciones (
-                numero_factura, fecha_factura, fecha_pago, cliente_cooperativa, cif_cliente,
-                total_cabezas, total_kilos_canal, base_imponible, porcentaje_iva,
-                cuota_iva, gastos_total, total_factura, archivo_origen
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                datos["numero_factura"],
-                datos["fecha_factura"],
-                datos["fecha_pago"],
-                datos["cliente_cooperativa"],
-                datos["cif_cliente"],
-                datos["total_cabezas"],
-                datos["total_kilos_canal"],
-                datos["base_imponible"],
-                datos["porcentaje_iva"],
-                datos["cuota_iva"],
-                datos["gastos_total"],
-                datos["total_factura"],
-                datos["archivo_origen"],
-            ),
-        )
-        factura_id = cur.lastrowid
+        if row:
+            factura_id = row[0]
+            cur.execute(
+                """
+                UPDATE ventas_liquidaciones
+                SET fecha_factura = ?, fecha_pago = ?, cliente_cooperativa = ?, cif_cliente = ?,
+                    total_cabezas = ?, total_kilos_canal = ?, base_imponible = ?, porcentaje_iva = ?,
+                    cuota_iva = ?, gastos_total = ?, total_factura = ?, archivo_origen = ?
+                WHERE id = ?
+                """,
+                (
+                    d["fecha_factura"],
+                    d["fecha_pago"],
+                    d["cliente_cooperativa"],
+                    d["cif_cliente"],
+                    d["total_cabezas"],
+                    d["total_kilos_canal"],
+                    d["base_imponible"],
+                    d["porcentaje_iva"],
+                    d["cuota_iva"],
+                    d["gastos_total"],
+                    d["total_factura"],
+                    d["archivo_origen"],
+                    factura_id,
+                ),
+            )
+            cur.execute("DELETE FROM ventas_canales WHERE factura_id = ?", (factura_id,))
+            cur.execute("DELETE FROM ventas_gastos WHERE factura_id = ?", (factura_id,))
+        else:
+            cur.execute(
+                """
+                INSERT INTO ventas_liquidaciones (
+                    numero_factura, fecha_factura, fecha_pago, cliente_cooperativa, cif_cliente,
+                    total_cabezas, total_kilos_canal, base_imponible, porcentaje_iva,
+                    cuota_iva, gastos_total, total_factura, archivo_origen
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    d["numero_factura"],
+                    d["fecha_factura"],
+                    d["fecha_pago"],
+                    d["cliente_cooperativa"],
+                    d["cif_cliente"],
+                    d["total_cabezas"],
+                    d["total_kilos_canal"],
+                    d["base_imponible"],
+                    d["porcentaje_iva"],
+                    d["cuota_iva"],
+                    d["gastos_total"],
+                    d["total_factura"],
+                    d["archivo_origen"],
+                ),
+            )
+            factura_id = cur.lastrowid
 
-    # Inserción de canales
-    for lin in datos["lineas_animales"]:
-        cur.execute(
-            """
-            INSERT INTO ventas_canales (
-                factura_id, linea_numero, articulo, cabezas, peso_canal_kg,
-                precio_unitario, importe_linea, referencia, crotal_asignado
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                factura_id,
-                lin["linea_numero"],
-                lin["articulo"],
-                lin["cabezas"],
-                lin["peso_canal_kg"],
-                lin["precio_unitario"],
-                lin["importe_linea"],
-                lin["referencia"],
-                lin.get("crotal_asignado"),
-            ),
-        )
+        for lin in d["lineas_animales"]:
+            cur.execute(
+                """
+                INSERT INTO ventas_canales (
+                    factura_id, linea_numero, articulo, cabezas, peso_canal_kg,
+                    precio_unitario, importe_linea, referencia, crotal_asignado
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    factura_id,
+                    lin["linea_numero"],
+                    lin["articulo"],
+                    lin["cabezas"],
+                    lin["peso_canal_kg"],
+                    lin["precio_unitario"],
+                    lin["importe_linea"],
+                    lin.get("referencia", "001"),
+                    lin.get("crotal_asignado"),
+                ),
+            )
 
-    # Inserción de deducciones
-    for gst in datos["lineas_gastos"]:
-        cur.execute(
-            """
-            INSERT INTO ventas_gastos (factura_id, concepto, importe)
-            VALUES (?, ?, ?)
-            """,
-            (factura_id, gst["concepto"], gst["importe"]),
-        )
+        for gst in d["lineas_gastos"]:
+            cur.execute(
+                """
+                INSERT INTO ventas_gastos (factura_id, concepto, importe)
+                VALUES (?, ?, ?)
+                """,
+                (factura_id, gst["concepto"], gst["importe"]),
+            )
+
+        return factura_id
+
+    primer_id = _insertar_una_factura(datos)
+
+    if "otras_facturas" in datos and isinstance(datos["otras_facturas"], list):
+        for otra in datos["otras_facturas"]:
+            _insertar_una_factura(otra)
 
     conn.commit()
-    return factura_id
+    return primer_id
