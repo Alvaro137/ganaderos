@@ -15,7 +15,8 @@ import {
   formatearKg,
   formatearMoneda,
   registrarPasoHistorial,
-  obtenerTextoBotonVolver
+  obtenerTextoBotonVolver,
+  dispararToast
 } from '../config.js';
 import {
   obtenerLiquidaciones,
@@ -112,6 +113,9 @@ export function renderVistaLiquidaciones() {
             <p style="font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 0;">Control de liquidaciones, cebadero activo y cotizaciones de Lonja</p>
           </div>
           <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button id="btn-sincronizar-datos" title="Descargar del servidor las liquidaciones y el censo más recientes" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 0.8rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); color: var(--text-main); cursor: pointer;">
+              ↻ <span>Sincronizar</span>
+            </button>
             <button id="btn-info-metodologia" class="btn-info-metodologia" title="Explicación técnica de cálculos, GPD y Lonja" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 0.8rem; font-weight: 700; border-radius: var(--md-shape-md); border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-low); color: var(--text-main); cursor: pointer;">
               ℹ️ <span>Metodología</span>
             </button>
@@ -821,6 +825,88 @@ function vincularEventosDashboard() {
     selectAnio.addEventListener("change", (e) => {
       AppState.anioFinanciero = e.target.value;
       renderVistaLiquidaciones();
+    });
+  }
+
+  // Sincronización manual: descarga el SQLite vigente del servidor
+  const btnSyncDatos = document.getElementById("btn-sincronizar-datos");
+  if (btnSyncDatos) {
+    btnSyncDatos.addEventListener("click", async () => {
+      const textoOriginal = btnSyncDatos.innerHTML;
+      btnSyncDatos.disabled = true;
+      btnSyncDatos.textContent = "⏳ Sincronizando...";
+      try {
+        const token = localStorage.getItem("campo_pwa_token") || "";
+        await sincronizarBaseDatosAhora(token);
+        renderVistaLiquidaciones();
+        dispararToast("Liquidaciones y censo actualizados desde el servidor.");
+      } catch (err) {
+        console.error("[Ventas] Error sincronizando datos:", err);
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.startsWith("MUTACIONES_PENDIENTES")) {
+          dispararToast("Hay registros locales sin subir: resuélvelos en el badge de sincronización antes de descargar.", true);
+        } else if (msg === "SIN_CONEXION") {
+          dispararToast("Sin conexión: no se pueden descargar datos nuevos.", true);
+        } else if (msg === "AUTH_REQUIRED") {
+          dispararToast("Sesión caducada: vuelve a iniciar sesión.", true);
+        } else {
+          dispararToast(`No se pudo sincronizar: ${msg}`, true);
+        }
+        btnSyncDatos.disabled = false;
+        btnSyncDatos.innerHTML = textoOriginal;
+      }
+    });
+  }
+
+  // Subir factura PDF: ingestión en servidor + descarga del censo actualizado
+  const inputPdf = document.getElementById("input-subir-factura");
+  if (inputPdf) {
+    inputPdf.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        dispararToast("Selecciona un archivo PDF válido.", true);
+        inputPdf.value = "";
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        dispararToast("El PDF supera el tamaño máximo de 10 MB.", true);
+        inputPdf.value = "";
+        return;
+      }
+
+      dispararToast(`📄 Procesando ${file.name}...`);
+      const token = localStorage.getItem("campo_pwa_token") || "";
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const fd = new FormData();
+      fd.append("file", file);
+
+      try {
+        const res = await fetch("./api/ventas/ingest-pdf", { method: "POST", headers, body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || `Error del servidor (${res.status})`);
+        }
+        dispararToast(`✓ Factura ${data.numero_factura} registrada (${data.total_cabezas} canales). Actualizando...`);
+
+        try {
+          await sincronizarBaseDatosAhora(token);
+          renderVistaLiquidaciones();
+        } catch (syncErr) {
+          const msgSync = String(syncErr && syncErr.message ? syncErr.message : syncErr);
+          if (msgSync.startsWith("MUTACIONES_PENDIENTES")) {
+            dispararToast("Factura guardada en el servidor. Hay registros locales pendientes: sincroniza el badge para verla.", true);
+          } else {
+            throw syncErr;
+          }
+        }
+      } catch (err) {
+        console.error("[Ventas] Error subiendo factura PDF:", err);
+        dispararToast(`⚠️ ${err.message || err}`, true);
+      } finally {
+        inputPdf.value = "";
+      }
     });
   }
 

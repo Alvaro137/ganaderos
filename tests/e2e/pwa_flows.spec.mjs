@@ -379,6 +379,11 @@ test.describe('Flujos de Campo PWA Ganaderos', () => {
 
 test.describe('Autenticación y Control de Acceso', () => {
 
+  // Playwright no intercepta peticiones originadas por el Service Worker.
+  // Sin bloquearlo, el mock de /api/database/meta no se aplica y la detección
+  // de novedades depende del mtime real del fichero servido en CI.
+  test.use({ serviceWorkers: 'block' });
+
   test('09. Autenticación, Control de Acceso y Persistencia de Sesión Tras Recarga', async ({ page }) => {
     // 1. Abrir la app limpia sin credenciales
     await page.goto('./');
