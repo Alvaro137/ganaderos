@@ -123,7 +123,7 @@ def parsear_xlsx_animales_moga(origen: Union[str, bytes, io.BytesIO]) -> List[Di
         file_obj = origen
 
     with zipfile.ZipFile(file_obj, "r") as z:
-        sheet = ET.fromstring(z.read("xl/worksheets/sheet1.xml"))
+        sheet = ET.fromstring(z.read("xl/worksheets/sheet1.xml"))  # nosec B314
         ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
         rows = sheet.findall(".//s:row", ns)
 
