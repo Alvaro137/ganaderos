@@ -1,0 +1,1655 @@
+[
+  {
+    "numero_factura": "1 / 1024",
+    "fecha_factura": "2024-12-04",
+    "fecha_pago": "2024-12-06",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 7.0,
+    "total_kilos_canal": 2047.0,
+    "base_imponible": 12103.23,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1270.84,
+    "gastos_total": -186.6,
+    "total_factura": 13106.59,
+    "archivo_origen": "Factura 1-1024 04-12-2024.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 1725.5,
+        "peso_canal_kg": 290.0,
+        "precio_unitario": 5.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2164.76,
+        "peso_canal_kg": 362.0,
+        "precio_unitario": 5.98,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2141.7,
+        "peso_canal_kg": 354.0,
+        "precio_unitario": 6.05,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1651.04,
+        "peso_canal_kg": 272.0,
+        "precio_unitario": 6.07,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1517.25,
+        "peso_canal_kg": 255.0,
+        "precio_unitario": 5.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1410.0,
+        "peso_canal_kg": 235.0,
+        "precio_unitario": 6.0,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1679.58,
+        "peso_canal_kg": 279.0,
+        "precio_unitario": 6.02,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -35.0
+      },
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -70.0
+      },
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -14.6
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -67.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 1132",
+    "fecha_factura": "2024-12-28",
+    "fecha_pago": "2024-12-30",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": null,
+    "total_kilos_canal": null,
+    "base_imponible": 615.6,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 64.64,
+    "gastos_total": null,
+    "total_factura": 666.64,
+    "archivo_origen": "Factura 1-1132 28-12-2024.pdf",
+    "lineas_animales": [],
+    "lineas_gastos": []
+  },
+  {
+    "numero_factura": "1 / 150",
+    "fecha_factura": "2025-03-06",
+    "fecha_pago": "2025-03-07",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 1.0,
+    "total_kilos_canal": 155.0,
+    "base_imponible": 916.0,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 96.18,
+    "gastos_total": -100.0,
+    "total_factura": 991.94,
+    "archivo_origen": "Factura 1-150 06-03-2025.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1023.0,
+        "peso_canal_kg": 155.0,
+        "precio_unitario": 6.6,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -90.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -5.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -5.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 166",
+    "fecha_factura": "2025-03-12",
+    "fecha_pago": "2025-03-13",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 4.0,
+    "total_kilos_canal": 1425.0,
+    "base_imponible": 9418.79,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 988.97,
+    "gastos_total": -163.86,
+    "total_factura": 10199.6,
+    "archivo_origen": "Factura 1-166 12-03-2025.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2355.75,
+        "peso_canal_kg": 349.0,
+        "precio_unitario": 6.75,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2288.25,
+        "peso_canal_kg": 339.0,
+        "precio_unitario": 6.75,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2538.0,
+        "peso_canal_kg": 376.0,
+        "precio_unitario": 6.75,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2400.65,
+        "peso_canal_kg": 361.0,
+        "precio_unitario": 6.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -70.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -20.0
+      },
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -21.86
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -52.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 199",
+    "fecha_factura": "2025-03-19",
+    "fecha_pago": "2025-03-19",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 7.0,
+    "total_kilos_canal": 1488.0,
+    "base_imponible": 10081.51,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1058.56,
+    "gastos_total": -161.0,
+    "total_factura": 10917.27,
+    "archivo_origen": "Factura 1-199 19-03-2025.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1462.8,
+        "peso_canal_kg": 212.0,
+        "precio_unitario": 6.9,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1455.9,
+        "peso_canal_kg": 211.0,
+        "precio_unitario": 6.9,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1426.88,
+        "peso_canal_kg": 208.0,
+        "precio_unitario": 6.86,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1413.16,
+        "peso_canal_kg": 206.0,
+        "precio_unitario": 6.86,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1383.05,
+        "peso_canal_kg": 199.0,
+        "precio_unitario": 6.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1550.36,
+        "peso_canal_kg": 226.0,
+        "precio_unitario": 6.86,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1550.36,
+        "peso_canal_kg": 226.0,
+        "precio_unitario": 6.86,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -70.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -35.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -56.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 224",
+    "fecha_factura": "2025-04-03",
+    "fecha_pago": "2025-04-03",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 10.0,
+    "total_kilos_canal": 2109.0,
+    "base_imponible": 14510.85,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1523.64,
+    "gastos_total": -220.0,
+    "total_factura": 15713.8,
+    "archivo_origen": "Factura 1-224 03-04-2025.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1668.0,
+        "peso_canal_kg": 240.0,
+        "precio_unitario": 6.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1361.1,
+        "peso_canal_kg": 195.0,
+        "precio_unitario": 6.98,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1465.8,
+        "peso_canal_kg": 210.0,
+        "precio_unitario": 6.98,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1480.35,
+        "peso_canal_kg": 213.0,
+        "precio_unitario": 6.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1441.15,
+        "peso_canal_kg": 205.0,
+        "precio_unitario": 7.03,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1356.79,
+        "peso_canal_kg": 193.0,
+        "precio_unitario": 7.03,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1500.7,
+        "peso_canal_kg": 215.0,
+        "precio_unitario": 6.98,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 8,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1455.21,
+        "peso_canal_kg": 207.0,
+        "precio_unitario": 7.03,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 9,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1535.95,
+        "peso_canal_kg": 221.0,
+        "precio_unitario": 6.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 10,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1465.8,
+        "peso_canal_kg": 210.0,
+        "precio_unitario": 6.98,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -90.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -50.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -80.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 390",
+    "fecha_factura": "2024-04-24",
+    "fecha_pago": "2024-04-25",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 14.0,
+    "total_kilos_canal": 0,
+    "base_imponible": 25585.91,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 2686.52,
+    "gastos_total": -142.0,
+    "total_factura": 27706.98,
+    "archivo_origen": "Factura 1-390 24-04-2024-1.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 25727.91,
+        "peso_canal_kg": null,
+        "precio_unitario": 1837.71,
+        "referencia": "001",
+        "cabezas": 14.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -142.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 51",
+    "fecha_factura": "2026-02-04",
+    "fecha_pago": "2026-02-05",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 10.0,
+    "total_kilos_canal": 3081.0,
+    "base_imponible": 23292.75,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 2445.74,
+    "gastos_total": -263.75,
+    "total_factura": 25223.72,
+    "archivo_origen": "Factura 1-51 04-02-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2447.2,
+        "peso_canal_kg": 322.0,
+        "precio_unitario": 7.6,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2769.3,
+        "peso_canal_kg": 362.0,
+        "precio_unitario": 7.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2589.65,
+        "peso_canal_kg": 343.0,
+        "precio_unitario": 7.55,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2363.85,
+        "peso_canal_kg": 309.0,
+        "precio_unitario": 7.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2652.4,
+        "peso_canal_kg": 349.0,
+        "precio_unitario": 7.6,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2166.0,
+        "peso_canal_kg": 285.0,
+        "precio_unitario": 7.6,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2623.95,
+        "peso_canal_kg": 343.0,
+        "precio_unitario": 7.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 8,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2196.4,
+        "peso_canal_kg": 289.0,
+        "precio_unitario": 7.6,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 9,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1934.4,
+        "peso_canal_kg": 248.0,
+        "precio_unitario": 7.8,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 10,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1813.35,
+        "peso_canal_kg": 231.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -21.75
+      },
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -80.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -50.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -112.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 551",
+    "fecha_factura": "2025-08-13",
+    "fecha_pago": "2025-08-14",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 7.0,
+    "total_kilos_canal": 2177.0,
+    "base_imponible": 14849.76,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1559.22,
+    "gastos_total": -231.85,
+    "total_factura": 16080.8,
+    "archivo_origen": "Factura 1-551 13-08-2025.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2383.8,
+        "peso_canal_kg": 348.0,
+        "precio_unitario": 6.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2570.4,
+        "peso_canal_kg": 378.0,
+        "precio_unitario": 6.8,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2448.0,
+        "peso_canal_kg": 360.0,
+        "precio_unitario": 6.8,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2596.15,
+        "peso_canal_kg": 379.0,
+        "precio_unitario": 6.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1880.45,
+        "peso_canal_kg": 263.0,
+        "precio_unitario": 7.15,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1527.21,
+        "peso_canal_kg": 213.0,
+        "precio_unitario": 7.17,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1675.6,
+        "peso_canal_kg": 236.0,
+        "precio_unitario": 7.1,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -70.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -35.0
+      },
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -44.85
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -82.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 857",
+    "fecha_factura": "2024-09-25",
+    "fecha_pago": "2024-09-26",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 1.0,
+    "total_kilos_canal": 0,
+    "base_imponible": 10098.2,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1060.31,
+    "gastos_total": -56.0,
+    "total_factura": 10935.34,
+    "archivo_origen": "Factura 1-857 25-09-2024.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 10154.2,
+        "peso_canal_kg": null,
+        "precio_unitario": 10154.2,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -56.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 1",
+    "fecha_factura": "2026-02-18",
+    "fecha_pago": "2026-02-18",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 91.0,
+    "total_kilos_canal": 0,
+    "base_imponible": 805.0,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 84.53,
+    "gastos_total": null,
+    "total_factura": 871.74,
+    "archivo_origen": "Factura G015-1 18-02-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "LIQ MAYOR IMPORTE VTA ANIMALES AÑO",
+        "importe_linea": 805.0,
+        "peso_canal_kg": null,
+        "precio_unitario": 8.85,
+        "referencia": "001",
+        "cabezas": 91.0
+      }
+    ],
+    "lineas_gastos": []
+  },
+  {
+    "numero_factura": "G015 / 10",
+    "fecha_factura": "2026-08-19",
+    "fecha_pago": "2026-08-20",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 6.0,
+    "total_kilos_canal": 2406.0,
+    "base_imponible": 14787.8,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1552.72,
+    "gastos_total": -213.12,
+    "total_factura": 16013.71,
+    "archivo_origen": "Factura G015-10 19-08-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2635.0,
+        "peso_canal_kg": 425.0,
+        "precio_unitario": 6.2,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2727.45,
+        "peso_canal_kg": 435.0,
+        "precio_unitario": 6.27,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2089.4,
+        "peso_canal_kg": 337.0,
+        "precio_unitario": 6.2,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2292.64,
+        "peso_canal_kg": 368.0,
+        "precio_unitario": 6.23,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2591.68,
+        "peso_canal_kg": 416.0,
+        "precio_unitario": 6.23,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2664.75,
+        "peso_canal_kg": 425.0,
+        "precio_unitario": 6.27,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -80.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -30.0
+      },
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -21.12
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -82.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 11",
+    "fecha_factura": "2026-10-01",
+    "fecha_pago": "2026-10-02",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 7.0,
+    "total_kilos_canal": 2884.0,
+    "base_imponible": 17143.48,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1800.07,
+    "gastos_total": -229.43,
+    "total_factura": 18564.68,
+    "archivo_origen": "Factura G015-11 01-10-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2196.0,
+        "peso_canal_kg": 366.0,
+        "precio_unitario": 6.0,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2279.34,
+        "peso_canal_kg": 378.0,
+        "precio_unitario": 6.03,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2397.85,
+        "peso_canal_kg": 403.0,
+        "precio_unitario": 5.95,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2460.0,
+        "peso_canal_kg": 410.0,
+        "precio_unitario": 6.0,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2918.52,
+        "peso_canal_kg": 484.0,
+        "precio_unitario": 6.03,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2568.1,
+        "peso_canal_kg": 421.0,
+        "precio_unitario": 6.1,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2553.1,
+        "peso_canal_kg": 422.0,
+        "precio_unitario": 6.05,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -70.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -35.0
+      },
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -29.43
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -95.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 2",
+    "fecha_factura": "2026-03-25",
+    "fecha_pago": "2026-03-25",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 6.0,
+    "total_kilos_canal": 1379.0,
+    "base_imponible": 10688.52,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1122.29,
+    "gastos_total": -159.0,
+    "total_factura": 11574.59,
+    "archivo_origen": "Factura G015-2 25-03-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 2003.76,
+        "peso_canal_kg": 253.0,
+        "precio_unitario": 7.92,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1833.71,
+        "peso_canal_kg": 233.0,
+        "precio_unitario": 7.87,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1844.75,
+        "peso_canal_kg": 235.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1656.35,
+        "peso_canal_kg": 211.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1954.65,
+        "peso_canal_kg": 249.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1554.3,
+        "peso_canal_kg": 198.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -70.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -30.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -59.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 3",
+    "fecha_factura": "2026-04-08",
+    "fecha_pago": "2026-04-09",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 11.0,
+    "total_kilos_canal": 2453.0,
+    "base_imponible": 18918.26,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1986.42,
+    "gastos_total": -250.0,
+    "total_factura": 20486.59,
+    "archivo_origen": "Factura G015-3 08-04-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1725.72,
+        "peso_canal_kg": 219.0,
+        "precio_unitario": 7.88,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 2040.5,
+        "peso_canal_kg": 265.0,
+        "precio_unitario": 7.7,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1632.8,
+        "peso_canal_kg": 208.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1855.71,
+        "peso_canal_kg": 237.0,
+        "precio_unitario": 7.83,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1464.75,
+        "peso_canal_kg": 189.0,
+        "precio_unitario": 7.75,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1700.4,
+        "peso_canal_kg": 218.0,
+        "precio_unitario": 7.8,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1695.6,
+        "peso_canal_kg": 216.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 8,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1599.0,
+        "peso_canal_kg": 205.0,
+        "precio_unitario": 7.8,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 9,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1609.25,
+        "peso_canal_kg": 205.0,
+        "precio_unitario": 7.85,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 10,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1949.67,
+        "peso_canal_kg": 249.0,
+        "precio_unitario": 7.83,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 11,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1894.86,
+        "peso_canal_kg": 242.0,
+        "precio_unitario": 7.83,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -55.0
+      },
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -90.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -105.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 4",
+    "fecha_factura": "2026-05-27",
+    "fecha_pago": "2026-05-28",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 16.0,
+    "total_kilos_canal": 0,
+    "base_imponible": 42898.56,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 4504.35,
+    "gastos_total": null,
+    "total_factura": 46454.85,
+    "archivo_origen": "Factura G015-4 27-05-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 42898.56,
+        "peso_canal_kg": null,
+        "precio_unitario": 2681.16,
+        "referencia": "001",
+        "cabezas": 16.0
+      }
+    ],
+    "lineas_gastos": []
+  },
+  {
+    "numero_factura": "G015 / 5",
+    "fecha_factura": "2026-06-04",
+    "fecha_pago": "2026-06-05",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 3.0,
+    "total_kilos_canal": 920.0,
+    "base_imponible": 4776.06,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 501.49,
+    "gastos_total": -128.0,
+    "total_factura": 5172.0,
+    "archivo_origen": "Factura G015-5 04-06-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 1450.4,
+        "peso_canal_kg": 280.0,
+        "precio_unitario": 5.18,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 1898.1,
+        "peso_canal_kg": 342.0,
+        "precio_unitario": 5.55,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 1555.56,
+        "peso_canal_kg": 298.0,
+        "precio_unitario": 5.22,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "GASTOS>24meses",
+        "importe": -27.0
+      },
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -75.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -26.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 6",
+    "fecha_factura": "2026-06-25",
+    "fecha_pago": "2026-06-25",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 5.0,
+    "total_kilos_canal": 1262.0,
+    "base_imponible": 9351.65,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 981.92,
+    "gastos_total": -151.0,
+    "total_factura": 10126.9,
+    "archivo_origen": "Factura G015-6 25-06-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1683.65,
+        "peso_canal_kg": 223.0,
+        "precio_unitario": 7.55,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 2077.5,
+        "peso_canal_kg": 277.0,
+        "precio_unitario": 7.5,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 2189.5,
+        "peso_canal_kg": 290.0,
+        "precio_unitario": 7.55,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1740.0,
+        "peso_canal_kg": 232.0,
+        "precio_unitario": 7.5,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1812.0,
+        "peso_canal_kg": 240.0,
+        "precio_unitario": 7.55,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -75.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -25.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -51.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 7",
+    "fecha_factura": "2026-07-02",
+    "fecha_pago": "2026-07-03",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 1.0,
+    "total_kilos_canal": 535.0,
+    "base_imponible": 3077.0,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 323.09,
+    "gastos_total": -26.0,
+    "total_factura": 3332.09,
+    "archivo_origen": "Factura G015-7 02-07-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 3103.0,
+        "peso_canal_kg": 535.0,
+        "precio_unitario": 5.8,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "GASTOS>24meses",
+        "importe": -9.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -17.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 8",
+    "fecha_factura": "2026-07-16",
+    "fecha_pago": "2026-07-17",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 4.0,
+    "total_kilos_canal": 1362.0,
+    "base_imponible": 7335.53,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 770.23,
+    "gastos_total": -156.0,
+    "total_factura": 7943.64,
+    "archivo_origen": "Factura G015-8 16-07-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 2207.96,
+        "peso_canal_kg": 382.0,
+        "precio_unitario": 5.78,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 2097.6,
+        "peso_canal_kg": 368.0,
+        "precio_unitario": 5.7,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 1323.48,
+        "peso_canal_kg": 269.0,
+        "precio_unitario": 4.92,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 1862.49,
+        "peso_canal_kg": 343.0,
+        "precio_unitario": 5.43,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -80.0
+      },
+      {
+        "concepto": "GASTOS>24meses",
+        "importe": -36.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -40.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "G015 / 9",
+    "fecha_factura": "2026-08-04",
+    "fecha_pago": "2026-08-06",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 6.0,
+    "total_kilos_canal": 1223.0,
+    "base_imponible": 8781.6,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 922.07,
+    "gastos_total": -138.0,
+    "total_factura": 9509.6,
+    "archivo_origen": "Factura G015-9 04-08-2026.pdf",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1788.5,
+        "peso_canal_kg": 245.0,
+        "precio_unitario": 7.3,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1317.6,
+        "peso_canal_kg": 183.0,
+        "precio_unitario": 7.2,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1401.6,
+        "peso_canal_kg": 192.0,
+        "precio_unitario": 7.3,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1470.0,
+        "peso_canal_kg": 200.0,
+        "precio_unitario": 7.35,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1627.9,
+        "peso_canal_kg": 223.0,
+        "precio_unitario": 7.3,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1314.0,
+        "peso_canal_kg": 180.0,
+        "precio_unitario": 7.3,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -60.0
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -30.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -48.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 747",
+    "fecha_factura": "2025-10-22",
+    "fecha_pago": "2025-10-22",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 1.0,
+    "total_kilos_canal": 454.0,
+    "base_imponible": 2375.0,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 249.38,
+    "gastos_total": -122.0,
+    "total_factura": 2571.89,
+    "archivo_origen": "Facturas 1-747 22-10-2025, 1-759 22-10-2025.pdf#p1",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "VACAS O TOROS",
+        "importe_linea": 2497.0,
+        "peso_canal_kg": 454.0,
+        "precio_unitario": 5.5,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "URGENCIA",
+        "importe": -100.0
+      },
+      {
+        "concepto": "GASTOS>24meses",
+        "importe": -9.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -13.0
+      }
+    ]
+  },
+  {
+    "numero_factura": "1 / 759",
+    "fecha_factura": "2025-10-22",
+    "fecha_pago": "2025-10-22",
+    "cliente_cooperativa": "GANAVAEX, S.COOP",
+    "cif_cliente": "F37335411",
+    "total_cabezas": 8.0,
+    "total_kilos_canal": 1974.0,
+    "base_imponible": 14664.43,
+    "porcentaje_iva": 10.5,
+    "cuota_iva": 1539.77,
+    "gastos_total": -178.32,
+    "total_factura": 15880.12,
+    "archivo_origen": "Facturas 1-747 22-10-2025, 1-759 22-10-2025.pdf#p2",
+    "lineas_animales": [
+      {
+        "linea_numero": 1,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1740.2,
+        "peso_canal_kg": 226.0,
+        "precio_unitario": 7.7,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 2,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1683.0,
+        "peso_canal_kg": 220.0,
+        "precio_unitario": 7.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 3,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1445.85,
+        "peso_canal_kg": 189.0,
+        "precio_unitario": 7.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 4,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1352.8,
+        "peso_canal_kg": 178.0,
+        "precio_unitario": 7.6,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 5,
+        "articulo": "TERNERA CEBO",
+        "importe_linea": 1568.25,
+        "peso_canal_kg": 205.0,
+        "precio_unitario": 7.65,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 6,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2108.35,
+        "peso_canal_kg": 283.0,
+        "precio_unitario": 7.45,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 7,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2620.7,
+        "peso_canal_kg": 359.0,
+        "precio_unitario": 7.3,
+        "referencia": "001",
+        "cabezas": 1.0
+      },
+      {
+        "linea_numero": 8,
+        "articulo": "TERNERO CEBO",
+        "importe_linea": 2323.6,
+        "peso_canal_kg": 314.0,
+        "precio_unitario": 7.4,
+        "referencia": "001",
+        "cabezas": 1.0
+      }
+    ],
+    "lineas_gastos": [
+      {
+        "concepto": "ANIMAL >350 KG",
+        "importe": -7.32
+      },
+      {
+        "concepto": "GASTOS <12 meses",
+        "importe": -40.0
+      },
+      {
+        "concepto": "PORTES/GASTOS COMPENSACION",
+        "importe": -50.0
+      },
+      {
+        "concepto": "A CTA GASTOS COOP 0.5% . (partir 2016)",
+        "importe": -81.0
+      }
+    ]
+  }
+]
