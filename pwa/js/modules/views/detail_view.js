@@ -444,13 +444,13 @@ export function generarHtmlDetalleAnimal(animal) {
       </div>
 
       ${animal.alerta_retirada ? `
-      <div class="banner-alerta-retirada" style="background: #ffdad6; border: 1.5px solid #ba1a1a; border-radius: var(--md-shape-md, 12px); padding: 14px 16px; margin: 12px 0 16px 0; color: #410002;">
-        <div style="display: flex; align-items: flex-start; gap: 10px;">
-          <span style="font-size: 1.4rem;">⚠️</span>
+      <div class="banner-alerta-retirada" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: var(--md-shape-md, 10px); padding: 10px 14px; margin: 10px 0 14px 0; color: #92400e;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">⚠️</span>
           <div>
-            <div style="font-weight: 800; font-size: 0.98rem; color: #ba1a1a;">EN PERIODO DE RETIRADA SANITARIA</div>
-            <div style="font-size: 0.88rem; margin-top: 2px; line-height: 1.35;">
-              Tratado con <strong>${escapeHtml(animal.alerta_retirada.medicamento)}</strong>. Prohibido traslado a matadero o venta hasta el <strong>${formatearFecha(animal.alerta_retirada.fecha_fin_retirada || animal.alerta_retirada.fecha_fin)}</strong>.
+            <div style="font-weight: 700; font-size: 0.88rem; color: #92400e;">EN PERIODO DE RETIRADA SANITARIA</div>
+            <div style="font-size: 0.82rem; margin-top: 1px; color: #78350f;">
+              Tratado con <strong>${escapeHtml(animal.alerta_retirada.medicamento)}</strong>. Esperar hasta el <strong>${formatearFecha(animal.alerta_retirada.fecha_fin_retirada || animal.alerta_retirada.fecha_fin)}</strong> para traslado a matadero.
             </div>
           </div>
         </div>
