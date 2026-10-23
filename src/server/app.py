@@ -806,6 +806,16 @@ async def auth_login(req: LoginRequest, response: Response):
 # ============================================================
 
 
+# El binario SQLite y sus metadatos cambian en caliente al ingestar facturas.
+# Sin Cache-Control, el navegador aplica frescura heurística (≈10 % del tiempo
+# transcurrido desde Last-Modified) y puede reutilizar durante horas la copia
+# antigua sin revalidar: la PWA seguiría mostrando las liquidaciones viejas.
+_SIN_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+}
+
+
 @app.get("/api/database", tags=["Base de Datos"])
 async def get_database(authorized: bool = Depends(verify_token)):
     """Descarga el binario SQLite para sincronización y ejecución offline en el móvil."""
@@ -813,12 +823,15 @@ async def get_database(authorized: bool = Depends(verify_token)):
     if not sqlite_file or not sqlite_file.exists():
         raise HTTPException(status_code=404, detail="Base de datos no encontrada.")
     return FileResponse(
-        sqlite_file, media_type="application/octet-stream", filename="ganaderos_campo.sqlite"
+        sqlite_file,
+        media_type="application/octet-stream",
+        filename="ganaderos_campo.sqlite",
+        headers=_SIN_CACHE_HEADERS,
     )
 
 
 @app.get("/api/database/meta", tags=["Base de Datos"], response_model=DatabaseMetaResponse)
-async def get_database_meta(authorized: bool = Depends(verify_token)):
+async def get_database_meta(response: Response, authorized: bool = Depends(verify_token)):
     """Devuelve metadatos del binario SQLite servido para verificar si hay actualizaciones disponibles desde el PC."""
     sqlite_file = _buscar_archivo_sqlite()
     if not sqlite_file or not sqlite_file.exists():
@@ -845,6 +858,7 @@ async def get_database_meta(authorized: bool = Depends(verify_token)):
     except Exception as e:
         logger.warning(f"Error consultando conteo de animales en BD SQLite: {e}")
 
+    response.headers.update(_SIN_CACHE_HEADERS)
     return DatabaseMetaResponse(
         ok=True,
         mtime=mtime,
