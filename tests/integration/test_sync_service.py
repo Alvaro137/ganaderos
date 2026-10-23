@@ -113,6 +113,38 @@ class TestPush(TestSyncServiceBase):
         self.assertEqual(hist[0]["operador"], "usr_jose")
         self.assertIn("C-0273", hist[0]["payload"])
 
+    def test_push_movimiento_y_baja_mutations(self):
+        mov = {
+            "uuid": "test-uuid-mov-0001",
+            "tipo": "movimiento",
+            "crotal": "ES000810740273",
+            "ts_dispositivo": "2026-10-25T10:00:00",
+            "payload": {
+                "tipo_movimiento": "TRASPASO_CEBADERO",
+                "origen": "121",
+                "destino": "122",
+                "fecha": "2026-10-25",
+            },
+        }
+        baja = {
+            "uuid": "test-uuid-baja-0001",
+            "tipo": "baja",
+            "crotal": "ES000810740273",
+            "ts_dispositivo": "2026-10-25T11:00:00",
+            "payload": {
+                "causa": "Muerte natural / Enfermedad",
+                "fecha": "2026-10-25",
+            },
+        }
+        res = self.svc.aplicar_cambios("dev-campo-01", "usr_admin", [mov, baja])
+        self.assertIn(mov["uuid"], res["aceptados"])
+        self.assertIn(baja["uuid"], res["aceptados"])
+        self.assertEqual(len(res["rechazados"]), 0)
+        hist = self.svc.historial()
+        tipos = [h["tipo"] for h in hist]
+        self.assertIn("movimiento", tipos)
+        self.assertIn("baja", tipos)
+
 # === PARTE 2 ===
 
 class TestImport(TestSyncServiceBase):
