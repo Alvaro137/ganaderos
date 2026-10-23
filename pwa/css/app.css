@@ -1079,13 +1079,12 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  font-size: 0.70rem;
-  font-weight: 500;
-  padding: 2px 0;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 4px 0;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
-  min-width: 52px;
   flex: 1;
   position: relative;
 }
@@ -1094,7 +1093,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 12px;
+  padding: 4px 24px;
   border-radius: var(--md-shape-full);
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
   box-sizing: content-box;
@@ -1509,21 +1508,129 @@ body {
 .btn-floating-ai {
   position: fixed;
   bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-  right: 16px;
-  background: var(--md-primary-container);
-  color: var(--md-on-primary-container);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  left: 16px;
+  right: auto;
+  background: var(--md-surface-container-high, #e2e8f0);
+  color: var(--text-main, #1e293b);
+  border: 1px solid var(--border-color, #cbd5e1);
   border-radius: var(--md-shape-lg);
-  padding: 10px 18px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
+  gap: 6px;
+  font-size: 0.82rem;
   font-weight: 700;
-  box-shadow: var(--md-elevation-3);
+  box-shadow: var(--md-elevation-2);
   cursor: pointer;
   z-index: 90;
   transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ============================================================
+   BOTÓN FLOTANTE DE ACCIÓN RÁPIDA (FAB) Y SPEED DIAL DE CAMPO
+   ============================================================ */
+.btn-fab-quick-action {
+  position: fixed;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  right: 16px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: var(--brand-primary, #1e3a2b);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 120;
+  transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.btn-fab-quick-action:hover {
+  background: var(--md-primary, #15803d);
+  transform: scale(1.05);
+}
+
+.btn-fab-quick-action:active {
+  transform: scale(0.95);
+}
+
+.btn-fab-quick-action.open {
+  transform: rotate(45deg);
+  background: #334155;
+}
+
+.fab-speed-dial {
+  position: fixed;
+  bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+  z-index: 125;
+}
+
+.speed-dial-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: var(--md-surface-container-lowest, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: var(--md-shape-full, 9999px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.90rem;
+  font-weight: 700;
+  color: var(--text-main, #0f172a);
+  transition: all 0.2s ease;
+  min-height: 48px;
+}
+
+.speed-dial-item:hover {
+  background: var(--md-primary-container, #e8f5e9);
+  color: var(--brand-primary, #1e3a2b);
+  transform: translateX(-4px);
+}
+
+.speed-dial-item:active {
+  transform: scale(0.96);
+}
+
+.speed-dial-icon {
+  font-size: 1.25rem;
+}
+
+.fab-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 115;
+}
+
+@media (min-width: 768px) {
+  .btn-fab-quick-action {
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+  }
+  .fab-speed-dial {
+    bottom: 92px;
+    right: 24px;
+  }
+  .btn-floating-ai {
+    bottom: 24px;
+    left: auto;
+    right: 96px;
+    padding: 12px 20px;
+    font-size: 0.92rem;
+  }
 }
 
 .btn-floating-ai:hover {
