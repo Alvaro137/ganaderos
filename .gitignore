@@ -66,6 +66,7 @@ python/
 
 # Logs del servidor y de depuración
 logs/
+Example-data/
 *.log
 
 
