@@ -19,6 +19,8 @@ export const TIPOS_MUTACION_PERMITIDOS = [
   "tratamiento",
   "nota",
   "pesaje",
+  "movimiento",
+  "baja",
   "otro"
 ];
 
