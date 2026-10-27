@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -290,6 +290,300 @@ def conciliar_partos_en_access(
     return conciliados
 
 
+def normalizar_cea(codigo: Optional[str]) -> str:
+    """Normaliza identificadores de explotación o códigos CEA/REGA comunes."""
+    if not codigo:
+        return ""
+    c = str(codigo).strip()
+    if c == "121":
+        return "ES371261100121"
+    if c == "122":
+        return "ES371261100122"
+    return c
+
+
+def _parse_fecha(fecha_val: Any) -> datetime:
+    """Convierte un valor de fecha (str, date o datetime) a datetime."""
+    if isinstance(fecha_val, datetime):
+        return fecha_val
+    if isinstance(fecha_val, date):
+        return datetime.combine(fecha_val, datetime.min.time())
+    if isinstance(fecha_val, str) and fecha_val.strip():
+        fecha_str = fecha_val.strip()[:10]
+        try:
+            return datetime.strptime(fecha_str, "%Y-%m-%d")
+        except ValueError:
+            pass
+    return datetime.now()
+
+
+def mapear_tipo_movimiento(tipo_str: Optional[str]) -> str:
+    """Mapea tipos de movimiento a códigos Jet de Access ('T', 'U', 'V'), defecto 'T'."""
+    if not tipo_str:
+        return "T"
+    t = str(tipo_str).strip().upper()
+    if t in ("T", "TRASPASO", "TRASPASO_CEBADERO"):
+        return "T"
+    if t in ("U", "UBICACION", "MOVIMIENTO_INTERNO", "CAMBIO_CORRAL"):
+        return "U"
+    if t in ("V", "VENTA"):
+        return "V"
+    if t in ("T", "U", "V"):
+        return t
+    return "T"
+
+
+def _conciliar_movimientos_cursor(
+    cursor: Any,
+    movimientos: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    conciliados: List[Dict[str, Any]] = []
+    if not movimientos:
+        return conciliados
+
+    for m in movimientos:
+        payload = m.get("payload") if isinstance(m.get("payload"), dict) else {}
+        crotal = str(m.get("crotal") or payload.get("crotal") or "").strip()
+        uuid = str(m.get("uuid") or "").strip()
+
+        if not crotal:
+            logger.warning(f"Registro de movimiento omitido por falta de crotal: uuid={uuid}")
+            continue
+
+        corral_val = payload.get("corral")
+        if corral_val is None or str(corral_val).strip() == "":
+            corral_val = payload.get("idcorral")
+        corral = str(corral_val).strip() if corral_val is not None else ""
+
+        ubicacion_val = payload.get("ubicacion")
+        if ubicacion_val is None or str(ubicacion_val).strip() == "":
+            ubicacion_val = payload.get("destino")
+        ubicacion = normalizar_cea(str(ubicacion_val).strip() if ubicacion_val is not None else "")
+
+        origen = normalizar_cea(str(payload.get("origen") or "").strip())
+        destino = normalizar_cea(str(payload.get("destino") or ubicacion).strip())
+
+        fecha_str = payload.get("fecha") or payload.get("fecha_movimiento") or m.get("ts_dispositivo")
+        fecha = _parse_fecha(fecha_str)
+
+        tipo = mapear_tipo_movimiento(payload.get("tipo_movimiento"))
+        sexo_raw = str(payload.get("sexo") or "").strip().upper()
+        if sexo_raw in ("01", "02", "04"):
+            sexo = sexo_raw
+        elif sexo_raw in ("M", "MACHO"):
+            sexo = "01"
+        elif sexo_raw in ("H", "HEMBRA"):
+            sexo = "02"
+        else:
+            sexo = ""
+
+        cursor.execute(
+            "UPDATE Animal SET corral = ?, ubicacion = ? WHERE crotal = ?",
+            (corral, ubicacion, crotal),
+        )
+
+        cursor.execute(
+            "INSERT INTO Movimiento (crotal, origen, destino, corral, fecha, tipo, sexo, registrado) VALUES (?, ?, ?, ?, ?, ?, ?, False)",
+            (crotal, origen, destino, corral, fecha, tipo, sexo),
+        )
+
+        conciliados.append({
+            "uuid": uuid,
+            "crotal_asignado": crotal,
+            "crotal": crotal,
+            "tipo": "movimiento",
+            "fecha": fecha.strftime("%Y-%m-%d"),
+        })
+
+    return conciliados
+
+
+def _conciliar_bajas_cursor(
+    cursor: Any,
+    bajas: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    conciliados: List[Dict[str, Any]] = []
+    if not bajas:
+        return conciliados
+
+    for b in bajas:
+        payload = b.get("payload") if isinstance(b.get("payload"), dict) else {}
+        crotal = str(b.get("crotal") or payload.get("crotal") or "").strip()
+        uuid = str(b.get("uuid") or "").strip()
+
+        if not crotal:
+            logger.warning(f"Registro de baja omitido por falta de crotal: uuid={uuid}")
+            continue
+
+        fecha_str = payload.get("fecha") or payload.get("fecha_baja") or b.get("ts_dispositivo")
+        fecha = _parse_fecha(fecha_str)
+
+        origen = normalizar_cea(str(payload.get("origen") or payload.get("ubicacion") or "").strip())
+        sexo_raw = str(payload.get("sexo") or "").strip().upper()
+        if sexo_raw in ("01", "02", "04"):
+            sexo = sexo_raw
+        elif sexo_raw in ("M", "MACHO"):
+            sexo = "01"
+        elif sexo_raw in ("H", "HEMBRA"):
+            sexo = "02"
+        else:
+            sexo = ""
+
+        cursor.execute(
+            "UPDATE Animal SET estado = 'B', vivo = False, f_sacrificio = ? WHERE crotal = ?",
+            (fecha, crotal),
+        )
+
+        cursor.execute(
+            "INSERT INTO Movimiento (crotal, origen, destino, corral, fecha, tipo, sexo, registrado) VALUES (?, ?, '', '', ?, 'M', ?, False)",
+            (crotal, origen, fecha, sexo),
+        )
+
+        conciliados.append({
+            "uuid": uuid,
+            "crotal_asignado": crotal,
+            "crotal": crotal,
+            "tipo": "baja",
+            "fecha": fecha.strftime("%Y-%m-%d"),
+        })
+
+    return conciliados
+
+
+def _conciliar_movimientos_db(
+    db_path: Path,
+    password: str,
+    movimientos: List[Dict[str, Any]],
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    if esta_bloqueada_por_access(db_path):
+        raise AccessReconciliationError(
+            f"La base de datos Access está actualmente en uso por Ganaderos 10 o Microsoft Access "
+            f"(detectado archivo {db_path.with_suffix('.ldb').name}). Ciérralo antes de continuar."
+        )
+
+    try:
+        import pyodbc
+    except ImportError:
+        pyodbc = None
+
+    if pyodbc is None:
+        raise AccessReconciliationError("El controlador pyodbc no está disponible en este entorno.")
+
+    if not movimientos:
+        return []
+
+    lock_file = db_path.parent / f"{db_path.stem}.lock"
+    with FileLock(lock_file):
+        conn_str = conn_str_for(db_path, password)
+        conn = pyodbc.connect(conn_str, autocommit=False)
+        cur = conn.cursor()
+        try:
+            conciliados = _conciliar_movimientos_cursor(cur, movimientos)
+            if dry_run:
+                conn.rollback()
+                logger.info(f"[Dry-Run] Simulada conciliación de {len(conciliados)} movimientos. Rollback aplicado.")
+            else:
+                conn.commit()
+                logger.info(f"Conciliación de {len(conciliados)} movimientos confirmada en Access con éxito.")
+            return conciliados
+        except Exception as e:
+            conn.rollback()
+            raise AccessReconciliationError(f"Error procesando movimientos en Access: {e}") from e
+        finally:
+            conn.close()
+
+
+def _conciliar_bajas_db(
+    db_path: Path,
+    password: str,
+    bajas: List[Dict[str, Any]],
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    if esta_bloqueada_por_access(db_path):
+        raise AccessReconciliationError(
+            f"La base de datos Access está actualmente en uso por Ganaderos 10 o Microsoft Access "
+            f"(detectado archivo {db_path.with_suffix('.ldb').name}). Ciérralo antes de continuar."
+        )
+
+    try:
+        import pyodbc
+    except ImportError:
+        pyodbc = None
+
+    if pyodbc is None:
+        raise AccessReconciliationError("El controlador pyodbc no está disponible en este entorno.")
+
+    if not bajas:
+        return []
+
+    lock_file = db_path.parent / f"{db_path.stem}.lock"
+    with FileLock(lock_file):
+        conn_str = conn_str_for(db_path, password)
+        conn = pyodbc.connect(conn_str, autocommit=False)
+        cur = conn.cursor()
+        try:
+            conciliados = _conciliar_bajas_cursor(cur, bajas)
+            if dry_run:
+                conn.rollback()
+                logger.info(f"[Dry-Run] Simulada conciliación de {len(conciliados)} bajas. Rollback aplicado.")
+            else:
+                conn.commit()
+                logger.info(f"Conciliación de {len(conciliados)} bajas confirmada en Access con éxito.")
+            return conciliados
+        except Exception as e:
+            conn.rollback()
+            raise AccessReconciliationError(f"Error procesando bajas en Access: {e}") from e
+        finally:
+            conn.close()
+
+
+def conciliar_movimientos_en_access(
+    cursor_or_db_path: Any,
+    movimientos_or_password: Any,
+    movimientos: Optional[List[Dict[str, Any]]] = None,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """Aplica registros de movimientos en Access en las tablas Animal y Movimiento.
+
+    Soporta invocación directa con cursor:
+        conciliar_movimientos_en_access(cursor, movimientos)
+    o mediante ruta de base de datos con manejo de conexión y bloqueo:
+        conciliar_movimientos_en_access(db_path, password, movimientos, dry_run=False)
+    """
+    if hasattr(cursor_or_db_path, "execute"):
+        return _conciliar_movimientos_cursor(cursor_or_db_path, movimientos_or_password or [])
+    return _conciliar_movimientos_db(
+        Path(cursor_or_db_path),
+        str(movimientos_or_password),
+        movimientos or [],
+        dry_run=dry_run,
+    )
+
+
+def conciliar_bajas_en_access(
+    cursor_or_db_path: Any,
+    bajas_or_password: Any,
+    bajas: Optional[List[Dict[str, Any]]] = None,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """Aplica registros de baja en Access en las tablas Animal y Movimiento.
+
+    Soporta invocación directa con cursor:
+        conciliar_bajas_en_access(cursor, bajas)
+    o mediante ruta de base de datos con manejo de conexión y bloqueo:
+        conciliar_bajas_en_access(db_path, password, bajas, dry_run=False)
+    """
+    if hasattr(cursor_or_db_path, "execute"):
+        return _conciliar_bajas_cursor(cursor_or_db_path, bajas_or_password or [])
+    return _conciliar_bajas_db(
+        Path(cursor_or_db_path),
+        str(bajas_or_password),
+        bajas or [],
+        dry_run=dry_run,
+    )
+
+
 def notificar_conciliacion(
     api_url: str,
     token: str,
@@ -447,15 +741,21 @@ def main() -> int:
         # 2. Descargar pendientes
         print("[*] 2/6 Comprobando eventos pendientes en el hub...")
         partos_pendientes = obtener_pendientes(args.api_url, token, tipo="parto")
-        print(f"    Partos pendientes de conciliar: {len(partos_pendientes)}")
+        movimientos_pendientes = obtener_pendientes(args.api_url, token, tipo="movimiento")
+        bajas_pendientes = obtener_pendientes(args.api_url, token, tipo="baja")
+        print(f"    Partos pendientes de conciliar:      {len(partos_pendientes)}")
+        print(f"    Movimientos pendientes de conciliar: {len(movimientos_pendientes)}")
+        print(f"    Bajas pendientes de conciliar:       {len(bajas_pendientes)}")
 
-        if not partos_pendientes:
+        total_pendientes = len(partos_pendientes) + len(movimientos_pendientes) + len(bajas_pendientes)
+
+        if total_pendientes == 0:
             if not args.force_export:
-                print("\n[+] Todo al día: no hay partos pendientes de conciliar.")
+                print("\n[+] Todo al día: no hay registros pendientes de conciliar (partos, movimientos ni bajas).")
                 print("    (Para forzar la subida del censo local/recetas al hub, ejecute con --force-export)")
                 return 0
 
-            print("\n[*] No hay partos pendientes de conciliar, pero se solicitó exportación forzada (--force-export).")
+            print("\n[*] No hay registros pendientes de conciliar, pero se solicitó exportación forzada (--force-export).")
             if not args.dry_run:
                 if not args.skip_export:
                     print("[*] Re-exportando y subiendo censo actualizado desde Access al hub...")
@@ -490,15 +790,32 @@ def main() -> int:
             print("[*] 3/6 Backup omitido (modo dry-run)")
 
         # 4. Conciliación en Access
-        print("[*] 4/6 Aplicando partos en Access con asignación de crotales...")
-        conciliados = conciliar_partos_en_access(source, args.password, partos_pendientes, dry_run=args.dry_run)
+        conciliados_partos: List[Dict[str, Any]] = []
+        if partos_pendientes:
+            print("[*] 4a/6 Aplicando partos en Access con asignación de crotales...")
+            conciliados_partos = conciliar_partos_en_access(source, args.password, partos_pendientes, dry_run=args.dry_run)
+            for c in conciliados_partos:
+                print(f"    -> Parto - Vaca {c['madre_crotal']}: Cría asignada {c['crotal_asignado']} (Fecha {c['fecha_parto']})")
 
-        for c in conciliados:
-            print(f"    -> Vaca {c['madre_crotal']}: Cría asignada {c['crotal_asignado']} (Fecha {c['fecha_parto']})")
+        conciliados_mov: List[Dict[str, Any]] = []
+        if movimientos_pendientes:
+            print("[*] 4b/6 Aplicando movimientos en Access...")
+            conciliados_mov = conciliar_movimientos_en_access(source, args.password, movimientos_pendientes, dry_run=args.dry_run)
+            for c in conciliados_mov:
+                print(f"    -> Movimiento - Crotal {c['crotal']} (Fecha {c['fecha']})")
+
+        conciliados_baj: List[Dict[str, Any]] = []
+        if bajas_pendientes:
+            print("[*] 4c/6 Aplicando bajas en Access...")
+            conciliados_baj = conciliar_bajas_en_access(source, args.password, bajas_pendientes, dry_run=args.dry_run)
+            for c in conciliados_baj:
+                print(f"    -> Baja - Crotal {c['crotal']} (Fecha {c['fecha']})")
+
+        todos_conciliados = conciliados_partos + conciliados_mov + conciliados_baj
 
         if not args.dry_run:
             print("[*] Notificando conciliación al servidor hub...")
-            actualizados = notificar_conciliacion(args.api_url, token, conciliados)
+            actualizados = notificar_conciliacion(args.api_url, token, todos_conciliados)
             print(f"    Registros confirmados en el servidor: {actualizados}")
 
             # 5. Re-exportación y subida
@@ -513,10 +830,8 @@ def main() -> int:
             if not args.no_vault:
                 print("[*] 6/6 Guardando snapshot inmutable en Git Vault...")
                 try:
-                    crotales_txt = ", ".join([c["crotal_asignado"] for c in conciliados[:5]])
-                    if len(conciliados) > 5:
-                        crotales_txt += f" (+{len(conciliados) - 5} más)"
-                    msg_vault = f"backup: conciliacion de {len(conciliados)} parto(s) - terneros: {crotales_txt}"
+                    resumen_txt = f"partos: {len(conciliados_partos)}, movs: {len(conciliados_mov)}, bajas: {len(conciliados_baj)}"
+                    msg_vault = f"backup: conciliacion de {len(todos_conciliados)} evento(s) de campo ({resumen_txt})"
 
                     censo_sqlite = ROOT_DIR / "pwa" / "ganaderos_campo.sqlite"
                     res_vault = guardar_snapshot_en_vault(

@@ -1,0 +1,11 @@
+[Unit]
+Description=Temporizador diario para respaldo a pendrive USB
+
+[Timer]
+Unit=ganaderos-backup.service
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

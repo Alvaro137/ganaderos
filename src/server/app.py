@@ -275,6 +275,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from src.application.moga_conciliator import conciliar_censo_con_moga, procesar_csv_moga
 from src.application.query_builder import construir_consulta_intent
@@ -477,6 +478,8 @@ app = FastAPI(
     openapi_tags=TAGS_METADATA,
     lifespan=lifespan,
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 security = HTTPBearer(auto_error=False)
 
