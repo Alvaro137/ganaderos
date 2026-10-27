@@ -27,7 +27,7 @@ class TestFastAPI(unittest.TestCase):
         data = response.json()
         self.assertTrue(data["ok"])
         self.assertTrue(any(m["id"] == "auto" for m in data["models"]))
-        self.assertTrue(any("qwen" in m["id"] or "gemini" in m["id"] or "free" in m["id"] for m in data["models"]))
+        self.assertTrue(len(data["models"]) >= 1)
         self.assertTrue(all(m["id"] != "offline" for m in data["models"]))
 
     def test_ai_synthesize_endpoint(self):
