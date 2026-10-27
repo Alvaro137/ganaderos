@@ -3,10 +3,12 @@ from src.infrastructure.access_reader import conexion_access, detectar_ruta_bd, 
 
 try:
     from src.infrastructure.llm_gateway import (
+        clasificar_intencion_freellm,
         clasificar_intencion_groq,
         resolver_intencion_usuario,
     )
 except ImportError:
+    clasificar_intencion_freellm = None  # type: ignore
     clasificar_intencion_groq = None  # type: ignore
     resolver_intencion_usuario = None  # type: ignore
 from src.infrastructure.sqlite_builder import inicializar_bd_sqlite, optimizar_bd
@@ -17,6 +19,7 @@ __all__ = [
     "leer_animales",
     "inicializar_bd_sqlite",
     "optimizar_bd",
+    "clasificar_intencion_freellm",
     "clasificar_intencion_groq",
     "resolver_intencion_usuario",
 ]
