@@ -44,7 +44,7 @@ export function abrirModalRegistroMovimiento({ crotal = "", origenDefault = "121
             <span style="font-size: 0.78rem; opacity: 0.85;">Traspasos entre cercados, cebadero o salidas</span>
           </div>
         </div>
-        <button id="btn-cerrar-modal-movimiento" aria-label="Cerrar modal" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; min-width: 44px; min-height: 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <button id="btn-cerrar-modal-movimiento" aria-label="Cerrar modal" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; min-width: 48px; min-height: 48px; width: 48px; height: 48px; border-radius: 50%; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
           ✕
         </button>
       </div>
@@ -219,7 +219,7 @@ export function abrirModalRegistroBaja({ crotal = "" } = {}) {
             <span style="font-size: 0.78rem; opacity: 0.85;">Muerte o baja zootécnica de un animal</span>
           </div>
         </div>
-        <button id="btn-cerrar-modal-baja" aria-label="Cerrar modal" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; min-width: 44px; min-height: 44px; width: 44px; height: 44px; border-radius: 50%; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <button id="btn-cerrar-modal-baja" aria-label="Cerrar modal" style="background: rgba(255,255,255,0.15); border: none; color: #ffffff; min-width: 48px; min-height: 48px; width: 48px; height: 48px; border-radius: 50%; font-size: 1.3rem; cursor: pointer; display: flex; align-items: center; justify-content: center;">
           ✕
         </button>
       </div>

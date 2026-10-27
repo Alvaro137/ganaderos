@@ -32,13 +32,17 @@ La explotación opera bajo dos códigos REGA:
   - Vacas reproductoras con código de explotación no coincidente (traspasos pendientes de regularizar).
 - [ ] US-103 (Informe de regularización): generación de informe para la unidad veterinaria de la Junta.
  
-### Épica 2: control de peso y ganancia media diaria (GMD)
-- [x] US-201 (Esquema de pesajes en SQLite):
-  - Tabla `pesajes`: `id`, `crotal`, `fecha`, `peso_kg`, `tipo` (Destete, Control, Salida), `operador`.
-- [x] US-202 (Cálculo de GMD en ficha y rendimiento a la canal):
-  - Ficha técnica en PWA con historial de pesajes, badges de GMD y vinculación con rendimiento oficial a la canal (% canal / vivo).
-- [ ] US-203 (Previsión de salida a matadero):
-  - Estimar la fecha en la que el animal alcanza los 520-540 kg comerciales según su GMD histórica.
+### Épica 2: control de peso y ganancia media diaria (GMD) [DESCARTADA / YAGNI]
+- [x] **Descarte explícito por directriz del ganadero (KISS / YAGNI)**: En la operativa real en campo y dehesa no se realizan pesajes manuales en manga ni báscula. El único peso verificado y vinculante es el **peso a la canal** liquidado en matadero (Ganavaex).
+- ~~US-201~~ (Esquema de pesajes manuales en SQLite): suprimido por YAGNI.
+- ~~US-202~~ (Cálculo de GMD manual): sustituido por el cuadro de mando oficial de liquidaciones y rendimiento en canal.
+- ~~US-203~~ (Previsión de salida a matadero por báscula): suprimido; el ganadero controla el punto óptimo mediante días de estancia y penalización por sobrepeso (>350 kg canal) auditado en facturas.
+
+
+
+
+
+
 
 ### Épica 3: trazabilidad sanitaria y libro digital de explotación
 - [ ] US-301 (Exportador de hoja de tratamientos oficial):

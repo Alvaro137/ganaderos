@@ -6,7 +6,6 @@ from src.domain.models import (
     Animal,
     CotizacionLonja,
     Parto,
-    Pesaje,
     RecetaSanitaria,
     TratamientoIndividual,
     Usuario,
@@ -16,7 +15,6 @@ from src.domain.repositories import (
     ExplotacionRepository,
     LonjaRepository,
     PartoRepository,
-    PesajeRepository,
     RecetaRepository,
     TratamientoRepository,
     UsuarioRepository,
@@ -240,110 +238,6 @@ class SQLiteUsuarioRepository(UsuarioRepository):
             password_hash=row['password_hash'],
             activo=bool(row['activo']),
             creado_en=row['creado_en']
-        )
-
-
-class SQLitePesajeRepository(PesajeRepository):
-    def __init__(self, conn: sqlite3.Connection):
-        self.conn = conn
-        self.conn.row_factory = sqlite3.Row
-        self._ensure_table()
-
-    def _ensure_table(self) -> None:
-        try:
-            self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS pesajes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                crotal TEXT NOT NULL,
-                fecha TEXT NOT NULL,
-                peso_kg REAL NOT NULL,
-                tipo TEXT DEFAULT 'Control',
-                notas TEXT,
-                operador TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
-            """)
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pesajes_crotal ON pesajes(crotal);")
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_pesajes_fecha ON pesajes(fecha);")
-            self.conn.commit()
-        except sqlite3.OperationalError:
-            pass
-
-    def list_by_crotal(self, crotal: str) -> List[Pesaje]:
-        cur = self.conn.cursor()
-        cur.execute("SELECT * FROM pesajes WHERE crotal = ? ORDER BY fecha ASC, id ASC", (crotal,))
-        return [self._map_to_domain(row) for row in cur.fetchall()]
-
-    def list_recent(self, limite: int = 50) -> List[Pesaje]:
-        cur = self.conn.cursor()
-        cur.execute("SELECT * FROM pesajes ORDER BY fecha DESC, id DESC LIMIT ?", (limite,))
-        return [self._map_to_domain(row) for row in cur.fetchall()]
-
-    def create(self, pesaje: Pesaje) -> Pesaje:
-        fecha_str = pesaje.fecha.isoformat() if isinstance(pesaje.fecha, (date, datetime)) else str(pesaje.fecha)
-        try:
-            cur = self.conn.cursor()
-            cur.execute("""
-            INSERT INTO pesajes (crotal, fecha, peso_kg, tipo, notas, operador)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                pesaje.crotal,
-                fecha_str,
-                float(pesaje.peso_kg),
-                pesaje.tipo or "Control",
-                pesaje.notas,
-                pesaje.operador
-            ))
-            self.conn.commit()
-            pesaje.id = cur.lastrowid
-            return pesaje
-        except sqlite3.OperationalError:
-            row = self.conn.execute("PRAGMA database_list").fetchone()
-            db_path = row[2] if (row and len(row) >= 3 and row[2]) else None
-            if db_path and db_path != "":
-                w_conn = sqlite3.connect(db_path)
-                try:
-                    w_conn.execute("""
-                    CREATE TABLE IF NOT EXISTS pesajes (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        crotal TEXT NOT NULL,
-                        fecha TEXT NOT NULL,
-                        peso_kg REAL NOT NULL,
-                        tipo TEXT DEFAULT 'Control',
-                        notas TEXT,
-                        operador TEXT,
-                        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                    );
-                    """)
-                    cur = w_conn.cursor()
-                    cur.execute("""
-                    INSERT INTO pesajes (crotal, fecha, peso_kg, tipo, notas, operador)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        pesaje.crotal,
-                        fecha_str,
-                        float(pesaje.peso_kg),
-                        pesaje.tipo or "Control",
-                        pesaje.notas,
-                        pesaje.operador
-                    ))
-                    w_conn.commit()
-                    pesaje.id = cur.lastrowid
-                    return pesaje
-                finally:
-                    w_conn.close()
-            raise
-
-    def _map_to_domain(self, row: sqlite3.Row) -> Pesaje:
-        f = _parse_fecha_segura(row['fecha']) or date.today()
-        return Pesaje(
-            crotal=row['crotal'],
-            fecha=f,
-            peso_kg=float(row['peso_kg']),
-            tipo=row['tipo'] or 'Control',
-            notas=row['notas'] if 'notas' in row.keys() else None,
-            operador=row['operador'] if 'operador' in row.keys() else None,
-            id=row['id']
         )
 
 
