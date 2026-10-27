@@ -84,7 +84,7 @@ class TestPush(TestSyncServiceBase):
         self.assertEqual(self.svc.estado()["registros_campo"], 0)
 
     def test_push_mezcla_acepta_y_rechaza(self):
-        bueno = dict(CHANGENOTA, uuid="test-uuid-nota-0002", tipo="pesaje",
+        bueno = dict(CHANGENOTA, uuid="test-uuid-nota-0002", tipo="movimiento",
                      payload={"kg": 512.5})
         malo = dict(CHANGENOTA, uuid="test-uuid-nota-0003", tipo="hacking")
         res = self.svc.aplicar_cambios("dev-x", "usr_amelia", [bueno, malo])

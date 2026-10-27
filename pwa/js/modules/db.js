@@ -136,14 +136,6 @@ export function obtenerResumenKpisLiquidaciones() {
   return db.obtenerResumenKpisLiquidaciones();
 }
 
-export function registrarPesaje(datos) {
-  const db = getDB();
-  if (!db || typeof db.registrarPesaje !== "function") {
-    throw new Error("Cliente de base de datos no soporta registro de pesajes.");
-  }
-  return db.registrarPesaje(datos);
-}
-
 export function obtenerAniosDisponiblesFinancieros() {
   const db = getDB();
   if (!db || typeof db.obtenerAniosDisponiblesFinancieros !== "function") return [new Date().getFullYear().toString()];

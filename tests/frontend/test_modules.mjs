@@ -6,6 +6,12 @@
  */
 
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import {
   AppState,
   extraer4Digitos,
@@ -439,9 +445,9 @@ async function runAllTests() {
     assert.strictEqual(html.includes('data-factura-id="1"'), true);
   });
 
-  await test("Pesajes y GMD: Visualización de historial, cálculo GMD y Rendimiento en Canal", async () => {
+  await test("Rendimiento en Canal y Venta: Limpieza y exclusión de pesajes manuales según KISS", async () => {
     const { generarHtmlDetalleAnimal } = await import('../../pwa/js/modules/views/detail_view.js');
-    const animalConPesajes = {
+    const animalConCanal = {
       crotal: "ES091008679094",
       crotal_4: "9094",
       raza: "Charolesa",
@@ -452,13 +458,6 @@ async function runAllTests() {
       corral: "CEBADERO",
       partos: [],
       movimientos: [],
-      pesajes: [
-        { fecha: "2024-01-01", peso_kg: 240.0, tipo: "Destete", gmd: null, operador: "Paco" },
-        { fecha: "2024-03-01", peso_kg: 320.0, tipo: "Control", gmd: 1.333, operador: "Álvaro" },
-        { fecha: "2024-05-01", peso_kg: 485.0, tipo: "Salida", gmd: 1.625, operador: "Álvaro" }
-      ],
-      rendimiento_canal_pct: 58.7,
-      ultimo_peso_vivo: 485.0,
       liquidacion_canal: {
         factura_id: 2,
         numero_factura: "F-2024-002",
@@ -469,13 +468,11 @@ async function runAllTests() {
       }
     };
 
-    const html = generarHtmlDetalleAnimal(animalConPesajes);
-    assert.strictEqual(html.includes("Control de Pesajes y Crecimiento"), true);
+    const html = generarHtmlDetalleAnimal(animalConCanal);
+    assert.strictEqual(html.includes("Control de Pesajes y Crecimiento"), false, "No debe renderizarse la sección de pesajes");
     assert.strictEqual(html.includes("data-action=\"registrar-pesaje\""), false);
-    assert.strictEqual(html.includes("485 kg"), true);
-    assert.strictEqual(html.includes("GMD: +1.33 kg/d"), true);
-    assert.strictEqual(html.includes("Rendimiento en Canal"), true);
-    assert.strictEqual(html.includes("58.7%"), true);
+    assert.strictEqual(html.includes("Rendimiento en Canal y Venta"), true, "Debe mostrarse el bloque oficial de canal");
+    assert.strictEqual(html.includes("285 kg"), true);
   });
 
   await test("Alerta Sanitaria: Detección y banner en Ficha de Animal", async () => {
@@ -860,6 +857,57 @@ async function runAllTests() {
 
     assert.ok(htmlContenedor.includes('class="tv-range-btn active" data-chart-id="chart-test-tv" data-range="1Y"'), "El botón 1A debe estar activo por defecto");
     assert.ok(htmlContenedor.includes('id="chart-test-tv-canvas"'), "Debe incluir el contenedor canvas del gráfico");
+  });
+
+  await test("Service Worker: Integridad de ASSETS y cobertura de módulos de app.js", () => {
+    const swPath = path.resolve(__dirname, '../../pwa/sw.js');
+    const swContent = fs.readFileSync(swPath, 'utf8');
+
+    // 1. Verificar CACHE_NAME v48
+    const cacheMatch = swContent.match(/CACHE_NAME\s*=\s*["']([^"']+)["']/);
+    assert.ok(cacheMatch, "Debe definirse CACHE_NAME en sw.js");
+    assert.strictEqual(cacheMatch[1], "ganaderos-campo-v49", "CACHE_NAME debe ser ganaderos-campo-v49");
+
+    // 2. Extraer lista ASSETS
+    const assetsMatch = swContent.match(/const\s+ASSETS\s*=\s*\[([\s\S]*?)\];/);
+    assert.ok(assetsMatch, "Debe definirse array ASSETS en sw.js");
+    const rawAssets = assetsMatch[1]
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('"') || line.startsWith("'"))
+      .map(line => line.replace(/^[",']|[",',;]+$/g, '').trim());
+
+    assert.ok(rawAssets.length > 20, "El array ASSETS debe contener los assets requeridos");
+    assert.ok(rawAssets.includes("./js/modules/views/field_modals.js"), "ASSETS debe incluir field_modals.js");
+    assert.strictEqual(rawAssets.includes("./js/modules/views/weighing_modal.js"), false, "weighing_modal.js debe haber sido suprimido de ASSETS");
+
+    // 3. Verificar que todos los archivos listados en ASSETS existen físicamente en pwa/
+    const pwaDir = path.resolve(__dirname, '../../pwa');
+    for (const asset of rawAssets) {
+      if (asset === "./") continue; // raíz
+      const assetFile = path.resolve(pwaDir, asset.replace(/^\.\//, ''));
+      assert.ok(fs.existsSync(assetFile), `El asset ${asset} referenciado en sw.js no existe en disco: ${assetFile}`);
+    }
+
+    // 4. Leer pwa/js/app.js y asegurar que todos los módulos locales importados están en ASSETS
+    const appJsPath = path.resolve(pwaDir, 'js/app.js');
+    const appJsContent = fs.readFileSync(appJsPath, 'utf8');
+    const importRegex = /import\s+.*?from\s+['"](\.\/modules\/[^'"]+)['"]/g;
+    let match;
+    const importedModules = [];
+    while ((match = importRegex.exec(appJsContent)) !== null) {
+      // Normalizar './modules/...' a './js/modules/...'
+      const normalizedPath = './js/' + match[1].replace(/^\.\//, '');
+      importedModules.push(normalizedPath);
+    }
+
+    assert.ok(importedModules.length >= 10, "app.js debe tener múltiples importaciones de módulos");
+    for (const mod of importedModules) {
+      assert.ok(
+        rawAssets.includes(mod),
+        `El módulo ${mod} importado en app.js no está en el array ASSETS del Service Worker`
+      );
+    }
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

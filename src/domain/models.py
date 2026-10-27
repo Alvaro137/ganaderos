@@ -152,34 +152,6 @@ class VentaCanal:
 
 
 @dataclass
-class Pesaje:
-    """Registro de peso vivo de un animal en báscula de manga o tolva."""
-    crotal: str
-    fecha: date
-    peso_kg: float
-    tipo: str = "Control"  # Destete, Control, Salida, Entrada
-    notas: Optional[str] = None
-    operador: Optional[str] = None
-    id: Optional[int] = None
-
-    @staticmethod
-    def calcular_gmd(p_anterior: "Pesaje", p_actual: "Pesaje") -> Optional[float]:
-        """Calcula la Ganancia Media Diaria en kg/día entre dos pesajes consecutivos."""
-        dias = (p_actual.fecha - p_anterior.fecha).days
-        if dias <= 0:
-            return None
-        delta_kg = p_actual.peso_kg - p_anterior.peso_kg
-        return round(delta_kg / dias, 3)
-
-    @staticmethod
-    def calcular_rendimiento_canal(peso_canal_kg: float, peso_vivo_kg: float) -> Optional[float]:
-        """Calcula el porcentaje de rendimiento a la canal: (peso canal / peso vivo) * 100."""
-        if peso_vivo_kg <= 0:
-            return None
-        return round((peso_canal_kg / peso_vivo_kg) * 100, 2)
-
-
-@dataclass
 class TratamientoIndividual:
     """Tratamiento veterinario aplicado individualmente a un animal con periodo de retirada."""
     crotal: str
