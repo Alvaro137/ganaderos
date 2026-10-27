@@ -35,33 +35,6 @@ token = generar_auth_token(duracion_dias=1, user_id="usr_admin", rol="admin")
 AUTH_HEADERS = {"Authorization": f"Bearer {token}"}
 
 
-def test_api_pesajes_crud():
-    # Registrar pesaje en BD temporal
-    resp = client.post(
-        "/api/censo/pesajes",
-        headers=AUTH_HEADERS,
-        json={
-            "crotal": "ES083712611001",
-            "fecha": "2026-03-15",
-            "peso_kg": 310.5,
-            "tipo": "Control",
-            "notas": "Manga corral Dueña",
-            "operador": "Álvaro",
-        },
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["crotal"] == "ES083712611001"
-    assert data["peso_kg"] == 310.5
-
-    # Consultar pesajes
-    resp_list = client.get("/api/censo/pesajes?crotal=ES083712611001", headers=AUTH_HEADERS)
-    assert resp_list.status_code == 200
-    items = resp_list.json()
-    assert len(items) >= 1
-    assert any(p["peso_kg"] == 310.5 for p in items)
-
-
 def test_api_tratamientos_y_alerta():
     resp_trat = client.get("/api/censo/tratamientos?crotal=ES083712611001", headers=AUTH_HEADERS)
     assert resp_trat.status_code == 200

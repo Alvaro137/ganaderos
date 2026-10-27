@@ -6,11 +6,10 @@ from datetime import date
 from typing import Any, List, Optional
 
 from src.application.query_builder import QueryResult
-from src.domain.models import Animal, Parto, Pesaje, RecetaSanitaria, Usuario
+from src.domain.models import Animal, Parto, RecetaSanitaria, Usuario
 from src.domain.repositories import (
     AnimalRepository,
     PartoRepository,
-    PesajeRepository,
     RecetaRepository,
     TratamientoRepository,
     UsuarioRepository,
@@ -21,11 +20,9 @@ class CensoService:
     def __init__(
         self,
         animal_repo: AnimalRepository,
-        pesaje_repo: Optional[PesajeRepository] = None,
         tratamiento_repo: Optional[TratamientoRepository] = None,
     ):
         self.animal_repo = animal_repo
-        self.pesaje_repo = pesaje_repo
         self.tratamiento_repo = tratamiento_repo
 
     def get_animal_by_crotal(self, crotal: str) -> Optional[Animal]:
@@ -36,48 +33,6 @@ class CensoService:
 
     def list_reproductoras(self) -> List[Animal]:
         return self.animal_repo.list_reproductoras()
-
-    def registrar_pesaje(
-        self,
-        crotal: str,
-        fecha: date,
-        peso_kg: float,
-        tipo: str = "Control",
-        notas: Optional[str] = None,
-        operador: Optional[str] = None,
-    ) -> Optional[Pesaje]:
-        if not self.pesaje_repo:
-            return None
-        p = Pesaje(
-            crotal=crotal,
-            fecha=fecha,
-            peso_kg=peso_kg,
-            tipo=tipo,
-            notas=notas,
-            operador=operador,
-        )
-        return self.pesaje_repo.create(p)
-
-    def get_pesajes_con_gmd(self, crotal: str) -> List[dict]:
-        if not self.pesaje_repo:
-            return []
-        pesajes = self.pesaje_repo.list_by_crotal(crotal)
-        res = []
-        for i, p in enumerate(pesajes):
-            gmd = None
-            if i > 0:
-                gmd = Pesaje.calcular_gmd(pesajes[i - 1], p)
-            res.append({
-                "id": p.id,
-                "crotal": p.crotal,
-                "fecha": p.fecha.isoformat(),
-                "peso_kg": p.peso_kg,
-                "tipo": p.tipo,
-                "notas": p.notas,
-                "operador": p.operador,
-                "gmd_kg_dia": gmd,
-            })
-        return res
 
     def get_tratamientos_animal(self, crotal: str, fecha_ref: Optional[date] = None) -> List[dict]:
         if not self.tratamiento_repo:

@@ -18,7 +18,7 @@ export const TIPOS_MUTACION_PERMITIDOS = [
   "cambio_corral",
   "tratamiento",
   "nota",
-  "pesaje",
+
   "movimiento",
   "baja",
   "otro"

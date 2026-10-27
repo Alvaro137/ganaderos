@@ -4,7 +4,6 @@ from src.domain.models import (
     Animal,
     CotizacionLonja,
     Parto,
-    Pesaje,
     RecetaSanitaria,
     TratamientoIndividual,
     Usuario,
@@ -51,16 +50,6 @@ class PartoRepository(Protocol):
 
 class RecetaRepository(Protocol):
     def list_all(self) -> List[RecetaSanitaria]:
-        ...
-
-class PesajeRepository(Protocol):
-    def list_by_crotal(self, crotal: str) -> List[Pesaje]:
-        ...
-
-    def create(self, pesaje: Pesaje) -> Pesaje:
-        ...
-
-    def list_recent(self, limite: int = 50) -> List[Pesaje]:
         ...
 
 class TratamientoRepository(Protocol):

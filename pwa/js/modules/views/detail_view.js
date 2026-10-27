@@ -376,23 +376,6 @@ export function generarHtmlDetalleAnimal(animal) {
 
   const esHembra = !animal.sexo || ['H', 'V'].includes(animal.sexo.trim().toUpperCase()[0]);
   const descSexo = (animal.sexo === 'M' || animal.sexo === 'Machos') ? 'Macho' : esHembra ? 'Hembra' : escapeHtml(animal.sexo || 'N/D');
-  const htmlPesajes = (animal.pesajes && animal.pesajes.length > 0)
-    ? `<div class="pesajes-list" style="display: flex; flex-direction: column; gap: 8px;">` +
-      animal.pesajes.slice().reverse().map(p => `
-        <div class="pesaje-item-card" style="background: var(--md-surface-container-low, #f8faf8); border: 1px solid var(--md-outline-variant, #e5e7eb); border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-weight: 800; font-size: 1.15rem; color: var(--brand-primary);">${formatearKg(p.peso_kg)} kg</span>
-              <span class="status-pill ${p.tipo === 'Salida' ? 'venta' : 'activo'}" style="font-size: 0.72rem;">${escapeHtml(p.tipo || 'Control')}</span>
-              ${Number.isFinite(p.gmd) ? `<span style="background: ${p.gmd >= 0 ? '#e8f5e9' : '#fff3e0'}; color: ${p.gmd >= 0 ? '#1b5e20' : '#e65100'}; font-weight: 700; font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; border: 1px solid ${p.gmd >= 0 ? '#c8e6c9' : '#ffe0b2'};">GMD: ${p.gmd > 0 ? '+' : ''}${p.gmd.toFixed(2)} kg/d</span>` : ''}
-            </div>
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
-              ${formatearFecha(p.fecha)} ${p.operador ? `• ${escapeHtml(p.operador)}` : ''} ${p.notas ? `• <em>${escapeHtml(p.notas)}</em>` : ''}
-            </div>
-          </div>
-        </div>
-      `).join("") + `</div>`
-    : "";
 
   const htmlTratamientos = (!animal.tratamientos || animal.tratamientos.length === 0)
     ? ""
@@ -583,13 +566,6 @@ export function generarHtmlDetalleAnimal(animal) {
       </div>
       ` : ""}
 
-      ${(animal.pesajes && animal.pesajes.length > 0) ? `
-      <!-- Control de Pesajes y Crecimiento -->
-      <div class="section-heading" style="margin-top: 20px;">
-        <span>Control de Pesajes y Crecimiento (${animal.pesajes.length})</span>
-      </div>
-      <div>${htmlPesajes}</div>
-      ` : ""}
 
       <!-- Tratamientos Sanitarios -->
       ${htmlTratamientos}
