@@ -258,4 +258,32 @@ class TestFastAPI(unittest.TestCase):
             self.assertEqual(data["registros"], 12)
             self.assertIn("12 cotizaciones", data["message"])
 
+    def test_gzip_compression_on_large_responses(self):
+        """Verifica que respuestas > 1000 bytes se compriman con gzip al solicitarlo."""
+        resp = self.client.get("/api/censo/animales", headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get("content-encoding"), "gzip")
+        self.assertIn("Accept-Encoding", resp.headers.get("vary", ""))
+
+    def test_gzip_bypassed_for_small_responses(self):
+        """Verifica que respuestas < 1000 bytes no se compriman aunque se solicite gzip."""
+        resp = self.client.get("/api/health", headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.headers.get("content-encoding"))
+
+    def test_gzip_bypassed_when_identity_requested(self):
+        """Verifica que con Accept-Encoding: identity la respuesta no se comprime."""
+        resp = self.client.get("/api/censo/animales", headers={"Accept-Encoding": "identity"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.headers.get("content-encoding"))
+
+    def test_database_download_gzip_streaming_and_clean_decompression(self):
+        """Verifica que la descarga de la base de datos se comprima y descomprima limpiamente."""
+        os.environ["PWA_ALLOW_ANON_DB"] = "1"
+        resp = self.client.get("/api/database", headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get("content-encoding"), "gzip")
+        self.assertTrue(resp.content.startswith(b"SQLite format 3\x00"))
+        self.assertGreaterEqual(len(resp.content), 1000)
+
 

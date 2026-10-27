@@ -134,6 +134,38 @@ class TestBackupDB(unittest.TestCase):
         self.assertLessEqual(len(restantes), 4)
 
 
+class TestSystemdBackupUnits(unittest.TestCase):
+    def setUp(self):
+        self.repo_root = Path(__file__).resolve().parents[2]
+        self.service_path = self.repo_root / "deploy" / "ganaderos-backup.service"
+        self.timer_path = self.repo_root / "deploy" / "ganaderos-backup.timer"
+
+    def test_systemd_backup_files_exist(self):
+        self.assertTrue(self.service_path.exists(), "ganaderos-backup.service must exist")
+        self.assertTrue(self.timer_path.exists(), "ganaderos-backup.timer must exist")
+
+    def test_systemd_backup_service_content(self):
+        content = self.service_path.read_text(encoding="utf-8")
+        self.assertIn("ConditionPathIsMountPoint=/mnt/usb", content)
+        self.assertIn("Type=oneshot", content)
+        self.assertIn("User=varo", content)
+        self.assertIn("Group=varo", content)
+        self.assertIn("WorkingDirectory=/home/varo/ganaderos_pwa", content)
+        self.assertIn("backup_to_usb.py", content)
+        self.assertIn("ProtectSystem=full", content)
+        self.assertIn("ProtectHome=read-only", content)
+        self.assertIn("ReadWritePaths=/mnt/usb", content)
+        self.assertIn("NoNewPrivileges=true", content)
+
+    def test_systemd_backup_timer_content(self):
+        content = self.timer_path.read_text(encoding="utf-8")
+        self.assertIn("OnCalendar=*-*-* 03:00:00", content)
+        self.assertIn("Persistent=true", content)
+        self.assertIn("RandomizedDelaySec=300", content)
+        self.assertIn("Unit=ganaderos-backup.service", content)
+        self.assertIn("WantedBy=timers.target", content)
+
+
 if __name__ == "__main__":
     unittest.main()
 
