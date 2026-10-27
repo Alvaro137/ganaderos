@@ -167,26 +167,6 @@ class DatabaseMetaResponse(BaseModel):
     total_activos: int = 0
 
 
-class PesajeCreateRequest(BaseModel):
-    crotal: str = Field(min_length=4, max_length=20)
-    fecha: str
-    peso_kg: float = Field(gt=0, lt=2000)
-    tipo: str = "Control"
-    notas: Optional[str] = None
-    operador: Optional[str] = None
-
-
-class PesajeItemResponse(BaseModel):
-    id: Optional[int]
-    crotal: str
-    fecha: str
-    peso_kg: float
-    tipo: str
-    notas: Optional[str] = None
-    operador: Optional[str] = None
-    gmd_kg_dia: Optional[float] = None
-
-
 class TratamientoItemResponse(BaseModel):
     id: Optional[int]
     crotal: str

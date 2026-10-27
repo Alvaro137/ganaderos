@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-TIPOS_PERMITIDOS = {"nota", "parto", "pesaje", "cambio_corral", "tratamiento", "movimiento", "baja", "otro"}
+TIPOS_PERMITIDOS = {"nota", "parto", "cambio_corral", "tratamiento", "movimiento", "baja", "otro"}
 MAX_PAYLOAD_BYTES = 8192
 MAX_CAMPOS = 500  # límite defensivo por push
 

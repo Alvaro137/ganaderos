@@ -205,7 +205,7 @@ CI: `.github/workflows/ci.yml` ejecuta ruff, pytest y comprobaciones de segurida
   - Bandit en GitHub Actions: análisis de seguridad estático en `src/` y `scripts/` filtrado por nivel medio y alto (`-ll`), configurado en `pyproject.toml`.
   - Pip-Audit en CI: detección de vulnerabilidades conocidas (CVE) en dependencias en cada pull request y push.
 - [ ] Plan de trabajo futuro:
-  - Registro de pesaje (pendiente de especificación de formato de báscula).
+  - Pesajes en báscula descartados explícitamente por el ganadero (KISS / YAGNI). El único peso real de la explotación es el peso a la canal liquidado en matadero (Ganavaex).
   - Nota: el ganadero descartó explícitamente el cambio de lote o corral y la gestión de recetas o tratamientos desde la PWA.
 
 ## 9. Glosario

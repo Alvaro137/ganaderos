@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import List, Optional
@@ -297,7 +297,6 @@ from src.infrastructure.llm_gateway import (
 from src.infrastructure.repositories import (
     SQLiteAnimalRepository,
     SQLitePartoRepository,
-    SQLitePesajeRepository,
     SQLiteRecetaRepository,
     SQLiteTratamientoRepository,
     SQLiteUsuarioRepository,
@@ -316,8 +315,6 @@ from src.server.schemas import (
     LogEntry,
     LoginRequest,
     MogaConciliacionResponse,
-    PesajeCreateRequest,
-    PesajeItemResponse,
     SetLogLevelRequest,
     SetLogLevelResponse,
     SyncConciliarRequest,
@@ -384,7 +381,7 @@ def recargar_servicios_dominio(app: FastAPI, db_path: Optional[Path] = None) -> 
             animal_repo = SQLiteAnimalRepository(conn)
             parto_repo = SQLitePartoRepository(conn)
             receta_repo = SQLiteRecetaRepository(conn)
-            pesaje_repo = SQLitePesajeRepository(conn)
+
             tratamiento_repo = SQLiteTratamientoRepository(conn)
 
             # Comprobar si la tabla usuarios existe en la BD
@@ -399,7 +396,7 @@ def recargar_servicios_dominio(app: FastAPI, db_path: Optional[Path] = None) -> 
                 usuario_repo.ensure_table_and_defaults()
 
             app.state.db_conn = conn
-            app.state.censo_service = CensoService(animal_repo, pesaje_repo, tratamiento_repo)
+            app.state.censo_service = CensoService(animal_repo, tratamiento_repo)
             app.state.sanidad_service = SanidadService(receta_repo, tratamiento_repo)
             app.state.genealogia_service = GenealogiaService(animal_repo, parto_repo)
             app.state.usuario_service = UsuarioService(usuario_repo)
@@ -524,9 +521,9 @@ def get_censo_service() -> Optional[CensoService]:
             try:
                 conn = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True, check_same_thread=False)
                 animal_repo = SQLiteAnimalRepository(conn)
-                pesaje_repo = SQLitePesajeRepository(conn)
+
                 tratamiento_repo = SQLiteTratamientoRepository(conn)
-                service = CensoService(animal_repo, pesaje_repo, tratamiento_repo)
+                service = CensoService(animal_repo, tratamiento_repo)
                 app.state.censo_service = service
             except Exception:
                 pass
@@ -921,53 +918,6 @@ async def get_animal_por_crotal(
         estado=animal.estado,
         corral=animal.corral,
         edad_anios=animal.edad_anios(),
-    )
-
-
-@app.get("/api/censo/pesajes", tags=["Censo Ganadero"], response_model=List[PesajeItemResponse])
-async def list_pesajes_animal(
-    crotal: str,
-    censo: Optional[CensoService] = Depends(get_censo_service),
-    authorized: bool = Depends(verify_token),
-):
-    """Devuelve el historial cronológico de pesajes de un animal con cálculo de GMD."""
-    if not censo:
-        return []
-    return censo.get_pesajes_con_gmd(crotal)
-
-
-@app.post("/api/censo/pesajes", tags=["Censo Ganadero"], response_model=PesajeItemResponse)
-async def registrar_pesaje_animal(
-    req: PesajeCreateRequest,
-    censo: Optional[CensoService] = Depends(get_censo_service),
-    authorized: bool = Depends(verify_token),
-):
-    """Registra un nuevo pesaje en manga o tolva."""
-    if not censo:
-        raise HTTPException(status_code=503, detail="Servicio de censo no disponible.")
-    try:
-        f_dt = datetime.strptime(req.fecha[:10], "%Y-%m-%d").date()
-    except ValueError:
-        f_dt = date.today()
-    pesaje = censo.registrar_pesaje(
-        crotal=req.crotal,
-        fecha=f_dt,
-        peso_kg=req.peso_kg,
-        tipo=req.tipo,
-        notas=req.notas,
-        operador=req.operador,
-    )
-    if not pesaje:
-        raise HTTPException(status_code=500, detail="No se pudo registrar el pesaje.")
-    return PesajeItemResponse(
-        id=pesaje.id,
-        crotal=pesaje.crotal,
-        fecha=pesaje.fecha.isoformat(),
-        peso_kg=pesaje.peso_kg,
-        tipo=pesaje.tipo,
-        notas=pesaje.notas,
-        operador=pesaje.operador,
-        gmd_kg_dia=None,
     )
 
 
