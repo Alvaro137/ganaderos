@@ -63,6 +63,7 @@ decompiled/
 original/
 hola.txt
 python/
+.agents/
 
 # Logs del servidor y de depuración
 logs/

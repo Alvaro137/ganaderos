@@ -866,7 +866,7 @@ async function runAllTests() {
     // 1. Verificar CACHE_NAME v48
     const cacheMatch = swContent.match(/CACHE_NAME\s*=\s*["']([^"']+)["']/);
     assert.ok(cacheMatch, "Debe definirse CACHE_NAME en sw.js");
-    assert.strictEqual(cacheMatch[1], "ganaderos-campo-v49", "CACHE_NAME debe ser ganaderos-campo-v49");
+    assert.strictEqual(cacheMatch[1], "ganaderos-campo-v50", "CACHE_NAME debe ser ganaderos-campo-v50");
 
     // 2. Extraer lista ASSETS
     const assetsMatch = swContent.match(/const\s+ASSETS\s*=\s*\[([\s\S]*?)\];/);
@@ -879,6 +879,7 @@ async function runAllTests() {
 
     assert.ok(rawAssets.length > 20, "El array ASSETS debe contener los assets requeridos");
     assert.ok(rawAssets.includes("./js/modules/views/field_modals.js"), "ASSETS debe incluir field_modals.js");
+    assert.ok(rawAssets.includes("./js/modules/views/census_view.js"), "ASSETS debe incluir census_view.js");
     assert.strictEqual(rawAssets.includes("./js/modules/views/weighing_modal.js"), false, "weighing_modal.js debe haber sido suprimido de ASSETS");
 
     // 3. Verificar que todos los archivos listados en ASSETS existen físicamente en pwa/
@@ -908,6 +909,159 @@ async function runAllTests() {
         `El módulo ${mod} importado en app.js no está en el array ASSETS del Service Worker`
       );
     }
+  });
+
+  // === TESTS MOGA CENSUS RECONCILIATION (R2) ===
+  await test("Integridad ES Modules: Exportaciones de census_view.js", async () => {
+    const modCensus = await import('../../pwa/js/modules/views/census_view.js');
+    assert.strictEqual(typeof modCensus.abrirModalConciliacionMoga, "function", "abrirModalConciliacionMoga debe ser una función");
+    assert.strictEqual(typeof modCensus.renderizarResumenMogaHTML, "function", "renderizarResumenMogaHTML debe ser una función");
+    assert.strictEqual(typeof modCensus.generarDiscrepanciasMogaHTML, "function", "generarDiscrepanciasMogaHTML debe ser una función");
+    assert.strictEqual(typeof modCensus.conciliarArchivoMoga, "function", "conciliarArchivoMoga debe ser una función");
+  });
+
+  await test("Conciliación MoGa: Renderizado de resumen con discrepancias y badges", async () => {
+    const { renderizarResumenMogaHTML } = await import('../../pwa/js/modules/views/census_view.js');
+
+    // 1. Caso con discrepancias
+    const resumenConDiscrepancias = {
+      total_local: 245,
+      total_moga: 240,
+      coincidentes: 235,
+      discrepancias_totales: 15
+    };
+    const htmlDisc = renderizarResumenMogaHTML(resumenConDiscrepancias);
+    assert.ok(htmlDisc.includes("245"), "Debe mostrar el total del censo local (245)");
+    assert.ok(htmlDisc.includes("240"), "Debe mostrar el total del censo MoGa (240)");
+    assert.ok(htmlDisc.includes("235"), "Debe mostrar el total de coincidentes (235)");
+    assert.ok(htmlDisc.includes("15"), "Debe mostrar el número de discrepancias (15)");
+    assert.ok(htmlDisc.includes("15 Discrepancias Detectadas"), "Debe mostrar el banner de advertencia");
+    assert.ok(htmlDisc.includes("Censo Campo"), "Debe incluir etiqueta de Censo Campo");
+    assert.ok(htmlDisc.includes("Censo MoGa"), "Debe incluir etiqueta de Censo MoGa");
+
+    // 2. Caso 100% conciliado (0 discrepancias)
+    const resumenConciliado = {
+      total_local: 240,
+      total_moga: 240,
+      coincidentes: 240,
+      discrepancias_totales: 0
+    };
+    const htmlOk = renderizarResumenMogaHTML(resumenConciliado);
+    assert.ok(htmlOk.includes("Censo 100% Conciliado"), "Debe mostrar banner de éxito para 0 discrepancias");
+    assert.ok(htmlOk.includes("status-ok"), "Debe tener clase status-ok");
+    assert.ok(htmlOk.includes("✅"), "Debe incluir emoji de verificación");
+
+    // 3. Fallback seguro con objeto vacío o nulo
+    const htmlVacio = renderizarResumenMogaHTML({});
+    assert.ok(htmlVacio.includes("Censo 100% Conciliado"), "Debe asumir 0 discrepancias como fallback seguro");
+    assert.ok(htmlVacio.includes(">0<"), "Debe contener valor numérico 0 en métricas");
+  });
+
+  await test("Conciliación MoGa: Generación de discrepancias y estados vacíos", async () => {
+    const { generarDiscrepanciasMogaHTML } = await import('../../pwa/js/modules/views/census_view.js');
+
+    const mockResultado = {
+      no_en_moga: [
+        {
+          crotal: "ES083712611099",
+          crotal_4: "1099",
+          corral: "DUEÑA",
+          motivo: "Animal activo en campo pero ausente en registro oficial MoGa"
+        }
+      ],
+      bajas_oficiales_activas_local: [
+        {
+          crotal: "ES083712611002",
+          crotal_4: "1002",
+          estado_moga: "BAJA",
+          motivo: "Baja en MoGa (BAJA) pero figura como Activo en campo"
+        }
+      ],
+      bajas_locales_activas_oficial: [
+        {
+          crotal: "ES083712611088",
+          crotal_4: "1088",
+          motivo: "Dado de baja en el censo local pero todavía de alta oficial en MoGa"
+        }
+      ],
+      no_en_campo: [
+        {
+          crotal: "ES083712611003",
+          explotacion: "ES371261100122",
+          motivo: "De alta oficial en MoGa pero no existe en la base de datos local"
+        }
+      ]
+    };
+
+    // 1. Filtro 'todos': debe contener todos los animales y sus detalles
+    const htmlTodos = generarDiscrepanciasMogaHTML(mockResultado, "todos");
+    assert.ok(htmlTodos.includes("ES083712611099"), "Debe incluir crotal de animal no en moga");
+    assert.ok(htmlTodos.includes("1099"), "Debe resaltar 4 dígitos de 1099");
+    assert.ok(htmlTodos.includes("DUEÑA"), "Debe incluir el corral del animal");
+    assert.ok(htmlTodos.includes("No en MoGa (Activo en campo)"), "Debe incluir badge de categoría No en MoGa");
+
+    assert.ok(htmlTodos.includes("ES083712611002"), "Debe incluir crotal de baja oficial activa");
+    assert.ok(htmlTodos.includes("1002"), "Debe resaltar 4 dígitos de 1002");
+    assert.ok(htmlTodos.includes("Baja oficial activa en campo"), "Debe incluir badge de baja oficial activa");
+    assert.ok(htmlTodos.includes("BAJA"), "Debe indicar estado oficial en MoGa");
+
+    assert.ok(htmlTodos.includes("ES083712611088"), "Debe incluir baja local activa en moga");
+    assert.ok(htmlTodos.includes("Baja en campo activa en MoGa"), "Debe incluir badge de baja en campo activa");
+
+    assert.ok(htmlTodos.includes("ES083712611003"), "Debe incluir animal no en campo");
+    assert.ok(htmlTodos.includes("ES371261100122"), "Debe incluir la explotación MoGa");
+    assert.ok(htmlTodos.includes("No registrado en campo"), "Debe incluir badge de no en campo");
+
+    // 2. Filtro específico 'no_en_moga'
+    const htmlNoMoga = generarDiscrepanciasMogaHTML(mockResultado, "no_en_moga");
+    assert.ok(htmlNoMoga.includes("ES083712611099"), "Filtro no_en_moga debe incluir ES083712611099");
+    assert.strictEqual(htmlNoMoga.includes("ES083712611002"), false, "Filtro no_en_moga no debe incluir otros tipos");
+
+    // 3. Filtro específico 'bajas_oficiales_activas_local'
+    const htmlBajasOfi = generarDiscrepanciasMogaHTML(mockResultado, "bajas_oficiales_activas_local");
+    assert.ok(htmlBajasOfi.includes("ES083712611002"), "Filtro bajas_oficiales debe incluir ES083712611002");
+    assert.strictEqual(htmlBajasOfi.includes("ES083712611099"), false, "Filtro bajas_oficiales no debe incluir no_en_moga");
+
+    // 4. Estado vacío en categoría sin discrepancias
+    const htmlVacio = generarDiscrepanciasMogaHTML({ no_en_moga: [] }, "no_en_moga");
+    assert.ok(htmlVacio.includes("moga-empty-state"), "Debe generar contenedor de estado vacío");
+    assert.ok(htmlVacio.includes("No hay discrepancias en esta categoría"), "Debe contener mensaje explicativo de sin discrepancias");
+  });
+
+  await test("Conciliación MoGa: Cumplimiento de accesibilidad táctil WCAG AAA (>= 48px)", async () => {
+    // 1. Verificar dimensiones mínimas en botón de cabecera de cattle_view.js
+    const cattleViewPath = path.resolve(__dirname, '../../pwa/js/modules/views/cattle_view.js');
+    const cattleViewContent = fs.readFileSync(cattleViewPath, 'utf8');
+    assert.ok(cattleViewContent.includes('id="btn-moga-header"'), "cattle_view.js debe tener el botón #btn-moga-header");
+    assert.ok(cattleViewContent.includes('min-height: 48px'), "#btn-moga-header debe tener min-height de 48px");
+    assert.ok(cattleViewContent.includes('min-width: 48px'), "#btn-moga-header debe tener min-width de 48px");
+    assert.ok(cattleViewContent.includes('abrirModalConciliacionMoga()'), "cattle_view.js debe enlazar el clic a abrirModalConciliacionMoga");
+
+    // 2. Verificar dimensiones mínimas en el modal de census_view.js
+    const censusViewPath = path.resolve(__dirname, '../../pwa/js/modules/views/census_view.js');
+    const censusContent = fs.readFileSync(censusViewPath, 'utf8');
+
+    // Botón cerrar modal
+    assert.ok(censusContent.includes('id="btn-cerrar-modal-moga"'), "Debe existir #btn-cerrar-modal-moga");
+    assert.ok(censusContent.includes('min-height: 48px; width: 48px; height: 48px;'), "El botón cerrar debe ser 48x48px");
+
+    // Botón / label selector de archivo
+    assert.ok(censusContent.includes('id="btn-seleccionar-csv-moga"'), "Debe existir #btn-seleccionar-csv-moga");
+    assert.ok(censusContent.includes('min-height: 48px'), "El selector de CSV debe tener min-height >= 48px");
+
+    // Botón subir y conciliar
+    assert.ok(censusContent.includes('id="btn-subir-moga"'), "Debe existir #btn-subir-moga");
+    assert.ok(censusContent.includes('min-height: 48px'), "El botón subir debe tener min-height >= 48px");
+
+    // Botón quitar archivo
+    assert.ok(censusContent.includes('id="btn-quitar-archivo-moga"'), "Debe existir #btn-quitar-archivo-moga");
+
+    // Chips de filtrado de discrepancias
+    assert.ok(censusContent.includes('class="moga-chip-btn active"'), "Deben existir chips de filtro");
+    assert.ok(censusContent.includes('min-height: 48px; min-width: 48px;'), "Los chips de filtro deben tener min-height y min-width de 48px");
+
+    // Botón reiniciar / cargar otro
+    assert.ok(censusContent.includes('id="btn-reiniciar-moga"'), "Debe existir #btn-reiniciar-moga");
   });
 
   console.log(`RESULTADO: ${testsExitosos}/${testsEjecutados} tests superados con éxito.`);

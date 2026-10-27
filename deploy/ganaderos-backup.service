@@ -1,0 +1,15 @@
+[Unit]
+Description=Respaldo diario de base de datos a pendrive USB
+ConditionPathIsMountPoint=/mnt/usb
+
+[Service]
+Type=oneshot
+User=varo
+Group=varo
+WorkingDirectory=/home/varo/ganaderos_pwa
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/varo/ganaderos_pwa/venv/bin/python scripts/backup_to_usb.py --check-mount
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/mnt/usb
+NoNewPrivileges=true
