@@ -16,7 +16,8 @@ import { buscarAnimales, contarAnimales, obtenerMovimientos, comprobarActualizac
 
 import { seleccionarAnimal } from './detail_view.js';
 
-import { abrirModalRegistroParto } from './birth_modal.js';
+import { abrirModalRegistroParto } from './birth_modal.js';
+import { abrirModalConciliacionMoga } from './census_view.js';
 
 import { generarCardMovimientoHtml } from './movements_view.js';
 
@@ -236,6 +237,12 @@ export function renderVistaGanado() {
 
                 <span>Parto</span>
 
+              </button>
+
+              <!-- Botón táctil para conciliación oficial MoGa (WCAG AAA >= 48px) -->
+              <button class="btn-moga-header" id="btn-moga-header" title="Conciliación MoGa" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; min-width: 48px; padding: 0 14px; border-radius: var(--md-shape-full, 9999px); background: var(--md-secondary-container, #dbe4dc); color: var(--md-on-secondary-container, #111e17); border: 1px solid rgba(0, 0, 0, 0.08); font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                <span>📋</span>
+                <span>MoGa</span>
               </button>
 
             </div>
@@ -486,7 +493,15 @@ export function renderVistaGanado() {
 
 
 
-  const btnNuevoParto = document.getElementById("btn-nuevo-parto-header");
+  const btnNuevoParto = document.getElementById("btn-nuevo-parto-header");
+  const btnMogaHeader = document.getElementById("btn-moga-header");
+  if (btnMogaHeader) {
+    btnMogaHeader.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      abrirModalConciliacionMoga();
+    });
+  }
 
   if (btnNuevoParto) {
 
