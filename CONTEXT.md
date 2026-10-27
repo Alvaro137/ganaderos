@@ -29,7 +29,7 @@ PWA (Vanilla JS, ES Modules, sin bundler) <--descarga 1 vez-- Orange Pi + Caddy 
   - `src/infrastructure`: repositorios SQLite, `llm_gateway.py`.
   - `src/server`: FastAPI y esquemas Pydantic.
 - **Frontend**: directorio `pwa/` con ES Modules nativos (`pwa/js/modules/`: auth, api, voice, config, components/charts_svg.js...). El archivo `pwa/sw.js` precachea los recursos para uso offline. Incrementar `CACHE_NAME` en cada cambio de frontend para invalidar la versión en caché de los clientes (actualmente `ganaderos-campo-v36`).
-- **IA**: proxy multi-proveedor (Groq, Gemini, OpenRouter) con rotación ante códigos 429 por límite de cuota. Whisper para dictado por voz. Claves en `.env` (excluido del repositorio).
+- **IA**: pasarela simplificada (KISS/YAGNI) a través de FreeLLMApi (Smart Router unificado OpenAI-compatible con rotación inteligente, cuotas gratuitas y selección de modelo "auto"). Transcripción de voz mediante endpoint OpenAI-compatible con Unified_AK (o Groq Whisper como fallback). Claves en `.env` (excluido del repositorio).
 - **ADRs**: decisiones formales en `docs/adr/` (0001 a 0008): SQLite WASM, Intent Calling, arquitectura limpia, estrategia offline, ES Modules, logging y parseo de fechas legadas.
 
 ## 3. Infraestructura y despliegue (Orange Pi Zero 3)

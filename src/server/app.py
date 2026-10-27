@@ -291,6 +291,7 @@ from src.application.sync_service import SyncError, SyncService
 from src.domain.exceptions import DomainError
 from src.domain.value_objects import Crotal
 from src.infrastructure.llm_gateway import (
+    _obtener_config_freellm,
     obtener_modelos_priorizados,
     resolver_intencion_usuario,
     sintetizar_respuesta_llm,
@@ -1131,9 +1132,10 @@ async def ai_intent(
 async def ai_models(authorized: bool = Depends(verify_token)):
     """Devuelve el catálogo de modelos disponibles para inferencia y asistencia."""
     modelos = obtener_modelos_priorizados()
-    models = [{"id": "auto", "name": "Automático (Recomendado - Cascada de Mayor Inteligencia)"}]
+    models = [{"id": "auto", "name": "⚡ Automático (FreeLLMApi Smart Router)"}]
     for m in modelos:
-        models.append({"id": m["model"], "name": m["name"]})
+        if m.get("model") != "auto":
+            models.append({"id": m["model"], "name": m["name"]})
     return {
         "ok": True,
         "models": models,
@@ -1167,26 +1169,36 @@ async def ai_transcribe(file: UploadFile = File(...)):
             detail=f"El archivo de audio supera el límite permitido de {MAX_AUDIO_SIZE_BYTES // (1024 * 1024)}MB.",
         )
 
+    base_url, api_key = _obtener_config_freellm()
     groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("GROK_API_KEY")
-    if not groq_key:
-        raise HTTPException(status_code=400, detail="Configura GROQ_API_KEY en .env")
+
+    if api_key:
+        transcribe_url = f"{base_url}/audio/transcriptions"
+        auth_token = api_key
+        model_name = "whisper-1"
+    elif groq_key:
+        transcribe_url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        auth_token = groq_key
+        model_name = "whisper-large-v3-turbo"
+    else:
+        raise HTTPException(status_code=400, detail="Configura Unified_AK en .env para transcripción de voz.")
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         files = {
             "file": (file.filename or "audio.webm", content, file.content_type or "audio/webm")
         }
         data = {
-            "model": "whisper-large-v3-turbo",
+            "model": model_name,
             "language": "es",
             "response_format": "json",
         }
         headers = {
-            "Authorization": f"Bearer {groq_key}",
+            "Authorization": f"Bearer {auth_token}",
             "User-Agent": "GanaderosCampo/2.0",
         }
         try:
             resp = await client.post(
-                "https://api.groq.com/openai/v1/audio/transcriptions",
+                transcribe_url,
                 files=files,
                 data=data,
                 headers=headers,
