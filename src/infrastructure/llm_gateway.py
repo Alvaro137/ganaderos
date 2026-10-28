@@ -1,41 +1,24 @@
-"""Pasarela de comunicación con FreeLLMApi (Smart Router unificado).
+"""Pasarela de comunicación con FreeLLMApi y Agente Autónomo Text-to-SQL.
 
-Enruta consultas en lenguaje natural mediante Tool / Function Calling tipado
-a través del router unificado de FreeLLMApi (OpenAI-compatible).
-FreeLLMApi gestiona de forma autónoma la selección de modelos ('auto'), rotación
-ante códigos 429 y cuotas de proveedores gratuitos.
+Enruta consultas en lenguaje natural del ganadero mediante un Agente Text-to-SQL
+con grounding de esquema de base de datos sin PII, validación y ejecución en
+un Sandbox SQLite de solo lectura en el servidor, y auto-corrección de errores.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import re
+from pathlib import Path
 from typing import Any, Optional, Tuple
 
 import httpx
 
-from src.application.intents import CATALOGO_HERRAMIENTAS_LLM, IntentType
+from src.application.ai_domain_schema import construir_system_prompt_sql
+from src.application.sql_sandbox import ejecutar_consulta_sandbox
 
 logger = logging.getLogger("ganaderos.ai")
-
-SYSTEM_INSTRUCTION = """Eres el clasificador de intenciones del sistema de gestión de vacuno extensivo Ganaderos Campo.
-Tu única función es analizar la consulta del ganadero y seleccionar la herramienta/función más adecuada del catálogo con sus parámetros correspondientes.
-
-Reglas del dominio:
-- Crotales: Si el usuario indica un número de 4 dígitos (ej. "1045", "8549"), es el crotal del animal. Usa crotal_4.
-- Corrales/Lotes: Nombres como Dueña, Espadaña, Rivera, Vega, Cebadero corresponden al parámetro corral.
-- Explotaciones: 121 es reproducción/vida, 122 es cebadero. Los traslados entre ellas son traspasos, nunca ventas.
-- Si la pregunta es conceptual o informativa (ej. sanidad, consejos generales), utiliza la función 'consulta_informativa_general'.
-"""
-
-_MODELO_DEFAULT = [
-    {
-        "provider": "freellmapi",
-        "model": "auto",
-        "url": "http://localhost:3001/v1/chat/completions",
-        "name": "FreeLLMApi Smart Router (Auto)",
-    }
-]
 
 
 def _obtener_config_freellm() -> tuple[str, str]:
@@ -98,90 +81,259 @@ def obtener_modelos_priorizados() -> list[dict[str, Any]]:
 MODELOS_PRIORIZADOS = obtener_modelos_priorizados()
 
 
-def _construir_payload_tool_calling(
-    model: str,
-    prompt: str,
-    historial: Optional[list[dict[str, str]]] = None,
-) -> dict[str, Any]:
-    messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
-    if historial:
-        for msg in historial[-4:]:
-            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
-    messages.append({"role": "user", "content": prompt})
-
-    return {
-        "model": model,
-        "messages": messages,
-        "tools": CATALOGO_HERRAMIENTAS_LLM,
-        "tool_choice": "auto",
-        "temperature": 0.1,
-    }
-
-
-def _procesar_respuesta_tool_calling(
-    data: dict[str, Any],
-    model: str,
-) -> Optional[Tuple[str, dict[str, Any]]]:
-    try:
-        choice = data["choices"][0]["message"]
-    except (KeyError, IndexError, TypeError) as err:
-        logger.warning(f"[FreeLLM Router] Formato inesperado de respuesta de {model}: {err}")
+def _extraer_json_agente(texto: str) -> Optional[dict[str, Any]]:
+    """Extrae de forma robusta la estructura de consulta del texto generado por el LLM."""
+    if not texto or not isinstance(texto, str):
         return None
 
-    if "tool_calls" in choice and choice["tool_calls"]:
-        tool = choice["tool_calls"][0]["function"]
-        nombre = tool["name"]
-        try:
-            args = json.loads(tool["arguments"])
-        except (json.JSONDecodeError, TypeError) as json_err:
-            logger.warning(f"[FreeLLM Router] Error al parsear argumentos de '{nombre}' en {model}: {json_err}")
-            args = {}
-        return nombre, args
+    # 1. Intento directo con json.loads
+    try:
+        return json.loads(texto.strip())
+    except Exception:
+        pass
 
-    content = choice.get("content", "").strip() if choice.get("content") else ""
-    if content:
-        return IntentType.CONSULTA_INFORMATIVA_GENERAL.value, {"respuesta": content}
+    # 2. Bloque markdown ```json ... ```
+    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", texto, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1).strip())
+        except Exception:
+            pass
+
+    # 3. Primer '{' hasta el último '}'
+    start = texto.find("{")
+    end = texto.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(texto[start : end + 1])
+        except Exception:
+            pass
+
+    # 4. Si el modelo devolvió SQL directo sin envoltorio JSON
+    sql_match = re.search(r"(SELECT\s+.*)", texto, re.IGNORECASE | re.DOTALL)
+    if sql_match:
+        sql_clean = sql_match.group(1).strip().rstrip(";").replace("```", "").strip()
+        return {
+            "sql": sql_clean,
+            "interpretacion": "Consulta analítica sobre el censo ganadero",
+            "tipo_resultado": "general",
+        }
+
     return None
 
 
-async def resolver_intencion_usuario(
+def _deducir_tipo_resultado(filas: list[dict[str, Any]]) -> str:
+    """Clasifica el resultado para que el frontend use la vista especializada óptima."""
+    if not filas:
+        return "general"
+    keys = [k.lower() for k in filas[0].keys()]
+    if len(filas) == 1 and len(keys) == 1 and any(k in keys[0] for k in ("count", "total", "suma", "cantidad", "cabezas")):
+        return "conteo"
+    if any(k in keys for k in ("crotal", "crotal_4")):
+        return "animales"
+    if any(k in keys for k in ("alimento", "precio_kg")):
+        return "compras"
+    if any(k in keys for k in ("medicamento", "receta", "dias_retirada")):
+        return "recetas"
+    return "general"
+
+
+async def ejecutar_agente_ia_sql(
     prompt: str,
     historial: Optional[list[dict[str, str]]] = None,
+    db_path: Optional[Path] = None,
     modelo_solicitado: Optional[str] = None,
-    timeout: float = 10.0,
-) -> Tuple[Optional[str], dict[str, Any], bool]:
-    """Resuelve la intención del usuario delegando en FreeLLMApi de forma asíncrona."""
+    timeout: float = 12.0,
+    max_intentos: int = 2,
+) -> dict[str, Any]:
+    """Agente autónomo Text-to-SQL con Sandbox SQLite de solo lectura y auto-corrección de errores."""
     base_url, api_key = _obtener_config_freellm()
     if not api_key:
-        logger.warning("[FreeLLM Router] Unified_AK no configurada en entorno o .env")
-        return None, {}, False
+        logger.warning("[FreeLLM Agent] Unified_AK no configurada en entorno o .env")
+        return {
+            "ok": False,
+            "error": "Sin credenciales",
+            "detail": "Servicio de inferencia LLM no disponible o sin credenciales de API activas.",
+        }
 
     model_name = modelo_solicitado if modelo_solicitado and modelo_solicitado != "auto" else "auto"
     url = f"{base_url}/chat/completions"
-    payload = _construir_payload_tool_calling(model_name, prompt, historial)
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
         "User-Agent": "GanaderosCampo/2.0",
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            if resp.status_code != 200:
+    # Grounding de dominio y esquema sin PII
+    system_prompt = construir_system_prompt_sql(db_path)
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if historial:
+        for msg in historial[-4:]:
+            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+    messages.append({"role": "user", "content": prompt})
+
+    intento_actual = 0
+    sql_generada: Optional[str] = None
+    interpretacion_generada: str = "Consulta analítica sobre la explotación"
+    tipo_resultado: str = "general"
+    filas_obtenidas: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        while intento_actual < max_intentos:
+            intento_actual += 1
+            payload = {
+                "model": model_name,
+                "messages": messages,
+                "temperature": 0.1,
+            }
+
+            try:
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code != 200:
+                    logger.warning(f"[FreeLLM Agent] HTTP {resp.status_code}: {resp.text[:200]}")
+                    break
+
+                res_json = resp.json()
+                contenido = res_json["choices"][0]["message"].get("content", "").strip()
+                parsed = _extraer_json_agente(contenido)
+
+                if not parsed:
+                    # Respuesta directa en lenguaje natural
+                    return {
+                        "ok": True,
+                        "sql": None,
+                        "params": [],
+                        "interpretacion": "Información general:",
+                        "respuesta_directa": contenido,
+                        "filas": [],
+                        "tipo_resultado": "general",
+                    }
+
+                sql_generada = parsed.get("sql")
+                interpretacion_generada = parsed.get("interpretacion") or interpretacion_generada
+                tipo_resultado = parsed.get("tipo_resultado") or tipo_resultado
+
+                # Caso sin SQL: respuesta conceptual directa
+                if not sql_generada:
+                    return {
+                        "ok": True,
+                        "sql": None,
+                        "params": [],
+                        "interpretacion": interpretacion_generada,
+                        "respuesta_directa": parsed.get("respuesta_directa") or "Sin datos que consultar.",
+                        "filas": [],
+                        "tipo_resultado": tipo_resultado,
+                    }
+
+                # Si no hay base de datos local disponible para sandbox, devolver la SQL para el cliente
+                if not db_path or not db_path.exists():
+                    return {
+                        "ok": True,
+                        "sql": sql_generada,
+                        "params": [],
+                        "interpretacion": interpretacion_generada,
+                        "respuesta_directa": None,
+                        "filas": [],
+                        "tipo_resultado": tipo_resultado,
+                    }
+
+                # Ejecutar en Sandbox SQLite de solo lectura en servidor
+                exito, filas, error_sandbox = ejecutar_consulta_sandbox(db_path, sql_generada)
+
+                if exito:
+                    filas_obtenidas = filas
+                    tipo_resultado = _deducir_tipo_resultado(filas) if tipo_resultado == "general" else tipo_resultado
+
+                    # Síntesis ejecutiva en lenguaje ganadero sobre los datos
+                    sintesis = await sintetizar_respuesta_llm(
+                        prompt, filas_obtenidas[:15], modelo_solicitado=model_name
+                    )
+
+                    return {
+                        "ok": True,
+                        "sql": sql_generada,
+                        "params": [],
+                        "interpretacion": interpretacion_generada,
+                        "respuesta_directa": sintesis,
+                        "filas": filas_obtenidas,
+                        "tipo_resultado": tipo_resultado,
+                    }
+
+                # Falló en sandbox: retroalimentar error al modelo para auto-corrección
                 logger.warning(
-                    f"[FreeLLM Router] {model_name} en {url} respondió HTTP {resp.status_code}: {resp.text[:200]}"
+                    f"[FreeLLM Agent] Fallo en Sandbox (intento {intento_actual}/{max_intentos}): {error_sandbox} | SQL: {sql_generada}"
                 )
-                return None, {}, False
-            resultado = _procesar_respuesta_tool_calling(resp.json(), model_name)
-            if resultado:
-                return resultado[0], resultado[1], False
-    except httpx.TimeoutException:
-        logger.warning(f"[FreeLLM Router] Timeout agotado ({timeout}s) al contactar con FreeLLMApi")
-    except httpx.HTTPError as http_err:
-        logger.warning(f"[FreeLLM Router] Error de transporte HTTP con FreeLLMApi: {http_err}")
-    except Exception as e:
-        logger.warning(f"[FreeLLM Router] Error inesperado en llamada a FreeLLMApi: {e}", exc_info=True)
+                messages.append({"role": "assistant", "content": contenido})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"La consulta generó el siguiente error en SQLite: {error_sandbox}.\n"
+                            f"Corrige la sentencia SQL teniendo en cuenta las tablas y columnas exactas del esquema."
+                        ),
+                    }
+                )
+
+            except httpx.TimeoutException:
+                logger.warning(f"[FreeLLM Agent] Timeout ({timeout}s) en intento {intento_actual}")
+                break
+            except Exception as e:
+                logger.error(f"[FreeLLM Agent] Error inesperado: {e}", exc_info=True)
+                break
+
+    # Si se generó una consulta SQL válida que el sandbox no pudo ejecutar por timeout o tras agotar intentos
+    if sql_generada:
+        return {
+            "ok": True,
+            "sql": sql_generada,
+            "params": [],
+            "interpretacion": interpretacion_generada,
+            "respuesta_directa": None,
+            "filas": [],
+            "tipo_resultado": tipo_resultado,
+        }
+
+    return {
+        "ok": False,
+        "error": "Error de inferencia",
+        "detail": "Servicio de inferencia LLM no disponible o sin credenciales de API activas.",
+    }
+
+
+async def resolver_intencion_usuario(
+    prompt: str,
+    historial: Optional[list[dict[str, str]]] = None,
+    modelo_solicitado: Optional[str] = None,
+    db_path: Optional[Path] = None,
+    timeout: float = 12.0,
+) -> Tuple[Optional[str], dict[str, Any], bool]:
+    """Adaptador de compatibilidad para contratos legados del asistente."""
+    resultado = await ejecutar_agente_ia_sql(
+        prompt=prompt,
+        historial=historial,
+        db_path=db_path,
+        modelo_solicitado=modelo_solicitado,
+        timeout=timeout,
+    )
+    if not resultado.get("ok"):
+        return None, {}, False
+
+    sql = resultado.get("sql")
+    interpretacion = resultado.get("interpretacion") or "Consulta analítica sobre la explotación"
+    tipo_resultado = resultado.get("tipo_resultado") or "general"
+    resp_directa = resultado.get("respuesta_directa")
+
+    if sql:
+        args = {
+            "sql": sql,
+            "interpretacion": interpretacion,
+            "tipo_resultado": tipo_resultado,
+            "respuesta_directa": resp_directa,
+        }
+        return "consulta_sql_dinamica", args, False
+
+    if resp_directa:
+        return "consulta_informativa_general", {"respuesta": resp_directa}, False
 
     return None, {}, False
 
@@ -252,18 +404,27 @@ def clasificar_intencion_freellm(
 
     model_name = model or "auto"
     url = f"{base_url}/chat/completions"
-    payload = _construir_payload_tool_calling(model_name, prompt, historial)
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {clave_final}",
         "User-Agent": "GanaderosCampo/2.0",
+    }
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
     }
 
     try:
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(url, json=payload, headers=headers)
             if resp.status_code == 200:
-                return _procesar_respuesta_tool_calling(resp.json(), model_name)
+                data = resp.json()
+                content = data["choices"][0]["message"]["content"].strip()
+                parsed = _extraer_json_agente(content)
+                if parsed and parsed.get("sql"):
+                    return "consulta_sql_dinamica", parsed
+                return "consulta_informativa_general", {"respuesta": content}
             logger.warning(f"[FreeLLM Sync] HTTP {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
         logger.warning(f"[FreeLLM Sync] Error: {e}")
@@ -271,5 +432,4 @@ def clasificar_intencion_freellm(
     return None
 
 
-# Alias para retrocompatibilidad con scripts de evaluación CLI
 clasificar_intencion_groq = clasificar_intencion_freellm

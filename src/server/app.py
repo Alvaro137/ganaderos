@@ -431,7 +431,7 @@ async def lifespan(app: FastAPI):
 
     # Asistente IA está disponible tanto con BD local como en modo edge
     app.state.asistente_service = AsistenteService(
-        intent_resolver=lambda p, h=None, **kw: resolver_intencion_usuario(p, h, **kw),
+        intent_resolver=lambda p, h=None, **kw: resolver_intencion_usuario(p, h, db_path=_buscar_archivo_sqlite(), **kw),
         query_builder=construir_consulta_intent,
     )
 
@@ -542,7 +542,7 @@ def get_asistente_service() -> AsistenteService:
     service = getattr(app.state, "asistente_service", None)
     if service is None:
         service = AsistenteService(
-            intent_resolver=lambda p, h=None, **kw: resolver_intencion_usuario(p, h, **kw),
+            intent_resolver=lambda p, h=None, **kw: resolver_intencion_usuario(p, h, db_path=_buscar_archivo_sqlite(), **kw),
             query_builder=construir_consulta_intent,
         )
         app.state.asistente_service = service
