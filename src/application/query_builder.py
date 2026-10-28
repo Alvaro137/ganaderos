@@ -232,6 +232,19 @@ def construir_consulta_intent(nombre_intent: str, args: dict[str, Any]) -> Query
             respuesta_directa=texto
         )
 
+    elif nombre_intent in ("consulta_sql_dinamica", "sql_dinamica"):
+        sql = args.get("sql")
+        interpretacion = args.get("interpretacion") or "Consulta analítica sobre la explotación."
+        tipo_resultado = args.get("tipo_resultado") or "general"
+        respuesta_directa = args.get("respuesta_directa")
+        return QueryResult(
+            sql=sql,
+            params=[],
+            interpretacion=interpretacion,
+            tipo_resultado=tipo_resultado,
+            respuesta_directa=respuesta_directa,
+        )
+
     # Fallback genérico de seguridad
     return QueryResult(
         sql=None,

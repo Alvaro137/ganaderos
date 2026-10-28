@@ -4,9 +4,9 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 from src.infrastructure.llm_gateway import (
-    _construir_payload_tool_calling,
+    _deducir_tipo_resultado,
+    _extraer_json_agente,
     _obtener_config_freellm,
-    _procesar_respuesta_tool_calling,
     clasificar_intencion_freellm,
     clasificar_intencion_groq,
     obtener_modelos_priorizados,
@@ -42,59 +42,30 @@ class TestFreeLLMGatewayConfig:
 
 
 class TestFreeLLMPayloadAndParsing:
-    def test_construir_payload_tool_calling(self):
-        payload = _construir_payload_tool_calling(
-            model="auto",
-            prompt="Consulta vaca 1045",
-            historial=[{"role": "user", "content": "hola"}],
-        )
-        assert payload["model"] == "auto"
-        assert payload["tool_choice"] == "auto"
-        assert "tools" in payload
-        assert len(payload["messages"]) == 3  # system + 1 history + prompt
-
-    def test_procesar_respuesta_tool_calling_with_function(self):
-        data = {
-            "choices": [
-                {
-                    "message": {
-                        "tool_calls": [
-                            {
-                                "function": {
-                                    "name": "consultar_ficha_animal",
-                                    "arguments": '{"crotal_4": "1045"}',
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
-        res = _procesar_respuesta_tool_calling(data, "auto")
+    def test_extraer_json_agente_direct(self):
+        txt = '{"sql": "SELECT * FROM animales", "interpretacion": "Test", "tipo_resultado": "animales"}'
+        res = _extraer_json_agente(txt)
         assert res is not None
-        nombre, args = res
-        assert nombre == "consultar_ficha_animal"
-        assert args == {"crotal_4": "1045"}
+        assert res["sql"] == "SELECT * FROM animales"
 
-    def test_procesar_respuesta_content_fallback(self):
-        data = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "Respuesta directa general."
-                    }
-                }
-            ]
-        }
-        res = _procesar_respuesta_tool_calling(data, "auto")
+    def test_extraer_json_agente_markdown(self):
+        txt = 'Aquí está la consulta:\n```json\n{"sql": "SELECT crotal FROM animales", "interpretacion": "Crotales"}\n```'
+        res = _extraer_json_agente(txt)
         assert res is not None
-        nombre, args = res
-        assert nombre == "consulta_informativa_general"
-        assert args == {"respuesta": "Respuesta directa general."}
+        assert res["sql"] == "SELECT crotal FROM animales"
 
-    def test_procesar_respuesta_malformed(self):
-        assert _procesar_respuesta_tool_calling({}, "auto") is None
-        assert _procesar_respuesta_tool_calling({"choices": []}, "auto") is None
+    def test_extraer_json_agente_raw_sql(self):
+        txt = 'SELECT * FROM animales WHERE estado = "A";'
+        res = _extraer_json_agente(txt)
+        assert res is not None
+        assert "SELECT * FROM animales" in res["sql"]
+
+    def test_deducir_tipo_resultado(self):
+        assert _deducir_tipo_resultado([]) == "general"
+        assert _deducir_tipo_resultado([{"total": 10}]) == "conteo"
+        assert _deducir_tipo_resultado([{"crotal": "ES123"}]) == "animales"
+        assert _deducir_tipo_resultado([{"alimento": "Pienso"}]) == "compras"
+        assert _deducir_tipo_resultado([{"medicamento": "Draxxin"}]) == "recetas"
 
 
 class TestFreeLLMAsyncCalls:
@@ -108,14 +79,7 @@ class TestFreeLLMAsyncCalls:
             "choices": [
                 {
                     "message": {
-                        "tool_calls": [
-                            {
-                                "function": {
-                                    "name": "consultar_ficha_animal",
-                                    "arguments": '{"crotal_4": "2050"}',
-                                }
-                            }
-                        ]
+                        "content": '{"sql": "SELECT crotal_4 FROM animales WHERE crotal_4 = \'2050\'", "interpretacion": "Vaca 2050", "tipo_resultado": "animales"}'
                     }
                 }
             ]
@@ -126,8 +90,8 @@ class TestFreeLLMAsyncCalls:
                 return await resolver_intencion_usuario("vaca 2050")
 
         nombre, args, offline = asyncio.run(_run())
-        assert nombre == "consultar_ficha_animal"
-        assert args == {"crotal_4": "2050"}
+        assert nombre == "consulta_sql_dinamica"
+        assert args["sql"] == "SELECT crotal_4 FROM animales WHERE crotal_4 = '2050'"
         assert not offline
 
     def test_resolver_intencion_usuario_no_key(self, monkeypatch):
@@ -171,14 +135,7 @@ class TestFreeLLMSyncCalls:
             "choices": [
                 {
                     "message": {
-                        "tool_calls": [
-                            {
-                                "function": {
-                                    "name": "consultar_censo_corral",
-                                    "arguments": '{"corral": "Dueña"}',
-                                }
-                            }
-                        ]
+                        "content": '{"sql": "SELECT COUNT(*) as total FROM animales WHERE corral = \'DUEÑA\'", "interpretacion": "Censo Dueña"}'
                     }
                 }
             ]
@@ -188,8 +145,8 @@ class TestFreeLLMSyncCalls:
             res = clasificar_intencion_freellm("censo Dueña")
             assert res is not None
             nombre, args = res
-            assert nombre == "consultar_censo_corral"
-            assert args == {"corral": "Dueña"}
+            assert nombre == "consulta_sql_dinamica"
+            assert "total" in args["sql"]
 
     def test_clasificar_intencion_groq_alias(self, monkeypatch):
         assert clasificar_intencion_groq == clasificar_intencion_freellm
