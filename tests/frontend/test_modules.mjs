@@ -866,7 +866,7 @@ async function runAllTests() {
     // 1. Verificar CACHE_NAME v48
     const cacheMatch = swContent.match(/CACHE_NAME\s*=\s*["']([^"']+)["']/);
     assert.ok(cacheMatch, "Debe definirse CACHE_NAME en sw.js");
-    assert.strictEqual(cacheMatch[1], "ganaderos-campo-v50", "CACHE_NAME debe ser ganaderos-campo-v50");
+    assert.strictEqual(cacheMatch[1], "ganaderos-campo-v51", "CACHE_NAME debe ser ganaderos-campo-v51");
 
     // 2. Extraer lista ASSETS
     const assetsMatch = swContent.match(/const\s+ASSETS\s*=\s*\[([\s\S]*?)\];/);

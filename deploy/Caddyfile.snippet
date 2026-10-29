@@ -1,9 +1,49 @@
 # Snippet de configuración para Caddy v2 (/etc/caddy/Caddyfile)
-# Permite la convivencia pacífica de Ganaderos Campo (puerto 8010) junto a la
-# estación meteorológica Sainlogic en Espadaña (puerto 8000) bajo el mismo dominio.
+# Soporta tanto subdominios dedicados (Cloudflare Zero Trust / alvaro137.com)
+# como despliegues legados bajo subruta (/campo*).
 
-# Insertar dentro del bloque del dominio (ej. varo137.ddns.net):
-# -------------------------------------------------------------
+# ==============================================================================
+# 1. Configuración por Subdominios Dedicados (Producción alvaro137.com)
+# ==============================================================================
+
+http://campo.alvaro137.com {
+    encode gzip
+    # Redirección cruzada de subrutas legadas a sus respectivos subdominios
+    redir /meteo* https://meteo.alvaro137.com{uri} 302
+    redir /boxeo* https://boxeo.alvaro137.com{uri} 302
+
+    @noCache {
+        path /sw.js /index.html /manifest.json /
+    }
+    header @noCache Cache-Control "no-cache, no-store, must-revalidate"
+    reverse_proxy 127.0.0.1:8010
+}
+
+http://meteo.alvaro137.com {
+    encode gzip
+    redir /campo* https://campo.alvaro137.com{uri} 302
+    redir /boxeo* https://boxeo.alvaro137.com{uri} 302
+    reverse_proxy 127.0.0.1:8000
+}
+
+http://boxeo.alvaro137.com {
+    encode gzip
+    redir /campo* https://campo.alvaro137.com{uri} 302
+    redir /meteo* https://meteo.alvaro137.com{uri} 302
+    reverse_proxy 127.0.0.1:8020
+}
+
+http://alvaro137.com, http://www.alvaro137.com {
+    encode gzip
+    redir /meteo* https://meteo.alvaro137.com{uri} 302
+    redir /campo* https://campo.alvaro137.com{uri} 302
+    redir /boxeo* https://boxeo.alvaro137.com{uri} 302
+    redir / https://meteo.alvaro137.com 302
+}
+
+# ==============================================================================
+# 2. Configuración por Subruta en Dominio Compartido (Compatibilidad /campo*)
+# ==============================================================================
 
 handle /campo* {
     # Eliminar prefijo /campo para reenviar limpiamente al backend FastAPI
