@@ -9,6 +9,38 @@ import { ejecutarConsulta } from '../db.js';
 import { VoiceManager } from '../voice.js';
 import { seleccionarAnimal, verDetalleCorral } from './detail_view.js';
 
+/**
+ * Verifica si el servidor de explotación (Orange Pi + Caddy) responde de verdad.
+ * navigator.onLine es una mentira en campo (da true con wifi local pero sin ruta).
+ * Usamos GET /api/health con AbortController (timeout 3s).
+ */
+const HEALTH_TIMEOUT_MS = 3000;
+let _healthCache = { ok: false, ts: 0 };
+const HEALTH_CACHE_TTL_MS = 15000;
+
+export async function servidorDisponible(force = false) {
+  const now = Date.now();
+  if (!force && (now - _healthCache.ts) < HEALTH_CACHE_TTL_MS) {
+    return _healthCache.ok;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    const resp = await fetch("./api/health", {
+      method: "GET",
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    _healthCache = { ok: resp.ok, ts: now };
+    return resp.ok;
+  } catch (e) {
+    _healthCache = { ok: false, ts: now };
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function setupAsistenteIA() {
   const btnOpenAi = document.getElementById("btn-open-ai");
   const btnCloseAi = document.getElementById("btn-close-ai");
@@ -46,19 +78,36 @@ export function setupAsistenteIA() {
   });
 
   function actualizarEstadoConectividad() {
-    const online = navigator.onLine;
+    const onlineRapido = navigator.onLine;
     if (voiceStatusText) {
-      if (!online) {
+      if (!onlineRapido) {
         voiceStatusText.textContent = "📡 Sin conexión: el asistente por voz/IA requiere cobertura";
         voiceStatusText.style.color = "#ea580c";
       } else {
-        voiceStatusText.textContent = "Toca el micrófono para hablar";
-        voiceStatusText.style.color = "";
+        voiceStatusText.textContent = "Comprobando servidor de explotación...";
+        voiceStatusText.style.color = "#2563eb";
       }
     }
     if (btnRecordVoice) {
-      btnRecordVoice.classList.toggle("disabled-offline", !online);
-      btnRecordVoice.title = online ? "Dictar consulta por voz" : "La entrada por voz requiere conexión al servidor";
+      btnRecordVoice.classList.toggle("disabled-offline", !onlineRapido);
+      btnRecordVoice.title = onlineRapido ? "Dictar consulta por voz" : "La entrada por voz requiere conexión al servidor";
+    }
+    if (onlineRapido) {
+      servidorDisponible().then((ok) => {
+        if (voiceStatusText) {
+          if (ok) {
+            voiceStatusText.textContent = "Toca el micrófono para hablar";
+            voiceStatusText.style.color = "";
+          } else {
+            voiceStatusText.textContent = "📡 El servidor de explotación no responde. Verifica la cobertura.";
+            voiceStatusText.style.color = "#ea580c";
+          }
+        }
+        if (btnRecordVoice) {
+          btnRecordVoice.classList.toggle("disabled-offline", !ok);
+          btnRecordVoice.title = ok ? "Dictar consulta por voz" : "El servidor de explotación no responde";
+        }
+      });
     }
   }
 
@@ -149,9 +198,10 @@ export function setupAsistenteIA() {
   });
 
   if (btnRecordVoice) {
-    btnRecordVoice.addEventListener("click", () => {
-      if (!navigator.onLine) {
-        mostrarDegradacionGracil("La transcripción de voz requiere conexión al servidor de explotación. Puedes consultar el censo o fichas de animales directamente sin conexión.");
+    btnRecordVoice.addEventListener("click", async () => {
+      const ok = await servidorDisponible();
+      if (!ok) {
+        mostrarDegradacionGracil("El servidor de explotación no está disponible. Puedes consultar el censo o fichas de animales directamente sin conexión.");
         return;
       }
       if (voiceManager.escuchandoVoz) {
@@ -246,8 +296,9 @@ export function setupAsistenteIA() {
     voiceManager.detener();
     ejecutandoConsulta = true;
 
-    if (!navigator.onLine) {
-      mostrarDegradacionGracil("El asistente en lenguaje natural requiere conexión con el servidor de explotación.");
+    const srvOk = await servidorDisponible(true);
+    if (!srvOk) {
+      mostrarDegradacionGracil("Fallo de conexión al servidor de explotación (Orange Pi). Revisa la cobertura de tu dispositivo.");
       ejecutandoConsulta = false;
       return;
     }
@@ -428,7 +479,7 @@ export function setupAsistenteIA() {
     if (bubbleResponse) bubbleResponse.innerHTML = htmlBubble;
 
     let sintesisTexto = null;
-    if (esAnaliticaOSeguimiento && navigator.onLine) {
+    if (esAnaliticaOSeguimiento && await servidorDisponible()) {
       try {
         const authHdrs = obtenerAuthHeaders();
         const respSynth = await fetch("./api/ai/synthesize", {
