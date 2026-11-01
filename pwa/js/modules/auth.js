@@ -233,22 +233,34 @@ const DEFAULT_USERS = [
   { id: "usr_otro", nombre: "Otro", rol: "operador" }
 ];
 
+function generarMonograma(nombre) {
+  if (!nombre) return "OP";
+  const partes = nombre.trim().split(/\s+/);
+  if (partes.length === 1) {
+    return partes[0].slice(0, 2).toUpperCase();
+  }
+  return (partes[0][0] + partes[1][0]).toUpperCase();
+}
+
 export async function mostrarPantallaLogin(mensajeError = "") {
   const container = document.getElementById("app-container");
   if (!container) return;
+
+  // Aislar interfaz en modo login: oculta tab bar inferior, botones flotantes y metadatos
+  document.body.classList.add("auth-mode");
 
   // Ocultar badge de usuario en la cabecera durante login
   const btnUser = document.getElementById("btn-header-user");
   if (btnUser) btnUser.style.display = "none";
 
-  // Cargar operadores activos desde caché o valores por defecto para renderizar inmediatamente sin esperas
+  // Cargar operadores activos desde caché o valores por defecto
   let users = DEFAULT_USERS;
   const cached = localStorage.getItem("campo_pwa_users_cache");
   if (cached) {
     try { users = JSON.parse(cached); } catch (_) {}
   }
 
-  // Refrescar en segundo plano para próximas aperturas
+  // Refrescar lista de usuarios en segundo plano
   fetch("./api/auth/users").then(async (resp) => {
     if (resp.ok) {
       const data = await resp.json();
@@ -258,125 +270,147 @@ export async function mostrarPantallaLogin(mensajeError = "") {
     }
   }).catch(() => {});
 
-  let operadorSeleccionado = null; // null => el backend usa el operador por defecto
+  // Preselección inteligente: recordar último usuario seleccionado en este terminal
+  const ultimoUserId = localStorage.getItem("campo_pwa_last_user_id") || "usr_admin";
+  let operadorSeleccionado = users.find(u => u.id === ultimoUserId) || users[0] || null;
 
   container.innerHTML = `
     <div class="auth-card-container">
-      <div class="auth-header-section">
-        <img src="./icon-192.png" alt="Ganaderos" class="auth-logo">
-        <h2 class="auth-title">Ganaderos Campo</h2>
-        <p class="auth-subtitle">¿Quién eres? Elige tu nombre y entra con la contraseña de la explotación</p>
-      </div>
+      <div class="auth-card">
+        <div class="auth-header-section">
+          <div class="auth-badge-tag">Acceso a Explotación</div>
+          <h2 class="auth-title">Identificación de Campo</h2>
+          <p class="auth-subtitle">Selecciona tu nombre e introduce la clave de la explotación</p>
+        </div>
 
-      ${mensajeError ? `
-        <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85rem; margin-bottom: 14px; width: 100%; text-align: center;">
+        <div id="auth-error-banner" class="auth-error-banner" style="${mensajeError ? 'display: block;' : 'display: none;'}">
           ${escapeHtml(mensajeError)}
         </div>
-      ` : ""}
 
-      <!-- 1. SELECCIÓN DE OPERADOR (solo atribución, sin roles ni PIN) -->
-      <div id="section-operator-select" style="width: 100%;">
-        <div class="operator-grid">
-          ${users.map((u) => `
-            <div class="operator-card" data-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.nombre)}">
-              <div class="operator-avatar">🧑‍🌾</div>
-              <div class="operator-info">
-                <div class="operator-name">${escapeHtml(u.nombre)}</div>
-              </div>
-              <div style="color: var(--text-dim); font-size: 1.2rem;">›</div>
+        <!-- 1. SELECCIÓN DE OPERADOR (Cuadrícula compacta de alto contraste) -->
+        <div id="section-operator-select" class="operator-section">
+          <div class="auth-field-label">Operador de campo</div>
+          <div class="operator-grid">
+            ${users.map((u) => {
+              const isSel = operadorSeleccionado && operadorSeleccionado.id === u.id;
+              return `
+                <div class="operator-card ${isSel ? 'selected' : ''}" data-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.nombre)}" role="button" tabindex="0">
+                  <div class="operator-avatar">${escapeHtml(generarMonograma(u.nombre))}</div>
+                  <div class="operator-info">
+                    <div class="operator-name">${escapeHtml(u.nombre)}</div>
+                  </div>
+                  <div class="operator-check">✓</div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+          <div id="login-operador-activo" class="operator-status-text"></div>
+        </div>
+
+        <!-- 2. CONTRASEÑA DE LA EXPLOTACIÓN -->
+        <div id="section-master-pass" class="auth-pass-section">
+          <form id="form-auth-login" class="auth-login-form">
+            <div class="auth-field-label">Contraseña de la explotación</div>
+            <div class="auth-input-wrapper">
+              <input
+                type="password"
+                id="input-auth-pass"
+                placeholder="Introduce la contraseña..."
+                autocomplete="current-password"
+                required
+              />
+              <button type="button" id="btn-toggle-pass-visibility" class="btn-toggle-eye" aria-label="Mostrar u ocultar contraseña">
+                <svg class="eye-icon-show" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg class="eye-icon-hide" style="display: none;" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
+                  <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
+                  <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path>
+                  <line x1="2" y1="2" x2="22" y2="22"></line>
+                </svg>
+              </button>
             </div>
-          `).join("")}
+            <button
+              type="submit"
+              id="btn-submit-auth"
+              class="btn-submit-auth"
+            >
+              Entrar al Censo
+            </button>
+          </form>
         </div>
       </div>
-      <!-- PARTE 2B -->
     </div>
   `;
 
-  await montarFormularioLogin(container, () => operadorSeleccionado, (v) => { operadorSeleccionado = v; });
-}
+  const errorBanner = container.querySelector("#auth-error-banner");
+  const form = container.querySelector("#form-auth-login");
+  const inputPass = container.querySelector("#input-auth-pass");
+  const btnSubmit = container.querySelector("#btn-submit-auth");
+  const btnToggleEye = container.querySelector("#btn-toggle-pass-visibility");
+  const eyeShow = container.querySelector(".eye-icon-show");
+  const eyeHide = container.querySelector(".eye-icon-hide");
+  const textOperadorActivo = container.querySelector("#login-operador-activo");
 
-// === PARTE 2B ===
-
-async function montarFormularioLogin(container, getOperador, setOperador) {
-  let operadorSeleccionado = getOperador();
-
-  // 2. CONTRASEÑA COMPARTIDA DE LA EXPLOTACIÓN (único paso de acceso)
-  const secMaster = document.createElement("div");
-  secMaster.id = "section-master-pass";
-  secMaster.style.cssText = "width: 100%; margin-top: 6px;";
-  secMaster.innerHTML = `
-    <div style="background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);">
-      <div class="auth-section-title" style="margin-top: 0; margin-bottom: 8px;">Contraseña de la explotación</div>
-      <p id="login-operador-activo" style="margin: 0 0 10px 0; font-size: 0.82rem; color: var(--text-muted);"></p>
-      <form id="form-auth-login" style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
-        <input
-          type="password"
-          id="input-auth-pass"
-          placeholder="Contraseña de la explotación..."
-          autocomplete="current-password"
-          style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-main); outline: none; box-sizing: border-box;"
-          required
-        />
-        <button
-          type="submit"
-          id="btn-submit-auth"
-          style="width: 100%; padding: 12px; background: var(--brand-primary); color: #fff; font-size: 0.95rem; font-weight: 700; border: none; border-radius: var(--radius-md); cursor: pointer; transition: opacity 0.2s;"
-        >
-          Entrar
-        </button>
-      </form>
-    </div>
-  `;
-  const marcador = container.querySelector("#section-operator-select");
-  marcador.insertAdjacentElement("afterend", secMaster);
-
-  function refrescarOperadorActivo() {
-    const el = document.getElementById("login-operador-activo");
-    if (!el) return;
-    el.textContent = operadorSeleccionado
-      ? `Entrarás como: ${operadorSeleccionado.nombre}`
-      : "Sin operador elegido: entrarás como Álvaro (propietario).";
+  function actualizarTextoOperador() {
+    if (!textOperadorActivo) return;
+    textOperadorActivo.textContent = operadorSeleccionado
+      ? `Operario activo: ${operadorSeleccionado.nombre}`
+      : "Operario: General / Titular";
   }
-  refrescarOperadorActivo();
+  actualizarTextoOperador();
 
-  // Selección de operador: solo marca la tarjeta; el formulario permanece visible
+  // Selección de operador
   container.querySelectorAll(".operator-card").forEach((card) => {
-    card.addEventListener("click", () => {
+    const seleccionar = () => {
       const uid = card.dataset.userId;
       const uname = card.dataset.userName;
 
       if (operadorSeleccionado && operadorSeleccionado.id === uid) {
-        // Segundo clic: deseleccionar (vuelta al operador por defecto)
         operadorSeleccionado = null;
         card.classList.remove("selected");
-        card.style.borderColor = "";
       } else {
-        container.querySelectorAll(".operator-card").forEach((c) => {
-          c.classList.remove("selected");
-          c.style.borderColor = "";
-        });
+        container.querySelectorAll(".operator-card").forEach(c => c.classList.remove("selected"));
         operadorSeleccionado = { id: uid, nombre: uname };
         card.classList.add("selected");
-        card.style.borderColor = "var(--brand-primary)";
       }
-      setOperador(operadorSeleccionado);
-      refrescarOperadorActivo();
+      actualizarTextoOperador();
+    };
+
+    card.addEventListener("click", seleccionar);
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        seleccionar();
+      }
     });
   });
 
-  // Formulario único de acceso con la contraseña compartida
-  const form = document.getElementById("form-auth-login");
-  const input = document.getElementById("input-auth-pass");
-  if (form) {
+  // Toggle visibilidad de contraseña
+  if (btnToggleEye && inputPass && eyeShow && eyeHide) {
+    btnToggleEye.addEventListener("click", () => {
+      const esPassword = inputPass.getAttribute("type") === "password";
+      inputPass.setAttribute("type", esPassword ? "text" : "password");
+      eyeShow.style.display = esPassword ? "none" : "block";
+      eyeHide.style.display = esPassword ? "block" : "none";
+      inputPass.focus();
+    });
+  }
+
+  // Envío de formulario sin reset destructivo
+  if (form && inputPass && btnSubmit) {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const pass = input.value.trim();
+      const pass = inputPass.value.trim();
       if (!pass) return;
 
-      const btn = document.getElementById("btn-submit-auth");
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = "Verificando...";
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = "Entrando...";
+      if (errorBanner) {
+        errorBanner.style.display = "none";
+        errorBanner.textContent = "";
       }
 
       try {
@@ -391,13 +425,29 @@ async function montarFormularioLogin(container, getOperador, setOperador) {
         const data = await resp.json();
 
         if (resp.ok && data.ok && data.token) {
+          if (operadorSeleccionado) {
+            localStorage.setItem("campo_pwa_last_user_id", operadorSeleccionado.id);
+          }
           guardarSesion(data.token, data.user || null);
+          document.body.classList.remove("auth-mode");
           location.reload();
         } else {
-          mostrarPantallaLogin(data.detail || "Contraseña incorrecta.");
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = "Entrar al Censo";
+          if (errorBanner) {
+            errorBanner.textContent = data.detail || "Contraseña incorrecta.";
+            errorBanner.style.display = "block";
+          }
+          inputPass.value = "";
+          inputPass.focus();
         }
       } catch (err) {
-        mostrarPantallaLogin("Error conectando con el servidor: " + err.message);
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = "Entrar al Censo";
+        if (errorBanner) {
+          errorBanner.textContent = "Error de conexión: " + err.message;
+          errorBanner.style.display = "block";
+        }
       }
     });
   }
