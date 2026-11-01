@@ -146,6 +146,8 @@ async function iniciarAplicacion() {
       if (elMsg) elMsg.textContent = mensaje;
     });
 
+    document.body.classList.remove("auth-mode");
+
     const meta = getMetadata();
     const fechaExp = meta ? meta["fecha_exportacion"] : null;
     const elFecha = document.getElementById("meta-fecha");

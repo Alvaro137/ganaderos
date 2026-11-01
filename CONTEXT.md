@@ -35,18 +35,32 @@ PWA (Vanilla JS, ES Modules, sin bundler) <--descarga 1 vez-- Orange Pi + Caddy 
 ## 3. Infraestructura y despliegue (Orange Pi Zero 3)
 
 - Máquina: `orangepizero3`, usuario `varo`, alias SSH local: `opi-lan`.
-  Ruta de la aplicación: `~/ganaderos_pwa`. Entorno: Armbian + Caddy.
-- Servicio de producción: corre bajo systemd con `ganaderos.service` (`/etc/systemd/system/ganaderos.service`). Ejecuta `venv/bin/python src/server/app.py 8010` bajo el usuario `varo`, cargando variables con `EnvironmentFile`.
+  Ruta de la aplicación: `~/ganaderos_pwa`. Entorno: Armbian + Caddy + Cloudflare Zero Trust.
+- Red y Dominio:
+  - Dominio raíz: `alvaro137.com` protegido mediante **Cloudflare Zero Trust (Cloudflare Tunnel)**.
+  - Subdominios dedicados:
+    - `campo.alvaro137.com` -> Proxy Caddy a `127.0.0.1:8010` (Ganaderos Campo PWA).
+    - `meteo.alvaro137.com` -> Proxy Caddy a `127.0.0.1:8000` (Meteo Lite / Estación Sainlogic).
+    - `boxeo.alvaro137.com` -> Proxy Caddy a `127.0.0.1:8020` (Boxeo Enigma / WodBuster Sniper).
+    - `alvaro137.com` y `www.alvaro137.com` -> Redirección 302 a subdominios.
+    - Redirección cruzada: rutas legadas (`/meteo*`, `/campo*`, `/boxeo*`) se redirigen automáticamente a sus subdominios correspondientes.
+- Servicio de producción Ganaderos: corre bajo systemd con `ganaderos.service` (`/etc/systemd/system/ganaderos.service`). Ejecuta `venv/bin/python src/server/app.py 8010` bajo el usuario `varo`, cargando variables con `EnvironmentFile`.
   - Reinicio: `sudo systemctl restart ganaderos` (habilitado NOPASSWD en `/etc/sudoers.d/ganaderos` para el usuario `varo`).
   - Comprobación de estado: `curl http://localhost:8010/api/health` -> `{"status":"healthy",...,"version":"2.0.0"}`.
-- Puertos:
-  - 8010: Ganaderos Campo.
-  - 8000: estación meteorológica Sainlogic (servicio independiente; no modificar).
-  - 80 / 443: servidor web Caddy.
-- Caddy (`/etc/caddy/Caddyfile`, dominio `varo137.ddns.net`):
-  - `/campo/*` -> proxy a `127.0.0.1:8010`.
-  - Resto de rutas -> proxy a `127.0.0.1:8000`.
-- Docker: se mantiene en el repositorio (`compose.yaml`, `Dockerfile`) para CI y portabilidad, pero no se utiliza para servir producción. El usuario `varo` no pertenece al grupo `docker`.
+- Puertos internos:
+  - 8010: Ganaderos Campo PWA (FastAPI).
+  - 8000: estación meteorológica Sainlogic / Meteo Lite (servicio independiente; no modificar).
+  - 8020: Boxeo Enigma (servicio independiente; no modificar).
+  - 3001: FreeLLMAPI (microservicio Docker en red `ai-net`).
+  - 80 / 443: servidor web Caddy (recibe tráfico local y del túnel Cloudflare).
+- Almacenamiento Docker y USB (`/mnt/usb`):
+  - Para evitar desgaste prematuro y corrupción en la tarjeta micro-SD de la Orange Pi por escrituras intensivas, Docker está configurado con `"data-root": "/mnt/usb/docker"` en el almacenamiento USB (`/mnt/usb`).
+  - Los volúmenes y datos persistentes de IA (FreeLLMAPI en `/mnt/usb/freellmapi-data`, Hermes Agent en `/mnt/usb/hermes-agent`) residen en `/mnt/usb`.
+- Coexistencia con Hermes Agent:
+  - En `/home/varo/hermes-agent` corre el agente autónomo Hermes (`nousresearch/hermes-agent:latest` + `signal-cli`) conectado a la red Docker `ai-net`, consumiendo del endpoint unificado `http://freellmapi:3001/v1`.
+  - Ganaderos Campo (en systemd) consume del mismo router unificado en `http://127.0.0.1:3001/v1`.
+- Sincronización Access (`scripts/sync_access_merge.py`):
+  - URL por defecto configurada a `https://campo.alvaro137.com`, permitiendo la sincronización bidireccional desde el PC de Access sobre HTTPS seguro desde cualquier red.
 - Protocolo de despliegue:
   1. Validar en local: `python -m pytest tests/ -q`, `node tests/frontend/test_modules.mjs`, `ruff check src/ tests/`.
   2. Push a `develop` -> esperar CI en verde -> merge a `master` -> push.
