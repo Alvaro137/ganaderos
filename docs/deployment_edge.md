@@ -1,37 +1,48 @@
 # Guía Operativa: Despliegue en Edge (Orange Pi Zero 3 / Linux aarch64)
 
-Esta guía detalla el procedimiento de despliegue y mantenimiento de **Ganaderos Campo** en la placa SBC **Orange Pi Zero 3** ubicada en la explotación ganadera, conviviendo pacíficamente con la estación meteorológica (`meteo.service` en puerto 8000).
+Esta guía detalla el procedimiento de despliegue y mantenimiento de **Ganaderos Campo** en la placa SBC **Orange Pi Zero 3** ubicada en la explotación ganadera, conviviendo pacíficamente con la estación meteorológica (`meteo.service` en puerto 8000) y Boxeo Enigma (puerto 8020) bajo Cloudflare Zero Trust.
 
 ---
 
 ## 1. Arquitectura de Convivencia en el Servidor
 
 ```text
-                                Internet (HTTPS / 443)
-                                          │
-                                          ▼
+                        Internet / Cloudflare Edge (*.alvaro137.com)
+                                           │
+                                           ▼ (Cloudflare Tunnel)
                          ┌─────────────────────────────────┐
-                         │   Caddy v2 (varo137.ddns.net)   │
+                         │      cloudflared daemon         │
                          └────────────────┬────────────────┘
-                                          │
-                  ┌───────────────────────┴───────────────────────┐
-                  │                                               │
-             Ruta "/"                                       Ruta "/campo/*"
-                  │                                               │
-                  ▼                                               ▼
-     ┌──────────────────────────┐                   ┌──────────────────────────┐
-     │  meteo.service (Puerto)  │                   │ ganaderos.service (8010) │
-     │     127.0.0.1:8000       │                   │      127.0.0.1:8010      │
-     │  (Estación Meteorológica)│                   │   (FastAPI + PWA Campo)  │
-     └──────────────────────────┘                   └──────────────────────────┘
+                                           │
+                                           ▼
+                         ┌─────────────────────────────────┐
+                         │   Caddy v2 (Reverse Proxy)      │
+                         └────────────────┬────────────────┘
+                                           │
+       ┌───────────────────────────────────┼───────────────────────────────────┐
+       │                                   │                                   │
+campo.alvaro137.com                meteo.alvaro137.com                 boxeo.alvaro137.com
+       │                                   │                                   │
+       ▼                                   ▼                                   ▼
+┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+│ ganaderos.service (8010) │   │  meteo.service (8000)    │   │   boxeo.service (8020)   │
+│   FastAPI + PWA Campo    │   │  Estación Meteorológica  │   │  Boxeo Enigma / Sniper   │
+└──────────────┬───────────┘   └──────────────────────────┘   └──────────────────────────┘
+               │
+               ▼ (http://127.0.0.1:3001/v1)
+┌────────────────────────────────────────────────────────┐
+│  FreeLLMAPI Docker (:3001) - Red ai-net               │
+│  (Almacenamiento USB en /mnt/usb para evitar desgaste)  │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 2. Requisitos Previos en la Placa
 
-- **Hardware:** Orange Pi Zero 3 (1 GB RAM, Linux aarch64).
-- **Servicios en ejecución:** Caddy v2 (`systemctl status caddy`).
+- **Hardware:** Orange Pi Zero 3 (Linux aarch64).
+- **Almacenamiento USB:** Unidad USB montada en `/mnt/usb` donde reside el `data-root` de Docker (`/mnt/usb/docker`) para proteger la tarjeta micro-SD de escrituras intensivas.
+- **Servicios en ejecución:** Caddy v2 (`systemctl status caddy`), Cloudflared (`systemctl status cloudflared`).
 - **Python:** Python 3.10 o superior con módulo `venv` (`sudo apt install python3-venv python3-pip`).
 
 ---
@@ -39,7 +50,7 @@ Esta guía detalla el procedimiento de despliegue y mantenimiento de **Ganaderos
 ## 3. Procedimiento de Instalación Paso a Paso
 
 ### Paso 1: Clonar o Transferir el Código
-En la sesión SSH de la Orange Pi (`ssh varo@varo137.ddns.net` o por IP local):
+En la sesión SSH de la Orange Pi (`ssh opi-lan` o por IP local):
 
 ```bash
 cd /home/varo
@@ -58,69 +69,49 @@ venv/bin/pip install -e .
 Crear el archivo `/home/varo/ganaderos_pwa/.env`:
 
 ```bash
-cat << 'EOF' > /home/varo/ganaderos_pwa/.env
-APP_PORT=8010
-PWA_PASSWORD=mvp-testing
-GROQ_API_KEY=gsk_tu_clave_de_groq_aqui
-GANADEROS_DB_PATH=pwa/ganaderos_campo.sqlite
-BACKUP_DIR=backups
-BACKUP_RETENTION=7
-EOF
-
-chmod 600 /home/varo/ganaderos_pwa/.env
-```
-
-### Paso 4: Instalar la Unidad Systemd
-Copiar la unidad preconfigurada al sistema:
-
-```bash
-sudo cp deploy/ganaderos.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ganaderos.service
-```
-
-Comprobar que el servicio arrancó limpiamente en el puerto `8010`:
-```bash
-sudo systemctl status ganaderos.service
-curl -s http://127.0.0.1:8010/api/health
-# Debe responder: {"status":"healthy","service":"ganaderos-campo","version":"2.0.0"}
+PWA_SECRET_KEY=<tu_token_seguro_hex>
+Unified_AK=freellmapi-<tu_clave_unificada>
 ```
 
 ---
 
 ## 4. Configuración del Reverse Proxy (Caddy v2)
 
-Editar el archivo `/etc/caddy/Caddyfile`:
-
-```bash
-sudo nano /etc/caddy/Caddyfile
-```
-
-Añadir dentro del bloque del dominio `varo137.ddns.net` el contenido de `deploy/Caddyfile.snippet`:
+El archivo `/etc/caddy/Caddyfile` organiza los subdominios dedicados con redirección cruzada de subrutas legadas:
 
 ```caddy
-varo137.ddns.net {
-    # 1. Rutas de Ganaderos Campo
-    handle /campo* {
-        uri strip_prefix /campo
-        reverse_proxy 127.0.0.1:8010 {
-            header_up Host {host}
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            buffer_requests false
-        }
-        encode zstd gzip
-        header {
-            Service-Worker-Allowed "/campo/"
-            X-Content-Type-Options "nosniff"
-            X-Frame-Options "SAMEORIGIN"
-        }
-    }
+http://campo.alvaro137.com {
+    encode gzip
+    redir /meteo* https://meteo.alvaro137.com{uri} 302
+    redir /boxeo* https://boxeo.alvaro137.com{uri} 302
 
-    # 2. Rutas de la Estación Meteorológica (conservadas intactas)
-    handle {
-        reverse_proxy 127.0.0.1:8000
+    @noCache {
+        path /sw.js /index.html /manifest.json /
     }
+    header @noCache Cache-Control "no-cache, no-store, must-revalidate"
+    reverse_proxy 127.0.0.1:8010
+}
+
+http://meteo.alvaro137.com {
+    encode gzip
+    redir /campo* https://campo.alvaro137.com{uri} 302
+    redir /boxeo* https://boxeo.alvaro137.com{uri} 302
+    reverse_proxy 127.0.0.1:8000
+}
+
+http://boxeo.alvaro137.com {
+    encode gzip
+    redir /campo* https://campo.alvaro137.com{uri} 302
+    redir /meteo* https://meteo.alvaro137.com{uri} 302
+    reverse_proxy 127.0.0.1:8020
+}
+
+http://alvaro137.com, http://www.alvaro137.com {
+    encode gzip
+    redir /meteo* https://meteo.alvaro137.com{uri} 302
+    redir /campo* https://campo.alvaro137.com{uri} 302
+    redir /boxeo* https://boxeo.alvaro137.com{uri} 302
+    redir / https://meteo.alvaro137.com 302
 }
 ```
 
@@ -161,20 +152,13 @@ Para validar que todos los archivos de configuración, límites de memoria y rut
 python3 scripts/verify_edge.py
 ```
 
-Este script comprueba automáticamente:
-- **Caddyfile.snippet:** Presencia de `/campo*`, `strip_prefix`, proxy a `8010` y cabecera `Service-Worker-Allowed`.
-- **ganaderos.service:** Directiva `Restart=always`, límites de memoria `MemoryMax` para 1GB RAM y puerto `8010`.
-- **compose.prod.yaml:** Mapeo de puerto a `127.0.0.1:8010`, límites de CPU/RAM y sonda `healthcheck`.
-- **backup_db.py:** Uso de API SQLite en caliente (`sqlite3.backup()`) y rotación de copias.
-
 ---
 
 ## 7. Verificación Final de la Instalación
 
-1. **Web Meteorológica:** Acceder a `https://varo137.ddns.net/` y comprobar que la telemetría del ESP32 sigue operando con normalidad.
-2. **Ganaderos Campo PWA:** Acceder a `https://varo137.ddns.net/campo/` y verificar:
-   - Se muestra la pantalla de acceso con contraseña.
-   - Introducir `mvp-testing`.
-   - Se descarga la base de datos y se inicializa el motor SQLite WebAssembly.
-   - Buscar por el crotal de 4 dígitos `1045` mediante el teclado táctil.
+1. **Web Meteorológica:** Acceder a `https://meteo.alvaro137.com/` y comprobar que la telemetría del ESP32 sigue operando con normalidad.
+2. **Ganaderos Campo PWA:** Acceder a `https://campo.alvaro137.com/` y verificar:
+   - Se muestra la pantalla de acceso con selección de operario / contraseña.
+   - Se descarga la base de datos y se inicializa el motor SQLite WebAssembly offline.
+   - El botón directo a "Meteo" en la cabecera redirige fluidamente a `https://meteo.alvaro137.com/`.
    - Poner el teléfono en modo avión y comprobar que la aplicación sigue funcionando offline.
