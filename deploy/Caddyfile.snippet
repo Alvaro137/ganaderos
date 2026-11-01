@@ -38,7 +38,15 @@ http://alvaro137.com, http://www.alvaro137.com {
     redir /meteo* https://meteo.alvaro137.com{uri} 302
     redir /campo* https://campo.alvaro137.com{uri} 302
     redir /boxeo* https://boxeo.alvaro137.com{uri} 302
-    redir / https://meteo.alvaro137.com 302
+
+    # Portal de bienvenida centralizado
+    root * /var/www/portal
+    file_server
+
+    @html {
+        path / /index.html
+    }
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
 }
 
 # ==============================================================================
