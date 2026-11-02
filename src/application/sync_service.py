@@ -98,6 +98,16 @@ class SyncService:
         except sqlite3.OperationalError:
             pass
 
+        # Migración de origen para recetas y tratamientos (desacoplamiento de fuentes externas / Gestionavet)
+        try:
+            conn.execute("ALTER TABLE recetas ADD COLUMN origen TEXT DEFAULT 'access'")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE tratamientos ADD COLUMN origen TEXT DEFAULT 'access'")
+        except sqlite3.OperationalError:
+            pass
+
         conn.commit()
         return conn
 
@@ -277,6 +287,7 @@ class SyncService:
         # 2. Rescatar el histórico de registros de campo de la maestra actual bajo lock exclusivo
         with self._mutation_lock:
             historico: List[Dict[str, Any]] = []
+            recetas_externas: List[Dict[str, Any]] = []
             epoch_previo = 0
             if self.db_path.exists():
                 vieja = self._conectar()
@@ -286,6 +297,14 @@ class SyncService:
                         "ts_servidor, payload, conciliado_en_access, ts_conciliado, crotal_asignado "
                         "FROM campo_registros"
                     ).fetchall()]
+                    try:
+                        recetas_externas = [dict(r) for r in vieja.execute(
+                            "SELECT fecha, receta, medicamento, unidades, dosis_unitaria, n_animales, "
+                            "veterinario, tiempo_carne, tiempo_leche, proveedor, cea, origen "
+                            "FROM recetas WHERE origen != 'access' AND origen IS NOT NULL"
+                        ).fetchall()]
+                    except sqlite3.OperationalError:
+                        recetas_externas = []
                     epoch_previo = self._leer_estado(vieja)["epoch"]
                 finally:
                     vieja.close()
@@ -305,6 +324,17 @@ class SyncService:
                             (r["uuid"], r["tipo"], r["crotal"], r["operador"], r["device_id"],
                              r["ts_dispositivo"], r["ts_servidor"], r["payload"],
                              r.get("conciliado_en_access", 0), r.get("ts_conciliado"), r.get("crotal_asignado")),
+                        )
+                    for rx in recetas_externas:
+                        conn.execute(
+                            "INSERT INTO recetas "
+                            "(fecha, receta, medicamento, unidades, dosis_unitaria, n_animales, "
+                            "veterinario, tiempo_carne, tiempo_leche, proveedor, cea, origen) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (rx["fecha"], rx["receta"], rx["medicamento"], rx["unidades"],
+                             rx["dosis_unitaria"], rx["n_animales"], rx["veterinario"],
+                             rx["tiempo_carne"], rx["tiempo_leche"], rx["proveedor"],
+                             rx["cea"], rx.get("origen", "gestionavet")),
                         )
                     nuevo_epoch = epoch_previo + 1
                     conn.execute(

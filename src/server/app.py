@@ -290,6 +290,7 @@ from src.application.services import (
 from src.application.sync_service import SyncError, SyncService
 from src.domain.exceptions import DomainError
 from src.domain.value_objects import Crotal
+from src.infrastructure.backup_vault import guardar_factura_en_vault
 from src.infrastructure.llm_gateway import (
     _obtener_config_freellm,
     obtener_modelos_priorizados,
@@ -1009,6 +1010,106 @@ async def ingest_ventas_pdf(
         "total_kilos_canal": datos["total_kilos_canal"],
         "total_factura": datos["total_factura"],
         "message": f"Factura {datos['numero_factura']} procesada correctamente ({datos['total_cabezas']} canales).",
+    }
+
+
+def _get_webhook_secret() -> str:
+    return os.environ.get("GANAVAEX_WEBHOOK_SECRET", "ganaderos-webhook-ganavaex-secret-key")
+
+
+@app.post("/api/ventas/webhook-ganavaex", tags=["Censo Ganadero"])
+async def webhook_ventas_ganavaex(
+    request: Request,
+    secret: Optional[str] = None,
+    file: Optional[UploadFile] = File(None),
+):
+    """Webhook cloud para ingesta automática de facturas GANAVAEX desde Power Automate / Outlook Web."""
+    expected = _get_webhook_secret()
+    provided = request.headers.get("X-Webhook-Secret") or secret
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Secreto de webhook inválido o ausente.",
+        )
+
+    MAX_PDF_SIZE = 15 * 1024 * 1024
+    nombre_archivo = "factura_ganavaex.pdf"
+    contenido = b""
+
+    if file is not None and file.filename:
+        nombre_archivo = file.filename
+        contenido = await file.read()
+    else:
+        contenido = await request.body()
+        hdr_fn = request.headers.get("X-Filename")
+        if hdr_fn:
+            nombre_archivo = hdr_fn
+        else:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            nombre_archivo = f"factura_ganavaex_{ts}.pdf"
+
+    if len(contenido) == 0:
+        raise HTTPException(status_code=400, detail="El archivo recibido está vacío.")
+    if len(contenido) > MAX_PDF_SIZE:
+        raise HTTPException(status_code=413, detail="El archivo excede el tamaño máximo permitido.")
+    if not contenido.startswith(b"%PDF-"):
+        raise HTTPException(
+            status_code=400, detail="El contenido recibido no corresponde a un documento PDF válido."
+        )
+
+    try:
+        datos = parsear_factura_pdf(contenido, nombre_archivo=nombre_archivo)
+    except Exception as e:
+        logger.error(f"[Webhook Ganavaex] Error parseando PDF {nombre_archivo}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=422, detail=f"No se pudieron extraer datos de la factura PDF: {e}"
+        )
+
+    db_file = _buscar_archivo_sqlite()
+    if not db_file:
+        raise HTTPException(status_code=503, detail="Base de datos no localizada.")
+
+    w_conn = sqlite3.connect(str(db_file))
+    try:
+        factura_id = guardar_liquidacion_en_bd(w_conn, datos)
+        try:
+            w_conn.execute(
+                "UPDATE _sync_estado SET epoch = epoch + 1, actualizado_en = datetime('now') WHERE id = 1"
+            )
+            w_conn.commit()
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"[Webhook Ganavaex] Error guardando en BD: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error guardando liquidación: {e}")
+    finally:
+        w_conn.close()
+
+    vault_status = {}
+    try:
+        fn_safe = (
+            f"{datos['numero_factura'].replace('/', '_')}.pdf"
+            if datos.get("numero_factura")
+            else nombre_archivo
+        )
+        vault_status = guardar_factura_en_vault(contenido, fn_safe)
+    except Exception as e:
+        logger.warning(f"[Webhook Ganavaex] Error archivando en Git Vault: {e}")
+
+    logger.info(
+        f"[Webhook Ganavaex] Factura {datos['numero_factura']} procesada ({datos['total_cabezas']} canales). Vault: {vault_status.get('committed')}"
+    )
+
+    return {
+        "ok": True,
+        "factura_id": factura_id,
+        "numero_factura": datos["numero_factura"],
+        "fecha_factura": datos["fecha_factura"],
+        "total_cabezas": datos["total_cabezas"],
+        "total_kilos_canal": datos["total_kilos_canal"],
+        "total_factura": datos["total_factura"],
+        "vault_archivado": vault_status.get("committed", False),
+        "message": f"Factura {datos['numero_factura']} procesada e integrada automáticamente.",
     }
 
 
