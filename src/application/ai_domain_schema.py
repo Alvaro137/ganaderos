@@ -19,7 +19,7 @@ CREATE TABLE animales (
     crotal TEXT PRIMARY KEY,          -- Crotal oficial completo (ej. 'ES012345678901')
     crotal_4 TEXT NOT NULL,           -- Últimos 4 dígitos del crotal (ej. '1045') para búsqueda rápida
     nombre TEXT,                      -- Nombre coloquial o código
-    sexo TEXT,                        -- 'H' (hembra) o 'M' (macho)
+    sexo TEXT,                        -- 'Vaca' o 'Machos' (y 'Hembras') procedentes de Access
     raza TEXT,                        -- Raza (ej. 'LIMUSIN', 'CHAROLES', 'AVILEÑA', 'CRUCE')
     fecha_nacimiento TEXT,            -- Fecha de nacimiento en formato ISO 'YYYY-MM-DD'
     madre_crotal TEXT,                -- Crotal oficial de la madre
@@ -38,7 +38,7 @@ CREATE TABLE partos (
     madre_crotal TEXT NOT NULL,       -- Crotal de la vaca nodriza madre
     fecha_parto TEXT NOT NULL,        -- Fecha del parto 'YYYY-MM-DD'
     cria_crotal TEXT,                 -- Crotal oficial asignado a la cría (si ya lo tiene)
-    cria_sexo TEXT,                   -- 'H' (hembra) o 'M' (macho)
+    cria_sexo TEXT,                   -- 'Hembra' o 'Macho'
     incidencias TEXT                  -- Notas de parto ('NORMAL', 'DISTOCICO', 'GEMELAR', 'MUERTO', etc.)
 );
 
@@ -142,7 +142,8 @@ def obtener_vocabulario_dominio(db_path: Optional[Path] = None) -> dict[str, lis
     vocabulario: dict[str, list[Any]] = {
         "corrales": ["DUEÑA", "ESPADAÑA", "CEBADERO", "VEGA", "RIVERA", "CEREZAL", "CIPEREZ"],
         "razas": ["LIMUSIN", "CHAROLES", "AVILEÑA", "RETINTA", "BERRENDA", "CRUCE"],
-        "sexos": ["H", "M"],
+        "sexos": ["Vaca", "Machos", "Hembras"],
+        "sexos_cria": ["Hembra", "Macho"],
         "estados": ["A", "B"],
         "tipos_movimiento": ["TRASLADO_INTERNO", "VENTA", "BAJA_MUERTE", "ENTRADA"],
     }
@@ -199,7 +200,10 @@ REGLAS ESTRICTAS DE SQL:
 8. Respeta las relaciones:
    - Partos de una madre: `partos.madre_crotal = animales.crotal`.
    - Rendimiento en matadero: une `ventas_canales` con `ventas_liquidaciones` por `ventas_canales.factura_id = ventas_liquidaciones.id`.
-9. Si la pregunta es puramente informativa/conceptual y no requiere datos de la base de datos (ej. "¿qué es el tiempo de supresión?"), responde directamente sin generar código SQL.
+9. Filtros por sexo:
+   - En la tabla `animales`, los valores reales son 'Vaca' (hembras/nodrizas) o 'Machos' (añojos, toros) o 'Hembras'. Para vacas/hembras usa `(sexo = 'Vaca' OR sexo = 'Hembras')`. Para machos usa `sexo = 'Machos'`.
+   - En la tabla `partos`, la columna `cria_sexo` utiliza 'Hembra' o 'Macho'.
+10. Si la pregunta es puramente informativa/conceptual y no requiere datos de la base de datos (ej. "¿qué es el tiempo de supresión?"), responde directamente sin generar código SQL.
 
 FORMATO DE RESPUESTA:
 Si la consulta requiere datos de la base de datos, responde ÚNICAMENTE con un objeto JSON en este formato:

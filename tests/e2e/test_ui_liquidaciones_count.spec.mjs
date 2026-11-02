@@ -1,7 +1,11 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 
-const ARTIFACT_DIR = 'C:/Users/varo/.gemini/antigravity/brain/1ca10c1f-b9cf-4659-8b4e-132dba12b533';
+import fs from 'fs';
+const ARTIFACT_DIR = process.env.ARTIFACT_DIR || path.join(process.cwd(), 'test-results');
+if (!fs.existsSync(ARTIFACT_DIR)) {
+  fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
 
 test.describe('Verificación Visual de Conteo de Facturas en UI', () => {
   test.beforeEach(async ({ page }) => {

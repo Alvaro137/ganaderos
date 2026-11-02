@@ -174,7 +174,6 @@ class SQLiteUsuarioRepository(UsuarioRepository):
             id TEXT PRIMARY KEY,
             nombre TEXT NOT NULL,
             rol TEXT NOT NULL,
-            pin_hash TEXT NOT NULL,
             password_hash TEXT,
             activo INTEGER DEFAULT 1,
             creado_en TEXT NOT NULL
@@ -188,15 +187,15 @@ class SQLiteUsuarioRepository(UsuarioRepository):
             now_str = datetime.now().isoformat()
 
             usuarios_defecto = [
-                ("usr_admin", "Álvaro", "admin", "sin-pin", None, 1, now_str),
-                ("usr_jose", "Jose", "operador", "sin-pin", None, 1, now_str),
-                ("usr_amelia", "Amelia", "operador", "sin-pin", None, 1, now_str),
-                ("usr_alex", "Alex", "operador", "sin-pin", None, 1, now_str),
-                ("usr_otro", "Otro", "operador", "sin-pin", None, 1, now_str),
+                ("usr_admin", "Álvaro", "admin", None, 1, now_str),
+                ("usr_jose", "Jose", "operador", None, 1, now_str),
+                ("usr_amelia", "Amelia", "operador", None, 1, now_str),
+                ("usr_alex", "Alex", "operador", None, 1, now_str),
+                ("usr_otro", "Otro", "operador", None, 1, now_str),
             ]
             cur.executemany("""
-            INSERT INTO usuarios (id, nombre, rol, pin_hash, password_hash, activo, creado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO usuarios (id, nombre, rol, password_hash, activo, creado_en)
+            VALUES (?, ?, ?, ?, ?, ?)
             """, usuarios_defecto)
             self.conn.commit()
 
@@ -216,13 +215,12 @@ class SQLiteUsuarioRepository(UsuarioRepository):
     def create(self, usuario: Usuario) -> None:
         cur = self.conn.cursor()
         cur.execute("""
-        INSERT INTO usuarios (id, nombre, rol, pin_hash, password_hash, activo, creado_en)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO usuarios (id, nombre, rol, password_hash, activo, creado_en)
+        VALUES (?, ?, ?, ?, ?, ?)
         """, (
             usuario.id,
             usuario.nombre,
             usuario.rol,
-            usuario.pin_hash,
             usuario.password_hash,
             1 if usuario.activo else 0,
             usuario.creado_en or datetime.now().isoformat()
@@ -234,7 +232,6 @@ class SQLiteUsuarioRepository(UsuarioRepository):
             id=row['id'],
             nombre=row['nombre'],
             rol=row['rol'],
-            pin_hash=row['pin_hash'],
             password_hash=row['password_hash'],
             activo=bool(row['activo']),
             creado_en=row['creado_en']
