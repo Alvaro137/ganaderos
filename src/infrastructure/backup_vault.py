@@ -16,6 +16,7 @@ import os
 import shutil
 import sqlite3
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -110,7 +111,8 @@ def _crear_readme_si_falta(vault_dir: Path) -> None:
             "## Estructura\n"
             "- `access/bdlibro.mdb`: Binario maestro de Ganaderos 10 (Microsoft Access Jet).\n"
             "- `sqlite/ganaderos_campo.sqlite`: Binario relacional consolidado para la PWA de campo.\n"
-            "- `dumps/censo_dump.sql`: Volcado completo en texto plano SQL (permite auditoría de diffs entre versiones).\n\n"
+            "- `dumps/censo_dump.sql`: Volcado completo en texto plano SQL (permite auditoría de diffs entre versiones).\n"
+            "- `liquidaciones/`: Documentos PDF oficiales de liquidaciones y rendimientos en canal de matadero.\n\n"
             "## Recuperación ante desastre\n"
             "Para restaurar cualquier versión histórica:\n"
             "```bash\n"
@@ -188,10 +190,8 @@ def guardar_snapshot_en_vault(
     pushed = False
     push_msg = "Push no solicitado"
     if push:
-        # Intentar push a main
         res_push = _ejecutar_git(["push", "-u", "origin", "main"], v_dir)
         if res_push.returncode != 0:
-            # Reintento con pull --rebase por si hay commits remotos concurrentes
             _ejecutar_git(["pull", "--rebase", "origin", "main"], v_dir)
             res_push = _ejecutar_git(["push", "-u", "origin", "main"], v_dir)
 
@@ -208,4 +208,62 @@ def guardar_snapshot_en_vault(
         "message": f"Snapshot guardado ({commit_hash}). {push_msg}",
         "vault_dir": str(v_dir),
         "archivos": archivos_actualizados,
+    }
+
+
+def guardar_factura_en_vault(
+    pdf_bytes: bytes,
+    nombre_archivo: str,
+    vault_dir: Optional[Path] = None,
+    remote_url: str = DEFAULT_VAULT_REMOTE,
+    push: bool = True,
+) -> Dict[str, Any]:
+    """Persiste y versiona un PDF de liquidación en el subdirectorio liquidaciones/{YYYY}/ del vault."""
+    v_dir = resolver_directorio_vault(vault_dir)
+    asegurar_repositorio_vault(v_dir, remote_url=remote_url)
+
+    anio = datetime.now().strftime("%Y")
+    dest_dir = v_dir / "liquidaciones" / anio
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_file = dest_dir / nombre_archivo
+    dest_file.write_bytes(pdf_bytes)
+
+    _crear_readme_si_falta(v_dir)
+    _ejecutar_git(["add", f"liquidaciones/{anio}/{nombre_archivo}"], v_dir)
+
+    status_res = _ejecutar_git(["status", "--porcelain"], v_dir)
+    if not status_res.stdout.strip():
+        return {
+            "ok": True,
+            "cambios": False,
+            "commit": None,
+            "path": str(dest_file),
+            "pushed": False,
+        }
+
+    msg = f"feat(ventas): liquidacion {nombre_archivo}"
+    res_commit = _ejecutar_git(["commit", "-m", msg], v_dir)
+    if res_commit.returncode != 0:
+        logger.warning(f"[GitVault] No se pudo crear commit para factura {nombre_archivo}: {res_commit.stderr}")
+        return {"ok": False, "error": res_commit.stderr, "path": str(dest_file)}
+
+    rev_res = _ejecutar_git(["rev-parse", "HEAD"], v_dir)
+    commit_hash = rev_res.stdout.strip()[:10]
+
+    pushed = False
+    if push:
+        res_push = _ejecutar_git(["push", "-u", "origin", "main"], v_dir)
+        if res_push.returncode != 0:
+            _ejecutar_git(["pull", "--rebase", "origin", "main"], v_dir)
+            res_push = _ejecutar_git(["push", "-u", "origin", "main"], v_dir)
+        pushed = res_push.returncode == 0
+        if not pushed:
+            logger.warning(f"[GitVault] Push de factura no completado: {res_push.stderr}")
+
+    return {
+        "ok": True,
+        "cambios": True,
+        "commit": commit_hash,
+        "path": str(dest_file),
+        "pushed": pushed,
     }

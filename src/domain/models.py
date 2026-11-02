@@ -62,6 +62,7 @@ class RecetaSanitaria:
     periodo_supresion: PeriodoSupresion
     proveedor: str
     cea: ExplotacionCEA
+    origen: str = "access"
     id: Optional[int] = None
 
     def fecha_limite_carne(self) -> Optional[date]:
