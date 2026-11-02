@@ -1143,6 +1143,31 @@ async def sync_lonja_endpoint(
     }
 
 
+@app.post("/api/recetas/sync-gestionavet", tags=["Sanidad y Recetas"])
+async def sync_gestionavet_endpoint(
+    authorized: bool = Depends(verify_token),
+):
+    """Sincroniza el libro oficial de medicamentos y tratamientos directamente desde Gestionavet con origen='gestionavet'."""
+    db_file = _buscar_archivo_sqlite()
+    if not db_file:
+        raise HTTPException(
+            status_code=503, detail="Base de datos no localizada para sincronizar recetas."
+        )
+
+    from src.application.gestionavet_service import sincronizar_gestionavet_en_bd
+
+    loop = asyncio.get_running_loop()
+    try:
+        res = await loop.run_in_executor(
+            None, sincronizar_gestionavet_en_bd, Path(db_file)
+        )
+    except Exception as e:
+        logger.error(f"[Gestionavet] Error sincronizando recetas: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al sincronizar Gestionavet: {e}")
+
+    return res
+
+
 @app.post(
     "/api/censo/conciliar-moga", tags=["Censo Ganadero"], response_model=MogaConciliacionResponse
 )
