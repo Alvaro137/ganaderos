@@ -64,7 +64,7 @@ def load_credentials() -> Tuple[str, str]:
 
 
 def md5(val: str) -> str:
-    return hashlib.md5(val.encode("utf-8")).hexdigest()
+    return hashlib.md5(val.encode("utf-8"), usedforsecurity=False).hexdigest()  # nosec B324
 
 
 class GestionavetClient:
