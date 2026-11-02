@@ -62,7 +62,8 @@ def inicializar_bd_sqlite(ruta_destino: Path) -> sqlite3.Connection:
         fecha_fin TEXT,
         medicamento TEXT,
         veterinario TEXT,
-        causa TEXT
+        causa TEXT,
+        origen TEXT DEFAULT 'access'
     );
 
     DROP TABLE IF EXISTS explotaciones;
@@ -87,7 +88,8 @@ def inicializar_bd_sqlite(ruta_destino: Path) -> sqlite3.Connection:
         tiempo_carne INTEGER,
         tiempo_leche INTEGER,
         proveedor TEXT,
-        cea TEXT
+        cea TEXT,
+        origen TEXT DEFAULT 'access'
     );
 
     DROP TABLE IF EXISTS compras_alimento;

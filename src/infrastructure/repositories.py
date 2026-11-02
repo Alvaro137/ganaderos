@@ -146,6 +146,7 @@ class SQLiteRecetaRepository(RecetaRepository):
             periodo_supresion=PeriodoSupresion(dias_carne=row['tiempo_carne'] or 0, dias_leche=row['tiempo_leche'] or 0),
             proveedor=row['proveedor'],
             cea=ExplotacionCEA(row['cea']) if row['cea'] else None,
+            origen=row['origen'] if 'origen' in row.keys() else 'access',
             id=row['id']
         )
 

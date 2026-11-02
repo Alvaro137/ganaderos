@@ -294,7 +294,7 @@ def guardar_liquidacion_en_bd(conn: sqlite3.Connection, datos: Dict[str, Any]) -
                     d["cuota_iva"],
                     d["gastos_total"],
                     d["total_factura"],
-                    d["archivo_origen"],
+                    d.get("archivo_origen"),
                     factura_id,
                 ),
             )
@@ -322,7 +322,7 @@ def guardar_liquidacion_en_bd(conn: sqlite3.Connection, datos: Dict[str, Any]) -
                     d["cuota_iva"],
                     d["gastos_total"],
                     d["total_factura"],
-                    d["archivo_origen"],
+                    d.get("archivo_origen"),
                 ),
             )
             factura_id = cur.lastrowid
@@ -337,7 +337,7 @@ def guardar_liquidacion_en_bd(conn: sqlite3.Connection, datos: Dict[str, Any]) -
                 """,
                 (
                     factura_id,
-                    lin["linea_numero"],
+                    lin.get("linea_numero", 1),
                     lin["articulo"],
                     lin["cabezas"],
                     lin["peso_canal_kg"],
