@@ -25,10 +25,10 @@ PWA (Vanilla JS, ES Modules, sin bundler) <--descarga 1 vez-- Orange Pi + Caddy 
 
 - **Backend**: FastAPI + Uvicorn (`src/server/app.py`). Arquitectura hexagonal:
   - `src/domain`: entidades, value objects (`Crotal`, `ExplotacionCEA`), excepciones.
-  - `src/application`: servicios, `query_builder.py` con Intent Calling tipado (el LLM extrae parámetros y el código construye SQL parametrizado con `?`, sin Text-to-SQL libre).
+  - `src/application`: servicios, asistente analítico con agente autónomo Text-to-SQL en sandbox SQLite de solo lectura (`sql_sandbox.py`, `ai_domain_schema.py`) y fallback a Intent Calling tipado (`query_builder.py`).
   - `src/infrastructure`: repositorios SQLite, `llm_gateway.py`.
   - `src/server`: FastAPI y esquemas Pydantic.
-- **Frontend**: directorio `pwa/` con ES Modules nativos (`pwa/js/modules/`: auth, api, voice, config, components/charts_svg.js...). El archivo `pwa/sw.js` precachea los recursos para uso offline. Incrementar `CACHE_NAME` en cada cambio de frontend para invalidar la versión en caché de los clientes (actualmente `ganaderos-campo-v36`).
+- **Frontend**: directorio `pwa/` con ES Modules nativos (`pwa/js/modules/`: auth, api, voice, config, components/charts_svg.js...). El archivo `pwa/sw.js` precachea los recursos para uso offline. Incrementar `CACHE_NAME` en cada cambio de frontend para invalidar la versión en caché de los clientes (actualmente `ganaderos-campo-v53`).
 - **IA**: pasarela simplificada (KISS/YAGNI) a través de FreeLLMApi (Smart Router unificado OpenAI-compatible con rotación inteligente, cuotas gratuitas y selección de modelo "auto"). Transcripción de voz mediante endpoint OpenAI-compatible con Unified_AK (o Groq Whisper como fallback). Claves en `.env` (excluido del repositorio).
 - **ADRs**: decisiones formales en `docs/adr/` (0001 a 0008): SQLite WASM, Intent Calling, arquitectura limpia, estrategia offline, ES Modules, logging y parseo de fechas legadas.
 
@@ -213,7 +213,7 @@ CI: `.github/workflows/ci.yml` ejecuta ruff, pytest y comprobaciones de segurida
   - Dimensiones de interacción táctil según WCAG (>=48px): `.btn-nuevo-parto-header` con dimensiones mínimas de 48x48px e icono de 18px; botón de borrado `.btn-input-clear` centrado con área táctil de 48x48px; botón de cierre de modal `#btn-cerrar-modal-parto` de 48x48px; `.btn-toggle-keypad` con altura mínima de 48px.
   - Búsqueda flexible por crotal (1 a 4 dígitos): coincidencia por prefijo, con relleno de ceros (`padStart(4, '0')`) y por sufijo en `db_client.js`, priorizando coincidencias exactas y animales activos.
   - Notificaciones en interfaz: sustitución de llamadas a `alert()` en `birth_modal.js` y `detail_view.js` por mensajes en `#modal-parto-error`, marcado visual de campos requeridos y avisos emergentes tipo toast (`.pwa-toast--visible`).
-  - Service Worker: actualización de versión de caché a `ganaderos-campo-v30` en `pwa/sw.js`.
+  - Service Worker: actualización de versión de caché a `ganaderos-campo-v53` en `pwa/sw.js`.
 - [x] Seguridad y análisis estático (pre-push y CI SAST):
   - Hook local de Git (`.githooks/pre-push` y `scripts/pre_push_check.py`): ejecución secuencial de Gitleaks, Ruff y Pip-Audit sobre las dependencias de `pyproject.toml` antes de permitir `git push`. Activado con `git config core.hooksPath .githooks`.
   - Bandit en GitHub Actions: análisis de seguridad estático en `src/` y `scripts/` filtrado por nivel medio y alto (`-ll`), configurado en `pyproject.toml`.
