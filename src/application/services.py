@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import inspect
 from dataclasses import dataclass
 from datetime import date
@@ -178,13 +176,3 @@ class UsuarioService:
 
     def get_by_id(self, user_id: str) -> Optional[Usuario]:
         return self.usuario_repo.get_by_id(user_id)
-
-    def autenticar_pin(self, user_id: str, pin: str) -> Optional[Usuario]:
-        usuario = self.usuario_repo.get_by_id(user_id)
-        if not usuario or not usuario.activo:
-            return None
-        pin_hash = hashlib.sha256(f"{user_id}:{pin}".encode()).hexdigest()
-        if hmac.compare_digest(usuario.pin_hash, pin_hash):
-            return usuario
-        return None
-

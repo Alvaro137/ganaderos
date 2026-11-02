@@ -26,6 +26,9 @@ class TestAIDomainSchema:
         assert "corrales" in vocab
         assert "razas" in vocab
         assert "sexos" in vocab
+        assert "sexos_cria" in vocab
+        assert "Vaca" in vocab["sexos"]
+        assert "Machos" in vocab["sexos"]
         assert "estados" in vocab
         assert len(vocab["corrales"]) > 0
 

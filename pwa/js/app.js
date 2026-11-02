@@ -175,9 +175,9 @@ async function iniciarAplicacion() {
       } else if (AppState.tabActual === "recetas") {
         renderVistaRecetas();
       } else if (AppState.tabActual === "alimentos") {
-        renderVistaLiquidaciones();
+        renderVistaAlimentos();
       } else if (AppState.tabActual === "movimientos") {
-        renderVistaGanado();
+        renderVistaMovimientos();
       }
 
       mostrarToast("Base de datos actualizada");
