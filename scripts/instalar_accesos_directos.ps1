@@ -14,10 +14,25 @@ Write-Host " Directori del repositorio: $RepoRoot"
 Write-Host " Escritorio destino:        $DesktopPath"
 Write-Host ""
 
-# Detectar intérprete de Python (preferir pythonw para no mostrar ventana de consola si se desea, o python)
-$PythonExe = (Get-Command pythonw -ErrorAction SilentlyContinue).Source
-if (-not $PythonExe) {
-    $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+# Detectar intérprete de Python (preferir venv local si existe, o pythonw/python del sistema)
+$VenvPythonw = Join-Path $RepoRoot "venv\Scripts\pythonw.exe"
+$VenvPython = Join-Path $RepoRoot "venv\Scripts\python.exe"
+$DotVenvPythonw = Join-Path $RepoRoot ".venv\Scripts\pythonw.exe"
+
+if (Test-Path $VenvPythonw) {
+    $PythonExe = $VenvPythonw
+    Write-Host "[+] Usando entorno virtual local: $PythonExe" -ForegroundColor Green
+} elseif (Test-Path $VenvPython) {
+    $PythonExe = $VenvPython
+    Write-Host "[+] Usando entorno virtual local: $PythonExe" -ForegroundColor Green
+} elseif (Test-Path $DotVenvPythonw) {
+    $PythonExe = $DotVenvPythonw
+    Write-Host "[+] Usando entorno virtual local (.venv): $PythonExe" -ForegroundColor Green
+} else {
+    $PythonExe = (Get-Command pythonw -ErrorAction SilentlyContinue).Source
+    if (-not $PythonExe) {
+        $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+    }
 }
 
 if (-not $PythonExe) {
