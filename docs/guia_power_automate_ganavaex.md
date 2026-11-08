@@ -65,5 +65,5 @@ Dentro del bucle:
    - Categoría comercial (`AÑOJO`, `TERNERA`, `VACA`) y precio por kg canal (€/kg).
    - Descuentos de transporte, cuota de cooperativa y retenciones.
 3. **Persistencia en SQLite**: Inserta en `ventas_liquidaciones`, `ventas_canales` y `ventas_gastos`.
-4. **Auditoría Git Vault**: Guarda una copia inmutable del PDF en el repositorio privado `ganaderos-vault` bajo `liquidaciones/YYYY/factura_XXX.pdf`.
+4. **Auditoría Git Vault**: Guarda una copia inmutable del PDF en el repositorio aislado de Git Vault bajo `liquidaciones/YYYY/factura_XXX.pdf`.
 5. **Aviso a los Móviles**: Incrementa el contador `epoch`. La próxima vez que los vaqueros abran la PWA en el campo, tendrán los datos de rendimiento en canal actualizados en su base de datos local.

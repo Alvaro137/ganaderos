@@ -1,231 +1,126 @@
 # Contexto maestro del proyecto
 
-> **Propósito**: este documento es la memoria persistente del proyecto. Consúltalo antes de realizar cambios en la arquitectura, el código o la infraestructura.
-> Última actualización: 2026-10-17.
+> **Propósito**: este documento es la memoria persistente del proyecto. Define los fundamentos de arquitectura, el modelo de datos, las decisiones de diseño y las convenciones de ingeniería del sistema.
+> Última actualización: 2026-11-08.
 
 ---
 
 ## 1. Qué es este proyecto
 
-Ganaderos Campo es una PWA local-first para consultar el censo de vacuno de carne (animales, lotes, movimientos, partos, recetas, compras de pienso, rendimientos en canal y rentabilidad económica) sin cobertura móvil.
+Ganaderos Campo es una Progressive Web App (PWA) con arquitectura local-first para la gestión operativa y el censo de vacuno de carne en pastos y dehesas (animales, lotes, movimientos, partos, recetas sanitarias, compras de pienso, rendimientos en canal y rentabilidad) sin dependencia de cobertura móvil en campo.
 
-- Usuario: ganadero y ayudante en campo.
-- Búsqueda principal: últimos 4 dígitos del crotal (por ejemplo, `ES000810740273` -> `0273`).
-- Origen de datos: Microsoft Access (`C:\GANADEROS 10\bdlibro.mdb`, password `REDACTED_DB_PASSWORD`, 32 bits).
-- Flujo de datos: el PC exporta un SQLite espejo; el móvil lo descarga una vez y ejecuta consultas localmente mediante SQLite WASM e IndexedDB. La aplicación en el móvil no se conecta directamente a la base de datos Access.
+- **Usuario objetivo**: operador ganadero y personal técnico en campo.
+- **Criterio de búsqueda operativa**: últimos 4 dígitos del crotal oficial (por ejemplo, `ES000810740273` -> `0273`).
+- **Origen de datos heredado**: Microsoft Access (`bdlibro.mdb`, protegido por credencial configurada en `GANADEROS_DB_PASSWORD`).
+- **Flujo de datos local-first**: el equipo de oficina exporta un espejo relacional en SQLite; el dispositivo cliente lo descarga una única vez y ejecuta las consultas analíticas y relacionales directamente en el navegador mediante SQLite compilado a WebAssembly (SQL.js) con persistencia en IndexedDB. El cliente móvil no realiza peticiones HTTP para consultar el censo.
 
-## 2. Arquitectura (resumen operativo)
+---
 
-```
-bdlibro.mdb (PC) --exportador--> ganaderos_demo.sqlite --> servido por FastAPI
-                                                                   |
-PWA (Vanilla JS, ES Modules, sin bundler) <--descarga 1 vez-- Orange Pi + Caddy (HTTPS)
-   └─ SQLite WASM: todas las consultas corren en el móvil, 0 HTTP al consultar
-```
+## 2. Arquitectura del sistema
 
-- **Backend**: FastAPI + Uvicorn (`src/server/app.py`). Arquitectura hexagonal:
-  - `src/domain`: entidades, value objects (`Crotal`, `ExplotacionCEA`), excepciones.
-  - `src/application`: servicios, asistente analítico con agente autónomo Text-to-SQL en sandbox SQLite de solo lectura (`sql_sandbox.py`, `ai_domain_schema.py`) y fallback a Intent Calling tipado (`query_builder.py`).
-  - `src/infrastructure`: repositorios SQLite, `llm_gateway.py`.
-  - `src/server`: FastAPI y esquemas Pydantic.
-- **Frontend**: directorio `pwa/` con ES Modules nativos (`pwa/js/modules/`: auth, api, voice, config, components/charts_svg.js...). El archivo `pwa/sw.js` precachea los recursos para uso offline. Incrementar `CACHE_NAME` en cada cambio de frontend para invalidar la versión en caché de los clientes (actualmente `ganaderos-campo-v53`).
-- **IA**: pasarela simplificada (KISS/YAGNI) a través de FreeLLMApi (Smart Router unificado OpenAI-compatible con rotación inteligente, cuotas gratuitas y selección de modelo "auto"). Transcripción de voz mediante endpoint OpenAI-compatible con Unified_AK (o Groq Whisper como fallback). Claves en `.env` (excluido del repositorio).
-- **ADRs**: decisiones formales en `docs/adr/` (0001 a 0008): SQLite WASM, Intent Calling, arquitectura limpia, estrategia offline, ES Modules, logging y parseo de fechas legadas.
-
-## 3. Infraestructura y despliegue (Orange Pi Zero 3)
-
-- Máquina: `orangepizero3`, usuario `varo`, alias SSH local: `opi-lan`.
-  Ruta de la aplicación: `~/ganaderos_pwa`. Entorno: Armbian + Caddy + Cloudflare Zero Trust.
-- Red y Dominio:
-  - Dominio raíz: `alvaro137.com` protegido mediante **Cloudflare Zero Trust (Cloudflare Tunnel)**.
-  - Subdominios dedicados:
-    - `campo.alvaro137.com` -> Proxy Caddy a `127.0.0.1:8010` (Ganaderos Campo PWA).
-    - `meteo.alvaro137.com` -> Proxy Caddy a `127.0.0.1:8000` (Meteo Lite / Estación Sainlogic).
-    - `boxeo.alvaro137.com` -> Proxy Caddy a `127.0.0.1:8020` (Boxeo Enigma / WodBuster Sniper).
-    - `alvaro137.com` y `www.alvaro137.com` -> Redirección 302 a subdominios.
-    - Redirección cruzada: rutas legadas (`/meteo*`, `/campo*`, `/boxeo*`) se redirigen automáticamente a sus subdominios correspondientes.
-- Servicio de producción Ganaderos: corre bajo systemd con `ganaderos.service` (`/etc/systemd/system/ganaderos.service`). Ejecuta `venv/bin/python src/server/app.py 8010` bajo el usuario `varo`, cargando variables con `EnvironmentFile`.
-  - Reinicio: `sudo systemctl restart ganaderos` (habilitado NOPASSWD en `/etc/sudoers.d/ganaderos` para el usuario `varo`).
-  - Comprobación de estado: `curl http://localhost:8010/api/health` -> `{"status":"healthy",...,"version":"2.0.0"}`.
-- Puertos internos:
-  - 8010: Ganaderos Campo PWA (FastAPI).
-  - 8000: estación meteorológica Sainlogic / Meteo Lite (servicio independiente; no modificar).
-  - 8020: Boxeo Enigma (servicio independiente; no modificar).
-  - 3001: FreeLLMAPI (microservicio Docker en red `ai-net`).
-  - 80 / 443: servidor web Caddy (recibe tráfico local y del túnel Cloudflare).
-- Almacenamiento Docker y USB (`/mnt/usb`):
-  - Para evitar desgaste prematuro y corrupción en la tarjeta micro-SD de la Orange Pi por escrituras intensivas, Docker está configurado con `"data-root": "/mnt/usb/docker"` en el almacenamiento USB (`/mnt/usb`).
-  - Los volúmenes y datos persistentes de IA (FreeLLMAPI en `/mnt/usb/freellmapi-data`, Hermes Agent en `/mnt/usb/hermes-agent`) residen en `/mnt/usb`.
-- Coexistencia con Hermes Agent:
-  - En `/home/varo/hermes-agent` corre el agente autónomo Hermes (`nousresearch/hermes-agent:latest` + `signal-cli`) conectado a la red Docker `ai-net`, consumiendo del endpoint unificado `http://freellmapi:3001/v1`.
-  - Ganaderos Campo (en systemd) consume del mismo router unificado en `http://127.0.0.1:3001/v1`.
-- Sincronización Access (`scripts/sync_access_merge.py`):
-  - URL por defecto configurada a `https://campo.alvaro137.com`, permitiendo la sincronización bidireccional desde el PC de Access sobre HTTPS seguro desde cualquier red.
-- Protocolo de despliegue:
-  1. Validar en local: `python -m pytest tests/ -q`, `node tests/frontend/test_modules.mjs`, `ruff check src/ tests/`.
-  2. Push a `develop` -> esperar CI en verde -> merge a `master` -> push.
-  3. En la Orange Pi: `cd ~/ganaderos_pwa && git pull`.
-  4. Ejecutar `sudo systemctl restart ganaderos` y verificar con curl.
-  - No realizar despliegues en caliente directamente en producción.
-
-## 4. Git y estructura del repositorio
-
-- Remoto: `origin` = `https://github.com/Alvaro137/ganaderos.git`.
-- Ramas: `master` (producción) y `develop` (integración), unificadas mediante merges `--no-ff`.
-  Flujo de trabajo: ramas `feature/<nombre>` creadas desde `develop` -> merge a `develop` -> merge a `master`.
-- Estructura: el proyecto reside en la raíz (`src/`, `pwa/`, `tests/`, `docs/`, `config/`).
-  El directorio `python/campo-pwa/` contiene una versión anterior histórica con `http.server`; no comparte ancestro git y se conserva como archivo de referencia.
-- Comportamiento de tests con archivos de datos: la suite de pytest modifica `pwa/ganaderos_demo.sqlite`. Restaurar con `git checkout -- pwa/ganaderos_demo.sqlite` antes de commitear.
-- Archivos locales no versionados (no commitear): `.opencode/`, `decompiled/`, `original/`, `scratch/`, `hola.txt`, `scripts/test_groq_live.py`.
-
-## 5. Autenticación: diseño actual (post-KISS, commit b7c40f3)
-
-Evolución del diseño:
-1. Versión inicial: contraseña única compartida (`PWA_PASSWORD`, valor por defecto `mvp-testing`) con token HMAC de 30 días.
-2. Intento de RBAC: roles admin, vaquero y veterinario con PIN de 4 dígitos, teclado en pantalla y contraseña maestra. Se descartó por complejidad innecesaria.
-3. Versión actual (KISS): selección de operador ("¿Quién eres?") y contraseña compartida de la explotación. Sin PIN, sin teclado numérico forzado ni permisos diferenciados.
-
-Objetivo del selector de usuario: atribuir autoría a las acciones para consolidaciones futuras de datos. No aplica restricciones de permisos.
-
-Detalles técnicos:
-- `POST /api/auth/login`: recibe `{password, user_id?}`. Con `user_id` válido emite un token asociado; si se omite o es inválido, asigna `usr_admin` (Álvaro).
-- Token: HMAC-SHA256 (`expira:user_id:rol:nonce.firma`), firmado con la clave `PWA_SECRET_KEY` configurada en el `.env` de la Orange Pi. Nota: la variable `PWA_AUTH_SECRET` presente en versiones antiguas de `compose.yaml` quedó en desuso; el código consume `PWA_SECRET_KEY`.
-- Usuarios iniciales (creados si la tabla `usuarios` está vacía): `usr_admin` (Álvaro, rol `admin`) y `usr_jose`, `usr_amelia`, `usr_alex`, `usr_otro` (rol `operador`). Los usuarios `usr_paco` y `usr_vet` fueron eliminados de la base de datos de producción.
-- Frontend: `pwa/js/modules/auth.js`. Pantalla con tarjetas de operador y campo de contraseña visible; un segundo clic en una tarjeta la deselecciona. Mantiene soporte offline mediante caché local (`campo_pwa_users_cache`) y renderiza la vista sin bloquear por peticiones de red.
-- Acceso para pruebas E2E: el token literal `e2e-valid-auth-token` solo se acepta si `APP_ENV=e2e` o `APP_ENV=test`.
-
-## 6. Ejecución de pruebas (local, Windows)
-
-```bat
-python -m pytest tests/ -q            :: 94 tests (unitarios e integracion)
-node tests/frontend/test_modules.mjs  :: 16 tests de modulos ES
-node --check pwa/js/modules/auth.js   :: sintaxis de un modulo JS
-python -m ruff check src/ tests/      :: linter (CI requiere 0 errores)
-npx playwright test tests/e2e/        :: pruebas E2E (requiere navegadores)
+```text
+[ Access bdlibro.mdb ] --(ETL/Sync)--> [ SQLite Espejo ] --> [ Servidor API FastAPI ]
+                                                                      |
+                                                               (HTTP / Caddy TLS)
+                                                                      |
+[ PWA Cliente (Vanilla JS ES Modules) ] <----(Descarga 1 vez)---------+
+   └─ Motor SQLite WASM (SQL.js + IndexedDB)
+      Consultas relacionales 100% locales en campo (0 latencia, 0 peticiones)
 ```
 
-CI: `.github/workflows/ci.yml` ejecuta ruff, pytest y comprobaciones de seguridad en push a `master`, `develop` y pull requests.
+### Capas del backend (Clean / Hexagonal Architecture)
+- **`src/domain`**: entidades inmutables y reglas de negocio puras sin dependencias externas (`Animal`, `Parto`, `RecetaSanitaria`, `Movimiento`, `CompraAlimento`), objetos de valor (`Crotal`, `ExplotacionCEA`, `PeriodoSupresion`) e interfaces abstractas de repositorio (`repositories.py`).
+- **`src/application`**: casos de uso y orquestación (`CensoService`, `SanidadService`, `GenealogiaService`), asistente analítico con agente Text-to-SQL en sandbox SQLite de solo lectura (`sql_sandbox.py`, `ai_domain_schema.py`) y fallback determinista a Intent Calling tipado (`query_builder.py`).
+- **`src/infrastructure`**: implementaciones SQLite de repositorios (`repositories.py`), pasarela de modelos de lenguaje con clientes asíncronos (`llm_gateway.py`), adaptadores para base de datos heredada (`access_reader.py`) y motor de copias versionadas (`backup_vault.py`).
+- **`src/server`**: servidor asíncrono ASGI con FastAPI (`app.py`), esquemas de validación Pydantic v2 (`schemas.py`), endpoints tipados, documentación interactiva OpenAPI en `/docs` y gestión de ciclo de vida con `lifespan`.
 
-## 7. Trampas conocidas
+### Frontend modular (Vanilla JS + ES Modules)
+- Directorio `pwa/` estructurado en módulos nativos (`pwa/js/modules/`): `auth.js`, `api.js`, `db.js`, `voice.js`, `config.js` y componentes de vista en `views/`.
+- Service Worker (`pwa/sw.js`): precaching de activos estáticos, recursos WebAssembly y soporte offline integral.
+- Cola de salida offline (`outbox.js`): almacén transaccional en IndexedDB (`GanaderosMutacionesOffline`) para registro optimista en campo de eventos (partos, movimientos, pesajes) y sincronización diferida contra `/api/sync/push`.
 
-1. **Sesiones SSH anidadas**: si un comando no responde, verificar si la terminal ya está dentro de una sesión interactiva en la Orange Pi, donde el alias `opi-lan` no existe. Salir con `exit`.
-2. **Expansión de variables en PowerShell**: PowerShell evalúa `$(...)` localmente al ejecutar `ssh host "cmd $(...)"`. Usar comillas simples para evaluar en destino: `ssh host 'cmd $(...)'`.
-3. **Lectura de archivos por rangos**: peticiones de rangos en herramientas de lectura pueden fallar si el archivo cambia en disco. Repetir la lectura completa si ocurre.
-4. **Archivos tar en Windows**: `git archive` genera problemas de codificación de rutas en Windows. Utilizar `git checkout <ref> -- .` o `git show ref:ruta`.
-5. **Estado de SQLite tras tests**: restaurar `pwa/ganaderos_demo.sqlite` con `git checkout` tras ejecutar pytest.
-6. **Contenido de variables de entorno**: el archivo `.env` local contiene credenciales reales y no debe ser inspeccionado ni enviado en prompts. Utilizar las funciones `cargar_env()` y `_cargar_env_file()`.
-7. **Directorio de trabajo en shell**: PowerShell puede reiniciar el directorio de trabajo entre comandos independientes. Especificar la ruta completa o invocar `Set-Location` al inicio de cada bloque.
-8. **Base de datos de producción en la Orange Pi**: el archivo activo en la Orange Pi es `pwa/ganaderos_campo.sqlite` (exportación real de ~1.6 MB, no versionada en Git). El archivo `ganaderos_demo.sqlite` versionado es exclusivamente para pruebas y entornos de desarrollo.
-9. **Operaciones Git concurrentes**: ejecutar comandos de Git de manera estrictamente secuencial para evitar colisiones en los bloqueos (`index.lock`), referencias cruzadas o pushes interrumpidos.
-10. **Comandos con sudo**: no ejecutar `sudo` de forma autónoma ni intentar inferir credenciales. Solicitar explícitamente al operador la ejecución de cualquier instrucción con privilegios en la Orange Pi.
-11. **Ciclo de vida `DOMContentLoaded` en módulos ES**: los scripts con `type="module"` difieren su ejecución. Tras un cierre de sesión o recarga rápida, el documento puede encontrarse ya en estado `interactive` o `complete` antes de enlazar el evento, impidiendo que se ejecute el inicializador. Verificar siempre con `document.readyState !== 'loading'`.
-12. **Actualización de base de datos en caliente en SQLite WASM**: al descargar una nueva versión de la base de datos en segundo plano, la propiedad `this.db` en memoria no se actualiza de forma automática. Es necesario invocar `_reemplazarBaseDatosEnCaliente`, emitir el evento `campo:db-updated` y actualizar la vista activa.
-13. **Llamadas a IndexedDB**: las operaciones sobre almacenes de IndexedDB pueden bloquearse si otra pestaña o el Service Worker mantiene un bloqueo activo. Conectar estas operaciones a promesas con control de tiempo de espera y degradación segura.
+---
 
-## 8. Estado y tareas pendientes
+## 3. Infraestructura y despliegue
 
-- [x] Login KISS activo en producción (`POST /api/auth/login` con `user_id`).
-- [x] Clave `PWA_SECRET_KEY` configurada en el `.env` de la Orange Pi.
-- [x] Lista de operadores: Álvaro (admin) junto a Jose, Amelia, Alex y Otro (rol `operador`). Base de datos de producción sincronizada (`pwa/ganaderos_campo.sqlite`; copia de seguridad en `/home/varo/ganaderos_campo_backup_20260929_1706.sqlite`).
-- [x] Cambio de contraseña de la explotación (`POST /api/auth/change-password` y modal administrativo) con persistencia en `.env` y memoria.
-- [x] Validación del token `e2e-valid-auth-token` restringida a entornos `APP_ENV=e2e` y `APP_ENV=test`.
-- [x] Eliminación de endpoint `/api/auth/login-pin` y esquema `PinLoginRequest`.
-- [x] Actualización de censo de producción con datos extraídos de `db-actualizada/bdlibro.mdb` (374 compras, 2397 animales, 2228 partos, 5534 movimientos).
-- [x] PR #15: sincronización en caliente y usabilidad:
-  - Recarga en memoria WASM (`this.db`) al recibir una base de datos nueva en segundo plano.
-  - Botón de sincronización manual en el modal de usuario.
-  - Paginación incremental (`Mostrar más animales (+50)`) y contador de resultados.
-  - Contraseña por defecto del backend fijada en `ganaderos` (compatible con `mvp-testing` en tests).
-  - Service Worker v24.
-- [x] PR #16: estabilidad de arranque y login:
-  - Inicialización basada en `document.readyState !== 'loading'` para evitar bloqueos en recargas.
-  - Control de tiempo de espera de 1.5s en transacciones de IndexedDB.
-  - Renderizado de la pantalla de login desde valores locales sin esperar respuesta de red.
-  - Service Worker v25.
-- [x] Funcionalidad de campo (Fases 1 y 2.1) y reglas de desarrollo:
-  - Fase 1 (motor de cola de salida local):
-    - Módulo `pwa/js/modules/outbox.js`: almacén `GanaderosMutacionesOffline` en IndexedDB para eventos auditados (`parto`, `movimiento`, `tratamiento`, `pesaje`, `nota`), identificadores UUID, estados `pending` y `synced`, y panel de inspección.
-    - Indicador de estado en cabecera (`Al día` / `N pendientes de sincronizar`) y botón de envío manual.
-    - Envío de mutaciones a `/api/sync/push`.
-  - Fase 2.1 (registro de partos offline):
-    - Modal `pwa/js/modules/views/birth_modal.js` con controles táctiles de al menos 48px.
-    - Filtro de búsqueda de reproductoras por `Vaca`, `Hembra`, `Hembras` y `H`.
-    - Acceso directo en el buscador y en la ficha de vacas activas.
-    - Inserción optimista directa en SQLite WASM (`db_client.js`) para disponibilidad inmediata en el censo local.
-    - Service Worker v26.
-  - Fase 3 (ingesta y auditoría en la Orange Pi):
-    - Rutas `POST /api/sync/push` y `GET /api/sync/estado` contra la tabla `eventos_campo` en SQLite, con epoch incremental, control de idempotencia por UUID y validación de tipos.
-  - Normas de desarrollo:
-    - Test 08 E2E en Playwright para el flujo completo de parto y cola de salida.
-    - Documentación en `AGENTS.md` con prohibición de push directo a `master` y restricción de ejecución autónoma de `sudo`.
-- [x] Actualización de `compose.yaml`: uso de `PWA_SECRET_KEY` y `PWA_PASSWORD=${PWA_PASSWORD:-ganaderos}`, eliminando `PWA_AUTH_SECRET`.
-- [x] PR #19: refactorización de arquitectura y resiliencia:
-  - Llamadas asíncronas en `llm_gateway.py` mediante `httpx.AsyncClient` para evitar bloqueos en el bucle de eventos.
-  - Eliminación de reemplazo de proceso `os.execve` con `_VENV_CANDIDATES` en `app.py`.
-  - Registro de errores estructurado (`logger.error(..., exc_info=True)`) en lectura de Access e inicio de base de datos.
-  - Retirada de tiempos de espera fijos en `db_client.js` y `outbox.js`.
-  - Consultas optimizadas en repositorios: `list_activos()`, `list_reproductoras()` y `count_activos()`, evitando filtrado en memoria de Python.
-- [x] PR #21: resolución de deuda técnica y seguridad:
-  - Eliminación de comprobaciones `hasattr` y llamadas de reserva a `list_all` en `CensoService` y `GenealogiaService`. Protocolo formalizado para `IntentResolver`.
-  - Escritura atómica de `.env` mediante `tempfile.mkstemp`, `os.fsync`, `os.replace` y cerrojo `threading.Lock`, con validación contra inyección de variables en `_set_password`.
-  - Eliminación de rutas absolutas locales (`/home/varo`) en `llm_gateway.py` y unificación de funciones auxiliares para peticiones HTTP y procesamiento de respuestas.
-- [x] PR #25: suite de integración y pruebas E2E con Playwright:
-  - Eliminación de comprobaciones superficiales de longitud y validaciones de DOM sin cambio de estado.
-  - 9 flujos E2E en Playwright: carga de manifiesto, teclado numérico de 4 dígitos, ficha técnica y genealogía descendente, recetas sanitarias y tiempo de espera en carne (`DRAXXIN`), registro de alimentación (costes de pienso), movimientos REGA con navegación cruzada, funcionamiento offline con degradación del asistente, ciclo de registro de parto con sincronización posterior y autenticación multi-usuario con recarga.
-  - Pruebas de concurrencia: `test_sync_concurrency.py` con `ThreadPoolExecutor` para operaciones simultáneas, monotonicidad de epoch, deduplicación e idempotencia, y validación de seguridad en `/api/database`.
-  - Ajustes de interfaz: botones de limpieza de filtros interactivos en todo momento, enlaces seguros en movimientos y conservación de selección de animal tras eventos de sincronización.
-- [x] PR #27: modernización de CI/CD, control de secretos y corrección de linter:
-  - Corrección de advertencias y orden de importaciones en Ruff.
-  - Pipeline de GitHub Actions unificado con pytest, escaneo de secretos con Gitleaks, verificación de `CACHE_NAME` en `sw.js` y almacenamiento de trazas de Playwright en fallos.
-  - Traslado de la construcción de imágenes Docker al workflow manual `.github/workflows/docker.yml`.
-  - Exclusión en `.gitignore` de directorios temporales (`scratch/`, `decompiled/`).
-- [x] PR #28: permisos pull-requests read en CI:
-  - Permisos explícitos `pull-requests: read` y `contents: read` en CI para evitar errores HTTP 403 en Gitleaks.
-- [x] PR #29: observabilidad (logs en USB), buffer en RAM y Node 22 en CI:
-  - Destino configurable de logs en `/mnt/usb/ganaderos_logs` mediante `_resolver_directorio_logs()`, reduciendo ciclos de escritura en la tarjeta MicroSD.
-  - Buffer circular en memoria con los últimos 1000 registros, marcas de tiempo y niveles de severidad.
-  - Endpoints administrativos protegidos: `GET /api/admin/logs` y `POST /api/admin/logs/level` (restringidos a rol `admin`).
-  - Actualización de los flujos de trabajo de GitHub Actions a Node 22.
-- [x] Fase 4: pipeline de conciliación bidireccional con Access (`bdlibro.mdb`) y asignación de crotales:
-  - Endpoints en el hub: `GET /api/sync/pendientes` (filtro por tipo y `conciliado_en_access = 0`) y `POST /api/sync/conciliado` (exclusivo para admin, registra `crotal_asignado` y marca temporal).
-  - Esquema de base de datos: columnas `conciliado_en_access`, `ts_conciliado` y `crotal_asignado` en `campo_registros`, con migraciones automáticas.
-  - Script de sincronización en PC (`scripts/sync_access_merge.py`):
-    - Autenticación con el servidor remoto.
-    - Copia de seguridad automática con marca temporal en `backups/bdlibro_backup_YYYYMMDD_HHMMSS.mdb`.
-    - Control de concurrencia mediante `FileLock`.
-    - Inserción en orden de integridad referencial: `Animal` -> `Movimiento` ('N') -> `SELECT @@IDENTITY` -> `Parto` -> `UPDATE Animal` (madre) -> `DELETE FROM Crotales`.
-    - Asignación secuencial de crotales disponibles y confirmación mediante `POST /api/sync/conciliado`.
-    - Regeneración y carga de la base de datos consolidada al servidor.
-    - Opciones `--dry-run` y `--skip-export`, con ejecución automática en Python de 32 bits en sistemas Windows de 64 bits.
-- [x] Copias de seguridad en Git (Git Backup Vault):
-  - Repositorio: `https://github.com/example/vault-backup.git` (HTTPS: `https://github.com/example/vault-backup.git`).
-  - Módulo `src/infrastructure/backup_vault.py` y utilidad CLI `scripts/backup_vault.py`.
-  - Almacenamiento de instantáneas de `access/bdlibro.mdb`, `sqlite/ganaderos_campo.sqlite` y volcado de texto determinista `dumps/censo_dump.sql` para auditoría mediante `git diff`.
-  - Integrado como paso final en `scripts/sync_access_merge.py`.
-- [x] Integridad de datos y concurrencia:
-  - Concurrencia en `SyncService`: sincronización con `threading.RLock()` (`_mutation_lock`). SQLite configurado en modo WAL (`PRAGMA journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 10000`) para lecturas concurrentes sin bloqueo y menor desgaste de MicroSD. Manejo de `sqlite3.IntegrityError` para evitar respuestas HTTP 500 en reintentos duplicados. Uso de `os.fsync` previo al reemplazo atómico con `os.replace` en `/api/sync/import`.
-  - Control de procesos en Access: detección de procesos finalizados mediante `os.kill` y liberación de bloqueos inactivos tras 10 minutos en `FileLock`. Detección de bloqueos activos mediante `bdlibro.ldb`. Asignación unívoca de crotales (`crotales_libres.pop(0)`) e inserción idempotente de terneros ya registrados en Access.
-  - Protección de cola de salida en PWA (`db_client.js`): `_verificarYVaciarOutbox()` despacha mutaciones pendientes antes de sobrescribir la base de datos local con un censo nuevo.
-  - Recarga de servicios en FastAPI: `recargar_servicios_dominio()` actualiza las conexiones de FastAPI y los repositorios tras importar datos, sin requerir reinicio del servicio en systemd. Aislamiento de `ganaderos_demo.sqlite` con modo de solo lectura y usuarios en memoria si no existe la tabla correspondiente.
-- [ ] Configuración opcional: añadir usuario al grupo Docker con `sudo usermod -aG docker varo` en la Orange Pi.
-- [x] Fase 2: mejoras de interfaz y usabilidad en la PWA:
-  - Teclado en pantalla: `.touch-keypad` oculto (`display: none;`) por defecto, mostrándose únicamente al activar la clase `.visible` mediante el botón correspondiente.
-  - Dimensiones de interacción táctil según WCAG (>=48px): `.btn-nuevo-parto-header` con dimensiones mínimas de 48x48px e icono de 18px; botón de borrado `.btn-input-clear` centrado con área táctil de 48x48px; botón de cierre de modal `#btn-cerrar-modal-parto` de 48x48px; `.btn-toggle-keypad` con altura mínima de 48px.
-  - Búsqueda flexible por crotal (1 a 4 dígitos): coincidencia por prefijo, con relleno de ceros (`padStart(4, '0')`) y por sufijo en `db_client.js`, priorizando coincidencias exactas y animales activos.
-  - Notificaciones en interfaz: sustitución de llamadas a `alert()` en `birth_modal.js` y `detail_view.js` por mensajes en `#modal-parto-error`, marcado visual de campos requeridos y avisos emergentes tipo toast (`.pwa-toast--visible`).
-  - Service Worker: actualización de versión de caché a `ganaderos-campo-v53` en `pwa/sw.js`.
-- [x] Seguridad y análisis estático (pre-push y CI SAST):
-  - Hook local de Git (`.githooks/pre-push` y `scripts/pre_push_check.py`): ejecución secuencial de Gitleaks, Ruff y Pip-Audit sobre las dependencias de `pyproject.toml` antes de permitir `git push`. Activado con `git config core.hooksPath .githooks`.
-  - Bandit en GitHub Actions: análisis de seguridad estático en `src/` y `scripts/` filtrado por nivel medio y alto (`-ll`), configurado en `pyproject.toml`.
-  - Pip-Audit en CI: detección de vulnerabilidades conocidas (CVE) en dependencias en cada pull request y push.
-- [ ] Plan de trabajo futuro:
-  - Pesajes en báscula descartados explícitamente por el ganadero (KISS / YAGNI). El único peso real de la explotación es el peso a la canal liquidado en matadero (Ganavaex).
-  - Nota: el ganadero descartó explícitamente el cambio de lote o corral y la gestión de recetas o tratamientos desde la PWA.
+- **Servidor Edge**: despliegue sobre Linux en servidor edge de bajo consumo.
+- **Topología de red**:
+  - Servidor web y proxy inverso: Caddy con certificados TLS automáticos.
+  - Exposición segura: túnel Cloudflare Zero Trust aislando los servicios internos.
+  - Separación de servicios: la API de Ganaderos escucha en la interfaz de bucle local (`127.0.0.1:8010`), delegando el tráfico externo al proxy inverso.
+  - Puertos reservados para servicios coexistentes: puerto `8000` (servicio telemétrico independiente), puerto `8010` (Ganaderos API), puerto `3001` (microservicio de enrutamiento IA).
+- **Gestión del servicio**: ejecutado como unidad de systemd (`ganaderos.service`) en entorno virtual aislado de Python con recarga atómica.
+- **Persistencia y optimización de I/O**:
+  - SQLite configurado en modo WAL (`PRAGMA journal_mode = WAL`, `synchronous = NORMAL`, `busy_timeout = 10000`) para lecturas concurrentes sin bloqueo y reducción de ciclos de escritura en tarjetas de almacenamiento.
+  - Directorio de logs y volúmenes intensivos parametrizables en rutas de almacenamiento dedicadas (`STORAGE_MOUNT`).
+- **Versionado inmutable de base de datos (Git Vault)**:
+  - Repositorio Git secundario aislado parametrizable mediante la variable `GANADEROS_VAULT_REMOTE`.
+  - Almacena instantáneas versionadas de la base de datos de gestión, réplica SQLite y volcado plano determinista (`dumps/censo_dump.sql`) para auditoría de diferencias estructurales mediante `git diff`.
 
-## 9. Glosario
+---
 
-- **Crotal**: identificador oficial del animal (`ES` seguido de dígitos). `crotal_4`: últimos 4 dígitos utilizados como criterio principal de búsqueda.
-- **REGA / CEA**: código oficial de la explotación ganadera (por ejemplo, `ES371261100121`). Explotaciones históricas inactivas: Cipérez (671) y Cerezal (591); sus movimientos corresponden a traslados internos.
-- **Supresión de carne**: período de espera obligatorio tras la administración de un fármaco antes del sacrificio (`tiempo_carne` en recetas).
-- **Local-first**: modelo de arquitectura donde la base de datos maestra reside en Access, se exporta a SQLite y los clientes móviles operan de forma autónoma sobre réplicas locales.
-- **Git Backup Vault**: repositorio Git secundario destinado al almacenamiento versionado de instantáneas de Access, SQLite y volcados SQL deterministas.
+## 4. Control de versiones y flujo de trabajo Git
+
+- **Ramas del repositorio**:
+  - `master`: código productivo y estable.
+  - `develop`: rama de integración para desarrollo continuo.
+  - `feature/<nombre>`: ramas de características creadas a partir de `develop`.
+- **Integración continua**:
+  - Todo cambio hacia `develop` o `master` debe superar la pipeline automatizada de CI (Ruff, Pytest, pruebas de módulos frontend en Node.js, escaneo de dependencias con Pip-Audit y análisis SAST con Bandit).
+- **Archivos y rutas de trabajo excluidos**:
+  - Documentación operativa y parámetros de infraestructura local (`OPS.md`, `*.local.md`).
+  - Secretos y variables de entorno (`.env`, `*.env`).
+  - Directorios de trabajo y análisis (`.opencode/`, `scratch/`, `decompiled/`, `original/`).
+  - Bases de datos con información real de explotación.
+
+---
+
+## 5. Autenticación y control de acceso (Patrón KISS)
+
+- **Mecanismo de acceso**: pantalla con selector de operador funcional y contraseña compartida de la explotación.
+- **Atribución de acciones**: el identificador del operador (`user_id`) se adjunta a cada mutación para garantizar la trazabilidad de los registros generados en campo.
+- **Token de sesión**: HMAC-SHA256 (`expira:user_id:rol:nonce.firma`) generado en `/api/auth/login` y validado en el middleware de autenticación, firmado mediante `PWA_SECRET_KEY`.
+- **Resiliencia offline**: la interfaz almacena la lista de operadores en caché local (`campo_pwa_users_cache`), permitiendo el renderizado y la operación en áreas sin conectividad.
+
+---
+
+## 6. Pruebas y control de calidad
+
+Comandos estándar para la verificación del proyecto:
+
+```bash
+# 1. Análisis estático y formateo (Linter)
+python -m ruff check src/ tests/ scripts/
+
+# 2. Pruebas unitarias y de integración del backend
+python -m pytest tests/ -q
+
+# 3. Pruebas unitarias de módulos frontend (ES Modules en Node.js)
+node tests/frontend/test_modules.mjs
+
+# 4. Pruebas End-to-End en navegador (Playwright)
+npx playwright test tests/e2e/
+```
+
+> [!NOTE]
+> Tras la ejecución de los tests de integración en backend, restaurar el archivo de pruebas `pwa/ganaderos_demo.sqlite` mediante `git checkout -- pwa/ganaderos_demo.sqlite` para asegurar un árbol de trabajo limpio.
+
+---
+
+## 7. Decisiones de resiliencia y trampas resueltas
+
+1. **Ciclo de vida en módulos ES**: los scripts con `type="module"` difieren su ejecución. En inicializaciones tras recarga o cierre de sesión, se verifica siempre `document.readyState !== 'loading'` para evitar bloqueos del inicializador.
+2. **Actualización de base de datos en caliente en SQLite WASM**: al descargarse una nueva versión del censo en segundo plano, la instancia en memoria se recarga de forma transparente (`_reemplazarBaseDatosEnCaliente`), emitiendo el evento `campo:db-updated` sin forzar la pérdida de navegación activa del usuario.
+3. **Manejo de bloqueos en IndexedDB**: las transacciones locales cuentan con temporizadores de expiración segura para evitar bloqueos si múltiples pestañas acceden al almacenamiento simultáneamente.
+4. **Protección de mutaciones antes de sobrescritura**: antes de reemplazar la base de datos local con un censo nuevo recibido del servidor, `_verificarYVaciarOutbox()` despacha o preserva las mutaciones pendientes de envío para garantizar la no pérdida de registros de campo.
+5. **Aislamiento de sandbox SQL**: las consultas en lenguaje natural traducidas por el agente analítico se ejecutan en una conexión secundaria de solo lectura (`PRAGMA query_only = ON`) y tiempo límite acotado, bloqueando cualquier mutación DDL/DML.
+
+---
+
+## 8. Glosario técnico
+
+- **Crotal**: identificador oficial auricular del animal (código alfanumérico internacional). `crotal_4`: últimos 4 dígitos utilizados en el ámbito operativo diario para identificación táctil rápida.
+- **REGA / CEA**: código oficial de registro de la explotación ganadera (ejemplo: `ES000000000000`).
+- **Supresión de carne**: período de espera reglamentario tras la administración de un tratamiento veterinario antes de que el animal pueda ser sacrificado para consumo (`tiempo_carne` en recetas).
+- **Local-first**: modelo de arquitectura donde la réplica de base de datos y la capacidad de consulta residen íntegramente en el cliente móvil, utilizándose el backend exclusivamente para sincronización y servicios periféricos.
+- **Git Vault**: repositorio Git complementario configurado para el archivo determinista de instantáneas binarias y volcados SQL con garantías criptográficas de inmutabilidad.

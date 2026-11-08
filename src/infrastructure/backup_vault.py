@@ -2,7 +2,7 @@
 
 Gestiona la persistencia segura, versionada y offsite de las bases de datos
 de la explotación (Access bdlibro.mdb, SQLite ganaderos_campo.sqlite y volcado SQL plano)
-en un repositorio Git privado aislado (ganaderos-vault).
+en un repositorio Git privado aislado (Git Vault).
 
 Garantías:
 1. Inmutabilidad criptográfica mediante commits SHA en Git.
@@ -24,7 +24,7 @@ logger = logging.getLogger("ganaderos.backup_vault")
 
 DEFAULT_VAULT_REMOTE = os.environ.get(
     "GANADEROS_VAULT_REMOTE",
-    "https://github.com/example/vault-backup.git",
+    "",
 )
 
 

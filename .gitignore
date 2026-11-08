@@ -61,7 +61,6 @@ reports/
 scratch/
 decompiled/
 original/
-hola.txt
 python/
 .agents/
 
@@ -72,3 +71,7 @@ Example-data/
 
 
 sensitive-data/
+
+# Documentacion operativa privada e infraestructura local
+OPS.md
+*.local.md

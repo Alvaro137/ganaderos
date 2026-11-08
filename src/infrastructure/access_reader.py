@@ -25,7 +25,7 @@ except ImportError:
 
 LOCK_TIMEOUT_S = 10.0
 LOCK_RETRY_S = 0.5
-DEFAULT_DB_PASSWORD = os.environ.get("GANADEROS_DB_PASSWORD", "REDACTED_DB_PASSWORD")
+DEFAULT_DB_PASSWORD = os.environ.get("GANADEROS_DB_PASSWORD", "")
 
 
 def _pid_sigue_vivo(pid: int) -> bool:

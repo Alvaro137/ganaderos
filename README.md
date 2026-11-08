@@ -47,11 +47,11 @@ El sistema separa las reglas de negocio de los mecanismos de persistencia e inte
 - `src/infrastructure/`: implementaciones SQLite de repositorios (`repositories.py`), pasarela de llamadas a herramientas con modelos de lenguaje (`llm_gateway.py`) y capa anticorrupción para bases de datos Access heredadas (`access_reader.py`).
 - `src/server/`: servidor asíncrono FastAPI con validación Pydantic v2, gestión de ciclo de vida con `lifespan`, documentación OpenAPI en `/docs`, proxy de audio Whisper y traducción de excepciones de dominio (`DomainError` a HTTP 422).
 
-### 2. Intent calling tipado frente a text-to-sql libre
-En lugar de permitir que un modelo de lenguaje genere sentencias SQL arbitrarias, el sistema utiliza extracción estructurada de intenciones:
-1. El modelo extrae la intención y los parámetros (por ejemplo, `intent: "consultar_partos_madre"`, `crotal_4: "1045"`).
-2. `QueryBuilder` traduce la intención a una sentencia SQL preparada con parámetros ligados (`?`), verificada mediante tests unitarios.
-3. La consulta resultante se ejecuta en el navegador sobre la base de datos WebAssembly. Los datos ganaderos no se envían a servicios externos de IA.
+### 2. Asistente analítico híbrido: Sandbox SQL de solo lectura e Intent Calling tipado
+Para responder a consultas de voz y lenguaje natural con máxima seguridad:
+1. **Consultas operativas deterministas**: el modelo extrae la intención y parámetros estructurados (`intent: "consultar_partos_madre"`, `crotal_4: "1045"`), traduciéndose mediante `QueryBuilder` a consultas preparadas con parámetros ligados (`?`).
+2. **Consultas analíticas complejas (Text-to-SQL en Sandbox)**: para preguntas agregadas o estadísticas abiertas, el agente genera sentencias SQL ejecutadas exclusivamente en una conexión secundaria de solo lectura (`PRAGMA query_only = ON`) con límites estrictos de tiempo de CPU y memoria.
+3. **Privacidad en campo**: las consultas relacionales del usuario final se resuelven contra la réplica SQLite en el navegador. La base de datos privada no se transfiere a APIs externas de IA.
 
 ### 3. Degradación en modo desconectado (ADR 0008)
 En zonas de campo sin cobertura móvil:
@@ -161,7 +161,7 @@ ganaderos/
 | Frontend PWA | ES Modules nativos, CSS3, HTML5 | Interfaz sin dependencias de frameworks para uso táctil en campo. |
 | Almacenamiento local | SQL.js (SQLite WebAssembly), IndexedDB | Consultas relacionales directas en el dispositivo móvil sin conexión. |
 | Backend y API | Python 3.12, FastAPI, Pydantic v2, Uvicorn | Endpoints tipados, validación de esquemas y documentación OpenAPI. |
-| Transcripción e IA | Groq Whisper Large v3, Llama 3.3 70B | Transcripción de audio y extracción de parámetros de consulta. |
+| Transcripción e IA | Whisper, Llama 3.3 / LLM Router, Sandbox SQL | Asistente por voz, Text-to-SQL en sandbox (query_only) y fallback a Intent Calling. |
 | Contenedores y CI | Docker, GitHub Actions | Validación de estilo, ejecución de tests y empaquetado. |
 
 ---
@@ -211,13 +211,16 @@ Comandos para ejecutar las comprobaciones de estilo y pruebas automatizadas:
 
 ```bash
 # 1. Comprobación de estilo y linter
-ruff check .
+python -m ruff check src/ tests/ scripts/
 
-# 2. Pruebas de frontend en Node.js
+# 2. Pruebas de frontend en Node.js (ES Modules)
 node tests/frontend/test_modules.mjs
 
-# 3. Pruebas unitarias y de integración en Python
-python -m unittest discover tests
+# 3. Pruebas unitarias y de integración con Pytest
+python -m pytest tests/ -q
+
+# 4. Pruebas End-to-End con Playwright (opcional)
+npx playwright test tests/e2e/
 ```
 
 ---

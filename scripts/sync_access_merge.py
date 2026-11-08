@@ -674,7 +674,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Conciliación bidireccional entre la PWA/Hub y Access bdlibro.mdb.")
     parser.add_argument("--source", type=Path, default=None, help="Ruta al fichero bdlibro.mdb")
     parser.add_argument("--api-url", type=str, default=os.environ.get("GANADEROS_API_URL", "https://campo.alvaro137.com"), help="URL base del servidor hub (por defecto https://campo.alvaro137.com)")
-    parser.add_argument("--password", type=str, default=os.environ.get("GANADEROS_DB_PASSWORD", "REDACTED_DB_PASSWORD"), help="Contraseña de bdlibro.mdb")
+    parser.add_argument("--password", type=str, default=os.environ.get("GANADEROS_DB_PASSWORD", ""), help="Contraseña de bdlibro.mdb (o variable GANADEROS_DB_PASSWORD)")
     parser.add_argument("--pwa-password", type=str, default=os.environ.get("PWA_PASSWORD", "ganaderos"), help="Contraseña compartida de la PWA")
     parser.add_argument("--dry-run", action="store_true", help="Simula la operación sin persistir en Access ni en el servidor")
     parser.add_argument("--skip-export", action="store_true", help="Omite la re-exportación y subida del censo consolidado")

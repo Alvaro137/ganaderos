@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -176,7 +177,7 @@ def main() -> int:
         default=PROJ_ROOT / "pwa" / "ganaderos_campo.sqlite",
         help="Ruta al fichero SQLite destino",
     )
-    parser.add_argument("--password", type=str, default="REDACTED_DB_PASSWORD", help="Contraseña de bdlibro.mdb")
+    parser.add_argument("--password", type=str, default=os.environ.get("GANADEROS_DB_PASSWORD", ""), help="Contraseña de bdlibro.mdb (o variable GANADEROS_DB_PASSWORD)")
     args = parser.parse_args()
 
     source = args.source or detectar_ruta_bd()
