@@ -149,7 +149,18 @@ def detectar_ruta_bd() -> Path:
     env_path = os.environ.get("GANADEROS_DB_PATH")
     if env_path and Path(env_path).exists():
         return Path(env_path)
+    # Comprobar path.txt en carpetas habituales de Ganaderos 10
+    for dir_cand in [Path("C:/GANADEROS10"), Path("C:/GANADEROS 10"), Path("C:/Ganaderos 10")]:
+        p_txt = dir_cand / "path.txt"
+        if p_txt.exists():
+            try:
+                line = p_txt.read_text(encoding="utf-8", errors="ignore").strip().splitlines()[0]
+                if line and Path(line).exists():
+                    return Path(line)
+            except Exception:
+                pass
     candidatos = [
+        Path("C:/GANADEROS10/bdlibro.mdb"),
         Path("C:/GANADEROS 10/bdlibro.mdb"),
         Path("C:/Ganaderos 10/bdlibro.mdb"),
         Path("C:/Ganaderos/bdlibro.mdb"),
@@ -158,7 +169,7 @@ def detectar_ruta_bd() -> Path:
     for ruta in candidatos:
         if ruta.exists():
             return ruta
-    return Path("C:/GANADEROS 10/bdlibro.mdb")
+    return Path("C:/GANADEROS10/bdlibro.mdb") if Path("C:/GANADEROS10").exists() else Path("C:/GANADEROS 10/bdlibro.mdb")
 
 
 def conn_str_for(path: Path, password: Optional[str] = None) -> str:

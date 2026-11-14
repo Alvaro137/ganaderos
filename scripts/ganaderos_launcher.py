@@ -23,6 +23,18 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+# Cargar variables de .env si existe
+env_path = ROOT_DIR / ".env"
+if env_path.exists():
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+    except Exception:
+        pass
+
 from src.infrastructure.access_reader import (  # noqa: E402
     detectar_python_32,
     detectar_ruta_bd,
