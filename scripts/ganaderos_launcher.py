@@ -120,15 +120,25 @@ def ejecutar_sync_access(
         return False
 
 
+def autodetectar_app_exe(mdb_path: Path) -> Optional[Path]:
+    """Localiza el ejecutable de Ganaderos 10 en la carpeta de la base de datos."""
+    for nombre in ("Ganaderos.exe", "Ganaderos10.exe", "LIBRO.exe"):
+        candidato = mdb_path.parent / nombre
+        if candidato.exists():
+            return candidato
+    return None
+
+
 def lanzar_ganaderos_access(mdb_path: Path, app_exe: Optional[Path] = None) -> bool:
     """Inicia el programa Ganaderos 10 o abre bdlibro.mdb con Microsoft Access."""
-    if app_exe and Path(app_exe).exists():
-        logger.info(f"Iniciando ejecutable Ganaderos 10: {app_exe}")
+    target_exe = app_exe or autodetectar_app_exe(mdb_path)
+    if target_exe and target_exe.exists():
+        logger.info(f"Iniciando ejecutable Ganaderos 10: {target_exe}")
         try:
-            subprocess.Popen([str(app_exe)])
+            subprocess.Popen([str(target_exe)], cwd=str(target_exe.parent))
             return True
         except Exception as e:
-            logger.warning(f"No se pudo abrir ejecutable {app_exe}: {e}. Intentando abrir base de datos...")
+            logger.warning(f"No se pudo abrir ejecutable {target_exe}: {e}. Intentando abrir base de datos...")
 
     logger.info(f"Abriendo base de datos Access: {mdb_path}")
     try:

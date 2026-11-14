@@ -48,7 +48,7 @@ def test_lanzar_ganaderos_access_custom_exe(tmp_path: Path) -> None:
     with patch("subprocess.Popen") as mock_popen:
         res = lanzar_ganaderos_access(dummy_mdb, app_exe=dummy_exe)
         assert res is True
-        mock_popen.assert_called_once_with([str(dummy_exe)])
+        mock_popen.assert_called_once_with([str(dummy_exe)], cwd=str(dummy_exe.parent))
 
 
 def test_lanzar_ganaderos_access_startfile_win32(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
