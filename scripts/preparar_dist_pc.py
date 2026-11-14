@@ -26,6 +26,7 @@ scripts_to_copy = [
     "sincronizar_manual.bat",
     "instalar_accesos_directos.ps1",
     "export_gestionavet.py",
+    "import_legacy.py",
 ]
 for s in scripts_to_copy:
     src_file = ROOT / "scripts" / s
